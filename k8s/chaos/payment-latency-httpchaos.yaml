@@ -1,0 +1,16 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: HTTPChaos
+metadata:
+  name: payment-latency
+  namespace: chaos-testing
+spec:
+  mode: all
+  selector:
+    namespaces:
+      - otel-demo
+    labelSelectors:
+      app.kubernetes.io/name: paymentservice
+  target: Request
+  port: 8080
+  delay:
+    latency: 2s

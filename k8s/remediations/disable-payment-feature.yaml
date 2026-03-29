@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkout-remediation-flags
+  namespace: otel-demo
+data:
+  payment_feature_disabled: "true"

@@ -1,0 +1,74 @@
+{
+  "workflow": {
+    "orchestrator": "openclaw",
+    "level": "level_3_browser_k8s_scaffold",
+    "phase": "browser_playbook"
+  },
+  "scenario_id": "alert_latest",
+  "goal": "Open the dashboard, apply the selected remediation in the feature-flag UI, refresh the dashboard, and then run verify automatically.",
+  "chosen_action": {
+    "id": "rate_limit_retries",
+    "label": "Apply Retry Rate Limit",
+    "selector": "#action-rate_limit_retries"
+  },
+  "urls": {
+    "dashboard": "http://127.0.0.1:8010/",
+    "feature_flags": "http://127.0.0.1:8010/feature-flags",
+    "state_api": "http://127.0.0.1:8010/api/state"
+  },
+  "steps": [
+    {
+      "kind": "open",
+      "target": "http://127.0.0.1:8010/",
+      "purpose": "capture_before_dashboard"
+    },
+    {
+      "kind": "inspect",
+      "target": "http://127.0.0.1:8010/",
+      "purpose": "read_before_metrics_and_flags"
+    },
+    {
+      "kind": "open",
+      "target": "http://127.0.0.1:8010/feature-flags",
+      "purpose": "open_execution_surface"
+    },
+    {
+      "kind": "click",
+      "target": "#action-rate_limit_retries",
+      "label": "Apply Retry Rate Limit",
+      "purpose": "apply_chosen_remediation"
+    },
+    {
+      "kind": "open",
+      "target": "http://127.0.0.1:8010/",
+      "purpose": "capture_after_dashboard"
+    },
+    {
+      "kind": "inspect",
+      "target": "http://127.0.0.1:8010/api/state",
+      "purpose": "confirm_state_after_action"
+    },
+    {
+      "kind": "exec",
+      "command": ".venv/bin/python run.py alerts/latest.json --phase verify",
+      "purpose": "run_post_action_verification"
+    },
+    {
+      "kind": "read",
+      "target": "outputs/alert_latest_report.json",
+      "purpose": "summarize_final_report"
+    }
+  ],
+  "expected_before": {
+    "latency_p95_ms": 2300,
+    "error_rate": 0.16,
+    "retry_rate": 0.31
+  },
+  "predicted_after": {
+    "latency_p95_ms": 1200,
+    "error_rate": 0.08,
+    "retry_rate": 0.05,
+    "time_to_effect_seconds": 30,
+    "blast_radius": "checkout service only"
+  }
+}

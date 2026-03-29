@@ -1,0 +1,43 @@
+{
+  "receiver": "openclaw-webhook",
+  "status": "resolved",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "CheckoutRetryStorm",
+        "dependency": "payment",
+        "instance": "host.docker.internal:9101",
+        "job": "synthetic_incident_target",
+        "service": "checkout",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "Retry pressure above baseline"
+      },
+      "startsAt": "2026-03-28T22:03:44.82Z",
+      "endsAt": "2026-03-29T00:16:24.82Z",
+      "generatorURL": "http://ebac79c85684:9090/graph?g0.expr=checkout_retry_rate+%3E+0.25&g0.tab=1",
+      "fingerprint": "01aa77fc2b8c87fd"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "CheckoutRetryStorm",
+    "service": "checkout"
+  },
+  "commonLabels": {
+    "alertname": "CheckoutRetryStorm",
+    "dependency": "payment",
+    "instance": "host.docker.internal:9101",
+    "job": "synthetic_incident_target",
+    "service": "checkout",
+    "severity": "critical"
+  },
+  "commonAnnotations": {
+    "summary": "Retry pressure above baseline"
+  },
+  "externalURL": "http://04e32fa07b62:9093",
+  "version": "4",
+  "groupKey": "{}:{alertname=\"CheckoutRetryStorm\", service=\"checkout\"}",
+  "truncatedAlerts": 0
+}

@@ -1,0 +1,14 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: checkout-shift-traffic
+  namespace: otel-demo
+spec:
+  hosts:
+    - checkoutservice
+  http:
+    - route:
+        - destination:
+            host: checkoutservice
+            subset: secondary
+          weight: 100

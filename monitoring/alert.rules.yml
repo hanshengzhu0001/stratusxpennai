@@ -1,0 +1,21 @@
+groups:
+  - name: incident_guardrail
+    rules:
+      - alert: CheckoutLatencyHigh
+        expr: checkout_latency_p95_ms > 2000
+        for: 10s
+        labels:
+          severity: critical
+          service: checkout
+        annotations:
+          summary: Checkout latency p95 above threshold
+
+      - alert: CheckoutRetryStorm
+        expr: checkout_retry_rate > 0.25
+        for: 10s
+        labels:
+          severity: critical
+          service: checkout
+          dependency: payment
+        annotations:
+          summary: Retry pressure above baseline

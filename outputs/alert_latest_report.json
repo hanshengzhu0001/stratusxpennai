@@ -1,0 +1,289 @@
+{
+  "workflow": {
+    "orchestrator": "openclaw",
+    "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase verify",
+    "workspace_skill": "incident_guardrail",
+    "level": "level_3_browser_k8s_scaffold",
+    "phase": "verify",
+    "mode": "browser_verify"
+  },
+  "source_type": "alertmanager_webhook",
+  "input_path": "alerts/latest.json",
+  "scenario_id": "alert_latest",
+  "incident_summary": "Retry pressure above baseline",
+  "observed_condition": {
+    "services": [
+      "frontend",
+      "checkout",
+      "payment"
+    ],
+    "metrics": {
+      "latency_p95_ms": 1650,
+      "error_rate": 0.18,
+      "retry_rate": 0.1
+    },
+    "logs": [
+      "Retry pressure above baseline"
+    ],
+    "traces": [
+      "checkout -> payment span dominates p95",
+      "retry fan-out visible across checkout service"
+    ],
+    "pattern_matches": [
+      "payment_degradation"
+    ],
+    "prometheus": {
+      "source": "live",
+      "queries": {
+        "checkout_latency_p95_ms": 1650.0,
+        "checkout_error_rate": 0.18,
+        "checkout_retry_rate": 0.1
+      },
+      "active_alerts": []
+    },
+    "browser_targets": {
+      "dashboard": "http://127.0.0.1:8010/",
+      "feature_flags": "http://127.0.0.1:8010/feature-flags",
+      "state_api": "http://127.0.0.1:8010/api/state"
+    }
+  },
+  "candidate_actions": [
+    {
+      "id": "restart_payment",
+      "type": "restart",
+      "target": "payment",
+      "description": "Restart payment pods"
+    },
+    {
+      "id": "disable_flag",
+      "type": "flag",
+      "target": "payment_feature",
+      "description": "Disable the payment feature flag"
+    },
+    {
+      "id": "rate_limit_retries",
+      "type": "throttle",
+      "target": "checkout",
+      "description": "Rate-limit checkout retries"
+    },
+    {
+      "id": "shift_traffic",
+      "type": "traffic_shift",
+      "target": "secondary_region",
+      "description": "Shift traffic to the secondary region"
+    }
+  ],
+  "stratus_ranking": [
+    {
+      "id": "rate_limit_retries",
+      "rank": 1,
+      "confidence": 0.87,
+      "reasoning": "Directly addresses retry amplification pattern. Stops cascade without service disruption."
+    },
+    {
+      "id": "restart_payment",
+      "rank": 2,
+      "confidence": 0.72,
+      "reasoning": "Targets root cause (payment degradation) but carries restart risk and doesn't prevent retry storm recurrence."
+    },
+    {
+      "id": "disable_flag",
+      "rank": 3,
+      "confidence": 0.58,
+      "reasoning": "Reduces load on payment service but degrades user experience significantly."
+    },
+    {
+      "id": "shift_traffic",
+      "rank": 4,
+      "confidence": 0.45,
+      "reasoning": "May propagate problem to secondary region if payment service issue is systemic."
+    }
+  ],
+  "best_action": {
+    "id": "rate_limit_retries",
+    "type": "throttle",
+    "target": "checkout",
+    "expected_outcome": "Break retry amplification feedback loop, stabilize checkout service, reduce payment service load",
+    "risk_level": "low",
+    "reversible": true
+  },
+  "overall_confidence": 0.87,
+  "predicted_effects_by_action": {
+    "rate_limit_retries": {
+      "latency_p95_ms": 1200,
+      "error_rate": 0.08,
+      "retry_rate": 0.05,
+      "time_to_effect_seconds": 30,
+      "blast_radius": "checkout service only"
+    },
+    "restart_payment": {
+      "latency_p95_ms": 1500,
+      "error_rate": 0.22,
+      "retry_rate": 0.28,
+      "time_to_effect_seconds": 90,
+      "blast_radius": "payment + checkout during restart window"
+    },
+    "disable_flag": {
+      "latency_p95_ms": 800,
+      "error_rate": 0.02,
+      "retry_rate": 0.01,
+      "time_to_effect_seconds": 15,
+      "blast_radius": "all users lose payment functionality"
+    },
+    "shift_traffic": {
+      "latency_p95_ms": 1800,
+      "error_rate": 0.14,
+      "retry_rate": 0.29,
+      "time_to_effect_seconds": 120,
+      "blast_radius": "global - may cascade to secondary region"
+    }
+  },
+  "browser_workflow": {
+    "dashboard_url": "http://127.0.0.1:8010/",
+    "feature_flags_url": "http://127.0.0.1:8010/feature-flags",
+    "state_api_url": "http://127.0.0.1:8010/api/state",
+    "button_label": "Apply Retry Rate Limit",
+    "button_selector": "#action-rate_limit_retries",
+    "steps": [
+      "Open the dashboard.",
+      "Inspect the incident metrics and active flags.",
+      "Open the feature-flag page.",
+      "Click 'Apply Retry Rate Limit'.",
+      "Refresh the dashboard.",
+      "Summarize before/after state and then run verify phase."
+    ]
+  },
+  "kubernetes_plan": {
+    "cluster_stack": {
+      "otel_demo_namespace": "otel-demo",
+      "chaos_mesh_namespace": "chaos-testing"
+    },
+    "fault_manifests": [
+      "k8s/chaos/payment-unreachable-networkchaos.yaml",
+      "k8s/chaos/payment-latency-httpchaos.yaml"
+    ],
+    "recommended_remediation_manifest": "k8s/remediations/rate-limit-retries-configmap.yaml"
+  },
+  "execution": {
+    "executor": "browser_expected",
+    "mode": "awaiting_or_completed_browser_action",
+    "action_id": "rate_limit_retries",
+    "control_plane_urls": {
+      "dashboard": "http://127.0.0.1:8010/",
+      "feature_flags": "http://127.0.0.1:8010/feature-flags",
+      "state_api": "http://127.0.0.1:8010/api/state"
+    },
+    "state_after_action": {
+      "payment_service_unreachable": true,
+      "loadgenerator_flood_homepage": true,
+      "retry_rate_limit_enabled": true,
+      "traffic_shift_enabled": false,
+      "payment_feature_disabled": false,
+      "last_action": "rate_limit_retries"
+    }
+  },
+  "actual_outcome": {
+    "latency_p95_ms": 1650,
+    "error_rate": 0.18,
+    "retry_rate": 0.1,
+    "time_to_effect_seconds": 30,
+    "risk_level": "low",
+    "impact": "medium_high",
+    "blast_radius": "low",
+    "recovery": "strong",
+    "notes": "Observed live metrics after rate_limit_retries via Prometheus-backed verification.",
+    "action_id": "rate_limit_retries",
+    "latency_direction": "down",
+    "error_direction": "up",
+    "retry_storm_risk": "low"
+  },
+  "predicted_vs_actual": {
+    "predicted": {
+      "latency_p95_ms": 1200,
+      "error_rate": 0.08,
+      "retry_rate": 0.05,
+      "time_to_effect_seconds": 30,
+      "blast_radius": "checkout service only"
+    },
+    "actual": {
+      "latency_p95_ms": 1650,
+      "error_rate": 0.18,
+      "retry_rate": 0.1,
+      "time_to_effect_seconds": 30,
+      "risk_level": "low",
+      "impact": "medium_high",
+      "blast_radius": "low",
+      "recovery": "strong",
+      "notes": "Observed live metrics after rate_limit_retries via Prometheus-backed verification.",
+      "action_id": "rate_limit_retries",
+      "latency_direction": "down",
+      "error_direction": "up",
+      "retry_storm_risk": "low"
+    },
+    "normalized_predicted": {
+      "latency_direction": "down",
+      "error_direction": "down",
+      "retry_storm_risk": "low",
+      "risk_level": "checkout service only"
+    },
+    "normalized_actual": {
+      "latency_direction": "down",
+      "error_direction": "up",
+      "retry_storm_risk": "low",
+      "risk_level": "low"
+    },
+    "drift": {
+      "action_id": "rate_limit_retries",
+      "normalized_predicted": {
+        "latency_direction": "down",
+        "error_direction": "down",
+        "retry_storm_risk": "low",
+        "risk_level": "checkout service only"
+      },
+      "normalized_actual": {
+        "latency_direction": "down",
+        "error_direction": "up",
+        "retry_storm_risk": "low",
+        "risk_level": "low"
+      },
+      "matches": {
+        "latency_direction": true,
+        "error_direction": false,
+        "retry_storm_risk": true,
+        "risk_level": false
+      },
+      "score": 0.5
+    }
+  },
+  "evidence_summary": {
+    "services": [
+      "frontend",
+      "checkout",
+      "payment"
+    ],
+    "metrics": {
+      "latency_p95_ms": 1650,
+      "error_rate": 0.18,
+      "retry_rate": 0.1
+    },
+    "logs": [
+      "Retry pressure above baseline"
+    ],
+    "traces": [
+      "checkout -> payment span dominates p95",
+      "retry fan-out visible across checkout service"
+    ],
+    "prometheus": {
+      "source": "live",
+      "queries": {
+        "checkout_latency_p95_ms": 1650.0,
+        "checkout_error_rate": 0.18,
+        "checkout_retry_rate": 0.1
+      },
+      "active_alerts": []
+    }
+  },
+  "notes": [
+    "Used live Stratus ranking."
+  ]
+}

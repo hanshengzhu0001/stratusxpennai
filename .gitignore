@@ -1,0 +1,9 @@
+.env
+__pycache__/
+.venv/
+.openclaw/
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+USER.md
+*.pyc
