@@ -24,8 +24,8 @@ When asked to evaluate an incident scenario in this repo, do the following:
 7. Summarize:
    - incident summary
    - candidate actions
-   - Stratus ranking
-   - chosen action
+   - Stratus ranking vs baseline ranking
+   - chosen action (Stratus) vs baseline choice
    - predicted vs actual
    - before/after browser-visible evidence
 

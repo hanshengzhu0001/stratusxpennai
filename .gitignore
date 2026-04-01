@@ -2,8 +2,13 @@
 __pycache__/
 .venv/
 .openclaw/
+.claude/
 HEARTBEAT.md
 IDENTITY.md
 SOUL.md
 USER.md
 *.pyc
+outputs/
+state/runtime_state.json
+NeverDrop.md
+week1_team_plan.pdf

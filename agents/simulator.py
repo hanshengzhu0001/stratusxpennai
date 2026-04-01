@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from config import ERROR_RATE_DOWN_THRESHOLD, RETRY_RISK_LOW_MAX, RETRY_RISK_MEDIUM_MAX
+
 
 SIMULATED_OUTCOMES = {
     "restart_payment": {
@@ -91,7 +93,7 @@ def normalize_prediction(predicted: dict) -> dict:
 
     error_direction = predicted.get("error_direction")
     if error_direction is None and "error_rate" in predicted:
-        error_direction = "down" if predicted["error_rate"] <= 0.18 else "mixed"
+        error_direction = "down" if predicted["error_rate"] <= ERROR_RATE_DOWN_THRESHOLD else "mixed"
 
     retry_storm_risk = predicted.get("retry_storm_risk")
     if retry_storm_risk is None and "retry_rate" in predicted:
@@ -129,9 +131,9 @@ def _direction(before: float | int | None, after: float | int | None) -> str:
 
 
 def _retry_risk(retry_rate: float) -> str:
-    if retry_rate <= 0.12:
+    if retry_rate <= RETRY_RISK_LOW_MAX:
         return "low"
-    if retry_rate <= 0.25:
+    if retry_rate <= RETRY_RISK_MEDIUM_MAX:
         return "medium"
     return "high"
 

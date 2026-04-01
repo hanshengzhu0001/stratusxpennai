@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from config import LATENCY_P95_THRESHOLD_MS, RETRY_RATE_THRESHOLD
+
 
 def classify_incident(alert_payload: dict, evidence: dict) -> dict:
     metrics = evidence["metrics"]
@@ -9,11 +11,11 @@ def classify_incident(alert_payload: dict, evidence: dict) -> dict:
         "Checkout latency spiked after payment dependency degradation and retries are increasing.",
     )
     patterns = []
-    if metrics.get("retry_rate", 0) >= 0.2:
+    if metrics.get("retry_rate", 0) >= RETRY_RATE_THRESHOLD:
         patterns.append("retry_amplification")
     if "payment" in evidence.get("services", []):
         patterns.append("payment_degradation")
-    if metrics.get("latency_p95_ms", 0) >= 2000:
+    if metrics.get("latency_p95_ms", 0) >= LATENCY_P95_THRESHOLD_MS:
         patterns.append("high_checkout_latency")
 
     return {

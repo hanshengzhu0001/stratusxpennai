@@ -1,3 +1,12 @@
+"""
+Incident response pipeline — teammate's run.py with baseline integrated.
+
+Runs both Stratus and baseline in the plan phase, compares their choices
+against simulated ground truth in the verify phase.
+
+Usage:
+    python run.py [alerts/latest.json] [--phase plan|verify|auto]
+"""
 from __future__ import annotations
 
 import argparse
@@ -5,6 +14,7 @@ import json
 import os
 from pathlib import Path
 
+from agents.baseline import choose_action as baseline_choose
 from agents.candidate_actions import generate_candidate_actions
 from agents.incident_classifier import classify_incident
 from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
@@ -18,7 +28,6 @@ def load_local_env(path: str = ".env") -> None:
     env_path = Path(path)
     if not env_path.exists():
         return
-
     for raw_line in env_path.read_text().splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -65,6 +74,7 @@ def main() -> None:
         print(f"Wrote report to outputs/{scenario_id}_report.json")
         return
 
+    # auto mode
     plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
     chosen = plan["best_action"]
     execution = execute_action(chosen)
@@ -99,6 +109,11 @@ def build_plan_report(
     actions = generate_candidate_actions(state)
     ranking = rank_actions(state, actions)
     chosen = normalize_best_action(ranking["best_action"], actions)
+
+    # --- BASELINE INTEGRATION ---
+    baseline_ranking = baseline_choose(state, actions)
+    baseline_chosen = normalize_best_action(baseline_ranking["best_action"], actions)
+
     playbook_path = f"outputs/{scenario_id}_browser_playbook.json"
     return {
         "workflow": {
@@ -128,6 +143,11 @@ def build_plan_report(
         "best_action": chosen,
         "overall_confidence": ranking["overall_confidence"],
         "predicted_effects_by_action": ranking["predicted_effects_by_action"],
+        # --- BASELINE FIELDS ---
+        "baseline_ranking": baseline_ranking["ranked_actions"],
+        "baseline_best_action": baseline_chosen,
+        "baseline_confidence": baseline_ranking["overall_confidence"],
+        "baseline_notes": baseline_ranking["notes"],
         "browser_workflow": browser_workflow(chosen),
         "artifacts": {
             "browser_playbook": playbook_path,
@@ -157,6 +177,17 @@ def build_verify_report(
         action_id=chosen["id"],
     )
     drift = compare_prediction_to_actual(chosen["id"], predicted, actual)
+
+    # --- BASELINE COMPARISON ---
+    baseline_chosen = plan.get("baseline_best_action", {})
+    baseline_vs_stratus = {
+        "stratus_chose": chosen["id"],
+        "baseline_chose": baseline_chosen.get("id", "unknown"),
+        "same_choice": chosen["id"] == baseline_chosen.get("id"),
+        "stratus_confidence": plan["overall_confidence"],
+        "baseline_confidence": plan.get("baseline_confidence", 0),
+    }
+
     return {
         "workflow": {
             "orchestrator": "openclaw",
@@ -205,6 +236,10 @@ def build_verify_report(
             "normalized_actual": normalize_actual(actual),
             "drift": drift,
         },
+        # --- BASELINE COMPARISON ---
+        "baseline_vs_stratus": baseline_vs_stratus,
+        "baseline_ranking": plan.get("baseline_ranking", []),
+        "baseline_notes": plan.get("baseline_notes", []),
         "evidence_summary": current_evidence,
         "notes": plan.get("notes", []),
     }
@@ -224,11 +259,22 @@ def render_markdown(report: dict) -> str:
     )
     browser_steps = "\n".join(f"- {step}" for step in report["browser_workflow"]["steps"])
     playbook = report.get("artifacts", {}).get("browser_playbook")
+
+    # --- BASELINE SECTION ---
+    baseline_section = ""
+    bvs = report.get("baseline_vs_stratus", {})
+    if bvs:
+        baseline_section = f"""
+## Baseline vs Stratus
+
+- Stratus chose: `{bvs.get('stratus_chose', 'n/a')}`
+- Baseline chose: `{bvs.get('baseline_chose', 'n/a')}`
+- Same choice: `{bvs.get('same_choice', 'n/a')}`
+- Stratus confidence: `{bvs.get('stratus_confidence', 'n/a')}`
+- Baseline confidence: `{bvs.get('baseline_confidence', 'n/a')}`
+"""
+
     return f"""# OpenClaw Incident Guardrail Report
-
-## Guardrail Question
-
-Given a payment-related latency incident with retry amplification, which of these fixes is safest globally?
 
 ## Workflow
 
@@ -263,9 +309,7 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 - Chosen action: `{chosen['id']}`
 - Confidence: `{report['overall_confidence']:.2f}`
-- Dashboard: `{report['observed_condition']['browser_targets']['dashboard']}`
-- Feature flags: `{report['observed_condition']['browser_targets']['feature_flags']}`
-
+{baseline_section}
 ## Predicted vs Actual
 
 - Predicted: `{json.dumps(predicted, sort_keys=True)}`
