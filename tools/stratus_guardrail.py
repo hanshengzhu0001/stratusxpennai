@@ -10,7 +10,7 @@ from openai import OpenAI
 def rank_actions(state: dict, actions: list[dict]) -> dict:
     api_key = os.environ.get("STRATUS_API_KEY")
     if not api_key:
-        return _mock_ranking()
+        return _mock_ranking(actions)
 
     client = OpenAI(
         base_url=os.environ.get("STRATUS_BASE_URL", "https://api.stratus.run/v1"),
@@ -23,7 +23,7 @@ You are an incident-response decision guardrail.
 Incident state:
 {json.dumps(state, indent=2)}
 
-Candidate actions:
+Planner-shortlisted candidate actions:
 {json.dumps(actions, indent=2)}
 
 Return valid JSON only with:
@@ -50,14 +50,14 @@ Return valid JSON only with:
         payload["notes"].append("Used live Stratus ranking.")
         return payload
     except Exception as exc:
-        payload = _mock_ranking()
+        payload = _mock_ranking(actions)
         payload["notes"].append(
             f"Live Stratus call failed; using deterministic fallback: {exc.__class__.__name__}"
         )
         return payload
 
 
-def _mock_ranking() -> dict:
+def _mock_ranking(actions: list[dict]) -> dict:
     ranked_actions = [
         {
             "id": "rate_limit_retries",
@@ -66,30 +66,59 @@ def _mock_ranking() -> dict:
             "rationale": "Controls retry amplification directly with low blast radius.",
         },
         {
-            "id": "disable_flag",
+            "id": "enable_payment_circuit_breaker",
             "rank": 2,
-            "confidence": 0.79,
-            "rationale": "Safely sheds risky dependency traffic, but is more user-visible.",
+            "confidence": 0.78,
+            "rationale": "Fails fast at the dependency edge and contains retry pressure, but may drop some payment attempts.",
+        },
+        {
+            "id": "increase_retry_backoff",
+            "rank": 3,
+            "confidence": 0.72,
+            "rationale": "Reduces retry pressure more gently, but takes longer to stabilize the feedback loop.",
         },
         {
             "id": "restart_payment",
-            "rank": 3,
+            "rank": 4,
             "confidence": 0.43,
             "rationale": "Tempting local fix, but it can amplify retries while payment is unstable.",
         },
         {
             "id": "shift_traffic",
-            "rank": 4,
+            "rank": 5,
             "confidence": 0.30,
             "rationale": "Widens exposure without directly reducing the retry storm.",
         },
+        {
+            "id": "disable_flag",
+            "rank": 6,
+            "confidence": 0.24,
+            "rationale": "Stops the pain quickly, but is too destructive to be the first safe move.",
+        },
     ]
+    action_ids = {action["id"] for action in actions}
+    ranked_actions = [item for item in ranked_actions if item["id"] in action_ids]
+    ranked_actions.sort(key=lambda item: item["rank"])
+    for index, item in enumerate(ranked_actions, start=1):
+        item["rank"] = index
     predicted_effects_by_action = {
         "restart_payment": {
             "latency_direction": "mixed",
             "error_direction": "down",
             "blast_radius": "medium",
             "retry_storm_risk": "high",
+        },
+        "enable_payment_circuit_breaker": {
+            "latency_direction": "down",
+            "error_direction": "mixed",
+            "blast_radius": "low",
+            "retry_storm_risk": "low",
+        },
+        "increase_retry_backoff": {
+            "latency_direction": "down",
+            "error_direction": "mixed",
+            "blast_radius": "low",
+            "retry_storm_risk": "medium",
         },
         "disable_flag": {
             "latency_direction": "down",
@@ -110,17 +139,17 @@ def _mock_ranking() -> dict:
             "retry_storm_risk": "medium",
         },
     }
-    best_action = {
-        "id": "rate_limit_retries",
-        "type": "throttle",
-        "target": "checkout",
-        "description": "Rate-limit checkout retries",
+    predicted_effects_by_action = {
+        action_id: effect
+        for action_id, effect in predicted_effects_by_action.items()
+        if action_id in action_ids
     }
+    best_action = next((action for action in actions if action["id"] == ranked_actions[0]["id"]), actions[0])
     return {
         "ranked_actions": ranked_actions,
         "best_action": best_action,
         "predicted_effects_by_action": predicted_effects_by_action,
-        "overall_confidence": 0.84,
+        "overall_confidence": ranked_actions[0]["confidence"],
         "notes": [
             "Using deterministic local ranking because Stratus credentials are missing or network access is unavailable."
         ],

@@ -7,3 +7,4 @@ IDENTITY.md
 SOUL.md
 USER.md
 *.pyc
+.DS_Store

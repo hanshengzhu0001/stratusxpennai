@@ -9,6 +9,8 @@ DEFAULT_STATE = {
     "payment_service_unreachable": True,
     "loadgenerator_flood_homepage": True,
     "retry_rate_limit_enabled": False,
+    "payment_circuit_breaker_enabled": False,
+    "retry_backoff_enabled": False,
     "traffic_shift_enabled": False,
     "payment_feature_disabled": False,
     "last_action": None,
@@ -18,7 +20,12 @@ DEFAULT_STATE = {
 def load_state() -> dict:
     if not STATE_PATH.exists():
         save_state(DEFAULT_STATE)
-    return json.loads(STATE_PATH.read_text())
+    state = json.loads(STATE_PATH.read_text())
+    merged = dict(DEFAULT_STATE)
+    merged.update(state)
+    if merged != state:
+        save_state(merged)
+    return merged
 
 
 def save_state(state: dict) -> None:
@@ -35,6 +42,10 @@ def apply_action(action_id: str) -> dict:
     state = load_state()
     if action_id == "rate_limit_retries":
         state["retry_rate_limit_enabled"] = True
+    elif action_id == "enable_payment_circuit_breaker":
+        state["payment_circuit_breaker_enabled"] = True
+    elif action_id == "increase_retry_backoff":
+        state["retry_backoff_enabled"] = True
     elif action_id == "restart_payment":
         state["payment_service_unreachable"] = False
     elif action_id == "disable_flag":
@@ -73,6 +84,13 @@ def derive_metrics(state: dict) -> dict:
         latency += 600
         error_rate += 0.03
         retry_rate += 0.10
+    if state["payment_circuit_breaker_enabled"]:
+        latency -= 420
+        error_rate -= 0.01
+        retry_rate -= 0.14
+    if state["retry_backoff_enabled"]:
+        latency -= 280
+        retry_rate -= 0.12
     if state["traffic_shift_enabled"]:
         latency -= 350
         error_rate -= 0.03

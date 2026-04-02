@@ -10,7 +10,7 @@ The current demo supports:
 
 - alert intake through a local webhook
 - live Prometheus-backed evidence collection
-- candidate remediation generation
+- a broader retail remediation library with scenario-specific shortlist selection
 - Stratus ranking and predicted downstream effects
 - a browser playbook for OpenClaw to execute
 - post-action verification and predicted-vs-actual comparison
@@ -20,7 +20,7 @@ The current demo supports:
 Core workflow:
 
 1. Alertmanager posts an incident payload to `tools/alert_receiver.py`.
-2. `run.py --phase plan` loads evidence and calls Stratus to rank actions.
+2. `run.py --phase plan` loads evidence, has the Planner Agent select a shortlist from the retail action library, and calls Stratus to rank only that shortlist.
 3. The plan writes a browser handoff artifact at `outputs/alert_latest_browser_playbook.json`.
 4. OpenClaw browser follows that artifact:
    - open dashboard
@@ -166,6 +166,7 @@ This writes:
 The final report includes:
 
 - incident summary
+- action library and planner shortlist metadata
 - candidate actions
 - Stratus ranking
 - chosen action

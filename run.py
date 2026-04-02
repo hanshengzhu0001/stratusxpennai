@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from agents.candidate_actions import generate_candidate_actions
+from agents.candidate_actions import build_scenario_shortlist
 from agents.incident_classifier import classify_incident
 from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
 from tools.execute_action import execute_action
@@ -96,9 +96,10 @@ def build_plan_report(
     state: dict,
     evidence: dict,
 ) -> dict:
-    actions = generate_candidate_actions(state)
-    ranking = rank_actions(state, actions)
-    chosen = normalize_best_action(ranking["best_action"], actions)
+    planner = build_scenario_shortlist(state)
+    shortlist = planner["shortlist"]
+    ranking = rank_actions(state, shortlist)
+    chosen = normalize_best_action(ranking["best_action"], shortlist)
     playbook_path = f"outputs/{scenario_id}_browser_playbook.json"
     return {
         "workflow": {
@@ -112,6 +113,13 @@ def build_plan_report(
         "input_path": str(input_path),
         "scenario_id": scenario_id,
         "incident_summary": state["summary"],
+        "planner": {
+            "agent": "Planner Agent",
+            "selection_strategy": planner["selection_strategy"],
+            "action_library_size": len(planner["action_library"]),
+            "shortlist_size": len(shortlist),
+            "selection_rationale": planner["selection_rationale"],
+        },
         "observed_condition": {
             "services": state.get("services", []),
             "metrics": state.get("metrics", {}),
@@ -123,7 +131,8 @@ def build_plan_report(
                 os.environ.get("CONTROL_PLANE_BASE_URL", "http://127.0.0.1:8010")
             ),
         },
-        "candidate_actions": actions,
+        "action_library": planner["action_library"],
+        "candidate_actions": shortlist,
         "stratus_ranking": ranking["ranked_actions"],
         "best_action": chosen,
         "overall_confidence": ranking["overall_confidence"],
@@ -170,6 +179,7 @@ def build_verify_report(
         "input_path": str(input_path),
         "scenario_id": scenario_id,
         "incident_summary": current_state["summary"],
+        "planner": plan.get("planner", {}),
         "observed_condition": {
             "services": current_state.get("services", []),
             "metrics": current_state.get("metrics", {}),
@@ -181,6 +191,7 @@ def build_verify_report(
                 os.environ.get("CONTROL_PLANE_BASE_URL", "http://127.0.0.1:8010")
             ),
         },
+        "action_library": plan.get("action_library", []),
         "candidate_actions": plan["candidate_actions"],
         "stratus_ranking": plan["stratus_ranking"],
         "best_action": chosen,
@@ -218,6 +229,10 @@ def render_markdown(report: dict) -> str:
     actions = "\n".join(
         f"- `{action['id']}`: {action['description']}" for action in report["candidate_actions"]
     )
+    library = "\n".join(
+        f"- `{action['id']}`: {action['category']} ({action['execution_surface']})"
+        for action in report.get("action_library", [])
+    )
     rankings = "\n".join(
         f"- Rank {item['rank']}: `{item['id']}` ({item['confidence']:.2f})"
         for item in report["stratus_ranking"]
@@ -241,6 +256,16 @@ Given a payment-related latency incident with retry amplification, which of thes
 - Summary: {report['incident_summary']}
 - Services: {", ".join(report['observed_condition']['services'])}
 - Pattern matches: {", ".join(report['observed_condition'].get('pattern_matches', []))}
+
+## Action Strategy
+
+- Planner strategy: `{report.get('planner', {}).get('selection_strategy', 'n/a')}`
+- Library size: `{report.get('planner', {}).get('action_library_size', 0)}`
+- Shortlist size: `{report.get('planner', {}).get('shortlist_size', 0)}`
+
+## Action Library
+
+{library}
 
 ## Candidate Actions
 
@@ -331,12 +356,16 @@ def retry_risk(retry_rate: float) -> str:
 def browser_workflow(chosen: dict) -> dict:
     button_map = {
         "rate_limit_retries": "Apply Retry Rate Limit",
+        "enable_payment_circuit_breaker": "Enable Payment Circuit Breaker",
+        "increase_retry_backoff": "Increase Retry Backoff",
         "restart_payment": "Restart Payment",
         "shift_traffic": "Shift Traffic",
         "disable_flag": "Disable Payment Flag",
     }
     selector_map = {
         "rate_limit_retries": "#action-rate_limit_retries",
+        "enable_payment_circuit_breaker": "#action-enable_payment_circuit_breaker",
+        "increase_retry_backoff": "#action-increase_retry_backoff",
         "restart_payment": "#action-restart_payment",
         "shift_traffic": "#action-shift_traffic",
         "disable_flag": "#action-disable_flag",
@@ -364,6 +393,8 @@ def kubernetes_plan(chosen: dict) -> dict:
         "restart_payment": "k8s/remediations/restart-payment-rollout.yaml",
         "disable_flag": "k8s/remediations/disable-payment-feature.yaml",
         "rate_limit_retries": "k8s/remediations/rate-limit-retries-configmap.yaml",
+        "enable_payment_circuit_breaker": "k8s/remediations/enable-payment-circuit-breaker-configmap.yaml",
+        "increase_retry_backoff": "k8s/remediations/increase-retry-backoff-configmap.yaml",
         "shift_traffic": "k8s/remediations/shift-traffic-virtualservice.yaml",
     }
     return {

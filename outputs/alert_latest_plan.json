@@ -10,6 +10,16 @@
   "input_path": "alerts/latest.json",
   "scenario_id": "alert_latest",
   "incident_summary": "Retry pressure above baseline",
+  "planner": {
+    "agent": "Planner Agent",
+    "selection_strategy": "broader_retail_action_library -> scenario_shortlist -> stratus_ranking",
+    "action_library_size": 12,
+    "shortlist_size": 6,
+    "selection_rationale": [
+      "Planner Agent prioritized overload-control actions because retry amplification and elevated checkout latency are present.",
+      "Planner Agent kept one tempting local reflex, one traffic option, and one kill switch so Guardrail can compare safe versus dangerous futures."
+    ]
+  },
   "observed_condition": {
     "services": [
       "frontend",
@@ -18,11 +28,12 @@
     ],
     "metrics": {
       "latency_p95_ms": 2300,
-      "error_rate": 0.16,
+      "error_rate": 0.18,
       "retry_rate": 0.31
     },
     "logs": [
-      "Retry pressure above baseline"
+      "payment timeout spikes observed",
+      "checkout retries exceeding normal threshold"
     ],
     "traces": [
       "checkout -> payment span dominates p95",
@@ -34,16 +45,17 @@
       "high_checkout_latency"
     ],
     "prometheus": {
-      "source": "live",
+      "source": "mock",
       "queries": {
-        "checkout_latency_p95_ms": 2300.0,
-        "checkout_error_rate": 0.16,
+        "checkout_latency_p95_ms": 2300,
+        "checkout_error_rate": 0.18,
         "checkout_retry_rate": 0.31
       },
       "active_alerts": [
         "CheckoutLatencyHigh",
         "CheckoutRetryStorm"
-      ]
+      ],
+      "note": "Prometheus query failed; using mock evidence: URLError"
     },
     "browser_targets": {
       "dashboard": "http://127.0.0.1:8010/",
@@ -51,95 +63,237 @@
       "state_api": "http://127.0.0.1:8010/api/state"
     }
   },
-  "candidate_actions": [
-    {
-      "id": "restart_payment",
-      "type": "restart",
-      "target": "payment",
-      "description": "Restart payment pods"
-    },
-    {
-      "id": "disable_flag",
-      "type": "flag",
-      "target": "payment_feature",
-      "description": "Disable the payment feature flag"
-    },
+  "action_library": [
     {
       "id": "rate_limit_retries",
       "type": "throttle",
       "target": "checkout",
-      "description": "Rate-limit checkout retries"
+      "category": "retry_overload_control",
+      "description": "Rate-limit checkout retries to break retry amplification.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "enable_payment_circuit_breaker",
+      "type": "circuit_breaker",
+      "target": "payment",
+      "category": "retry_overload_control",
+      "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "increase_retry_backoff",
+      "type": "config",
+      "target": "checkout",
+      "category": "retry_overload_control",
+      "description": "Increase retry backoff so checkout stops hammering payment during partial degradation.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "restart_payment",
+      "type": "restart",
+      "target": "payment",
+      "category": "service_recovery",
+      "description": "Restart payment pods to clear local state after backlog is reduced.",
+      "execution_surface": "browser"
     },
     {
       "id": "shift_traffic",
       "type": "traffic_shift",
       "target": "secondary_region",
-      "description": "Shift traffic to the secondary region"
+      "category": "traffic_management",
+      "description": "Shift a slice of checkout traffic to the secondary region.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "disable_flag",
+      "type": "flag",
+      "target": "payment_feature",
+      "category": "graceful_degradation",
+      "description": "Disable the payment feature flag as a last-resort kill switch.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "rollback_payment_deploy",
+      "type": "rollback",
+      "target": "payment",
+      "category": "deployment_recovery",
+      "description": "Rollback the most recent payment deployment.",
+      "execution_surface": "k8s"
+    },
+    {
+      "id": "rollback_checkout_deploy",
+      "type": "rollback",
+      "target": "checkout",
+      "category": "deployment_recovery",
+      "description": "Rollback the most recent checkout deployment.",
+      "execution_surface": "k8s"
+    },
+    {
+      "id": "disable_nonessential_checkout_features",
+      "type": "degrade",
+      "target": "checkout",
+      "category": "graceful_degradation",
+      "description": "Disable nonessential checkout features and keep the transaction path alive.",
+      "execution_surface": "future"
+    },
+    {
+      "id": "serve_stale_catalog_cache",
+      "type": "cache",
+      "target": "catalog",
+      "category": "graceful_degradation",
+      "description": "Serve stale catalog data to preserve capacity for checkout and payment.",
+      "execution_surface": "future"
+    },
+    {
+      "id": "failover_to_secondary_region",
+      "type": "failover",
+      "target": "region",
+      "category": "traffic_management",
+      "description": "Fail over fully to the secondary region when the primary region is no longer safe.",
+      "execution_surface": "k8s"
+    },
+    {
+      "id": "pause_noncritical_background_jobs",
+      "type": "workload_shaping",
+      "target": "background_workers",
+      "category": "capacity_management",
+      "description": "Pause noncritical background jobs to free capacity for checkout and payment.",
+      "execution_surface": "k8s"
+    }
+  ],
+  "candidate_actions": [
+    {
+      "id": "rate_limit_retries",
+      "type": "throttle",
+      "target": "checkout",
+      "category": "retry_overload_control",
+      "description": "Rate-limit checkout retries to break retry amplification.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "enable_payment_circuit_breaker",
+      "type": "circuit_breaker",
+      "target": "payment",
+      "category": "retry_overload_control",
+      "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "increase_retry_backoff",
+      "type": "config",
+      "target": "checkout",
+      "category": "retry_overload_control",
+      "description": "Increase retry backoff so checkout stops hammering payment during partial degradation.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "restart_payment",
+      "type": "restart",
+      "target": "payment",
+      "category": "service_recovery",
+      "description": "Restart payment pods to clear local state after backlog is reduced.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "shift_traffic",
+      "type": "traffic_shift",
+      "target": "secondary_region",
+      "category": "traffic_management",
+      "description": "Shift a slice of checkout traffic to the secondary region.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "disable_flag",
+      "type": "flag",
+      "target": "payment_feature",
+      "category": "graceful_degradation",
+      "description": "Disable the payment feature flag as a last-resort kill switch.",
+      "execution_surface": "browser"
     }
   ],
   "stratus_ranking": [
     {
       "id": "rate_limit_retries",
       "rank": 1,
-      "confidence": 0.87,
-      "reasoning": "Directly addresses retry amplification pattern. Stops cascade without service disruption."
+      "confidence": 0.84,
+      "rationale": "Controls retry amplification directly with low blast radius."
+    },
+    {
+      "id": "enable_payment_circuit_breaker",
+      "rank": 2,
+      "confidence": 0.78,
+      "rationale": "Fails fast at the dependency edge and contains retry pressure, but may drop some payment attempts."
+    },
+    {
+      "id": "increase_retry_backoff",
+      "rank": 3,
+      "confidence": 0.72,
+      "rationale": "Reduces retry pressure more gently, but takes longer to stabilize the feedback loop."
     },
     {
       "id": "restart_payment",
-      "rank": 2,
-      "confidence": 0.72,
-      "reasoning": "Targets root cause (payment degradation) but carries restart risk and doesn't prevent retry storm recurrence."
-    },
-    {
-      "id": "disable_flag",
-      "rank": 3,
-      "confidence": 0.58,
-      "reasoning": "Reduces load on payment service but degrades user experience significantly."
+      "rank": 4,
+      "confidence": 0.43,
+      "rationale": "Tempting local fix, but it can amplify retries while payment is unstable."
     },
     {
       "id": "shift_traffic",
-      "rank": 4,
-      "confidence": 0.45,
-      "reasoning": "May propagate problem to secondary region if payment service issue is systemic."
+      "rank": 5,
+      "confidence": 0.3,
+      "rationale": "Widens exposure without directly reducing the retry storm."
+    },
+    {
+      "id": "disable_flag",
+      "rank": 6,
+      "confidence": 0.24,
+      "rationale": "Stops the pain quickly, but is too destructive to be the first safe move."
     }
   ],
   "best_action": {
     "id": "rate_limit_retries",
     "type": "throttle",
     "target": "checkout",
-    "expected_outcome": "Break retry amplification feedback loop, stabilize checkout service, reduce payment service load",
-    "risk_level": "low",
-    "reversible": true
+    "category": "retry_overload_control",
+    "description": "Rate-limit checkout retries to break retry amplification.",
+    "execution_surface": "browser"
   },
-  "overall_confidence": 0.87,
+  "overall_confidence": 0.84,
   "predicted_effects_by_action": {
-    "rate_limit_retries": {
-      "latency_p95_ms": 1200,
-      "error_rate": 0.08,
-      "retry_rate": 0.05,
-      "time_to_effect_seconds": 30,
-      "blast_radius": "checkout service only"
-    },
     "restart_payment": {
-      "latency_p95_ms": 1500,
-      "error_rate": 0.22,
-      "retry_rate": 0.28,
-      "time_to_effect_seconds": 90,
-      "blast_radius": "payment + checkout during restart window"
+      "latency_direction": "mixed",
+      "error_direction": "down",
+      "blast_radius": "medium",
+      "retry_storm_risk": "high"
+    },
+    "enable_payment_circuit_breaker": {
+      "latency_direction": "down",
+      "error_direction": "mixed",
+      "blast_radius": "low",
+      "retry_storm_risk": "low"
+    },
+    "increase_retry_backoff": {
+      "latency_direction": "down",
+      "error_direction": "mixed",
+      "blast_radius": "low",
+      "retry_storm_risk": "medium"
     },
     "disable_flag": {
-      "latency_p95_ms": 800,
-      "error_rate": 0.02,
-      "retry_rate": 0.01,
-      "time_to_effect_seconds": 15,
-      "blast_radius": "all users lose payment functionality"
+      "latency_direction": "down",
+      "error_direction": "down",
+      "blast_radius": "low",
+      "retry_storm_risk": "low"
+    },
+    "rate_limit_retries": {
+      "latency_direction": "down",
+      "error_direction": "mixed",
+      "blast_radius": "low",
+      "retry_storm_risk": "low"
     },
     "shift_traffic": {
-      "latency_p95_ms": 1800,
-      "error_rate": 0.14,
-      "retry_rate": 0.29,
-      "time_to_effect_seconds": 120,
-      "blast_radius": "global - may cascade to secondary region"
+      "latency_direction": "mixed",
+      "error_direction": "mixed",
+      "blast_radius": "high",
+      "retry_storm_risk": "medium"
     }
   },
   "browser_workflow": {
@@ -173,6 +327,7 @@
     "recommended_remediation_manifest": "k8s/remediations/rate-limit-retries-configmap.yaml"
   },
   "notes": [
-    "Used live Stratus ranking."
+    "Using deterministic local ranking because Stratus credentials are missing or network access is unavailable.",
+    "Live Stratus call failed; using deterministic fallback: APITimeoutError"
   ]
 }

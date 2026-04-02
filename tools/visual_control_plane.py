@@ -49,6 +49,8 @@ def dashboard() -> str:
         <span class="pill">payment_service_unreachable={str(state["payment_service_unreachable"]).lower()}</span>
         <span class="pill">loadgenerator_flood_homepage={str(state["loadgenerator_flood_homepage"]).lower()}</span>
         <span class="pill">retry_rate_limit_enabled={str(state["retry_rate_limit_enabled"]).lower()}</span>
+        <span class="pill">payment_circuit_breaker_enabled={str(state["payment_circuit_breaker_enabled"]).lower()}</span>
+        <span class="pill">retry_backoff_enabled={str(state["retry_backoff_enabled"]).lower()}</span>
         <span class="pill">last_action={escape(str(state["last_action"]))}</span>
       </div>
       <div>
@@ -77,6 +79,8 @@ def dashboard() -> str:
 def feature_flags() -> str:
     state = load_state()
     buttons = _action_form("rate_limit_retries", "Apply Retry Rate Limit")
+    buttons += _action_form("enable_payment_circuit_breaker", "Enable Payment Circuit Breaker")
+    buttons += _action_form("increase_retry_backoff", "Increase Retry Backoff")
     buttons += _action_form("restart_payment", "Restart Payment")
     buttons += _action_form("shift_traffic", "Shift Traffic")
     buttons += _action_form("disable_flag", "Disable Payment Flag")
@@ -86,6 +90,8 @@ def feature_flags() -> str:
             ("payment_service_unreachable", state["payment_service_unreachable"]),
             ("loadgenerator_flood_homepage", state["loadgenerator_flood_homepage"]),
             ("retry_rate_limit_enabled", state["retry_rate_limit_enabled"]),
+            ("payment_circuit_breaker_enabled", state["payment_circuit_breaker_enabled"]),
+            ("retry_backoff_enabled", state["retry_backoff_enabled"]),
             ("traffic_shift_enabled", state["traffic_shift_enabled"]),
             ("payment_feature_disabled", state["payment_feature_disabled"]),
         ]

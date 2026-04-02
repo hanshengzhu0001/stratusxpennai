@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>week2_implementation_plan</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<h1 id="week-2-implementation-plan">Week 2 Implementation Plan</h1>
+<h2 id="openclaw-stratus-counterfactual-remediation-guardrail">OpenClaw
++ Stratus: Counterfactual Remediation Guardrail</h2>
+<h3 id="track">Track</h3>
+<p>Stratus X1 Hackathon<br />
+Track: <code>Multi-Agent Systems</code></p>
+<h2 id="objective">0. Objective</h2>
+<p>Week 2 should deliver a <strong>90% final product</strong>, not
+another prototype.</p>
+<p>By the end of this week, the demo should prove:</p>
+<ol type="1">
+<li><strong>Baseline vs Stratus</strong>
+<ul>
+<li>the naive local reflex chooses the wrong action</li>
+<li>Stratus rejects it by predicting a worse global consequence</li>
+</ul></li>
+<li><strong>Real incident demo</strong>
+<ul>
+<li>Scenario A is triggered live</li>
+<li>the issue is observed through real dashboards and alerts</li>
+<li>the safer action is executed and verified</li>
+</ul></li>
+<li><strong>True multi-agent product</strong>
+<ul>
+<li>the system is presented as named agents with distinct roles</li>
+<li>OpenClaw is visibly coordinating them</li>
+</ul></li>
+</ol>
+<p>Product claim:</p>
+<blockquote>
+<p>We are building a Counterfactual Remediation Guardrail for
+operational agents: a system that predicts whether a remediation is safe
+before acting, then verifies whether the prediction held after
+action.</p>
+</blockquote>
+<p>This should feel like a <strong>world-model safety layer for
+operational agents</strong>, not a generic incident copilot.</p>
+<hr />
+<h2 id="the-real-story-we-are-demoing">1. The Real Story We Are
+Demoing</h2>
+<h3 id="scenario-a-retail-death-spiral">Scenario A: Retail Death
+Spiral</h3>
+<p>It is a peak retail event, such as a flash sale.</p>
+<p>Traffic surges. The <code>payment</code> service suffers a minor
+degradation, not a full outage. On its own, the event is survivable. But
+the <code>checkout</code> service is designed to be aggressively
+resilient: every timeout triggers retries. Those retries amplify load on
+the already-stressed <code>payment</code> dependency. Within minutes,
+the recovery mechanism itself becomes the failure engine.</p>
+<p>This is what a real operator sees:</p>
+<ul>
+<li><code>checkout</code> latency spikes past <code>2300ms</code></li>
+<li>error rate rises into the high teens</li>
+<li>retry volume surges far above normal baseline</li>
+<li><code>payment</code> pods still appear “running,” but service
+quality is degraded</li>
+<li>dashboards show red latency and dependency stress across the
+checkout-payment path</li>
+</ul>
+<p>This is what makes the scenario dangerous:</p>
+<ul>
+<li>the obvious human reflex is to restart payment pods</li>
+<li>that reflex is locally sensible</li>
+<li>but under retry amplification it can make recovery worse</li>
+<li>a traffic shift can also spread the problem into a second
+region</li>
+</ul>
+<p>So the real operational question is:</p>
+<blockquote>
+<p>Which action is safe to take first, given the whole system state?</p>
+</blockquote>
+<h3 id="action-strategy-for-scenario-a">Action Strategy For Scenario
+A</h3>
+<p>We will not rank a fixed four-action list.</p>
+<p>The product structure is:</p>
+<ol type="1">
+<li><strong>Action library</strong>
+<ul>
+<li>a broader retail remediation catalog</li>
+<li>target size: 12 to 20 actions</li>
+</ul></li>
+<li><strong>Scenario shortlist</strong>
+<ul>
+<li>Planner Agent selects the 4 to 6 actions that are actually relevant
+to the live incident</li>
+</ul></li>
+<li><strong>Guardrail ranking</strong>
+<ul>
+<li>Stratus ranks only the shortlist</li>
+</ul></li>
+</ol>
+<p>This keeps the product realistic:</p>
+<ul>
+<li>richer than a toy demo</li>
+<li>focused enough for stable Stratus output</li>
+<li>clear enough for judges to follow</li>
+</ul>
+<h3 id="retail-action-library-categories">Retail Action Library
+Categories</h3>
+<ul>
+<li>retry / overload control</li>
+<li>graceful degradation</li>
+<li>traffic management</li>
+<li>deployment rollback</li>
+<li>capacity / workload shaping</li>
+<li>last-resort service recovery</li>
+</ul>
+<h3 id="default-scenario-a-shortlist">Default Scenario A Shortlist</h3>
+<ul>
+<li><code>rate_limit_retries</code></li>
+<li><code>enable_payment_circuit_breaker</code></li>
+<li><code>increase_retry_backoff</code></li>
+<li><code>restart_payment</code></li>
+<li><code>shift_traffic</code></li>
+<li><code>disable_flag</code></li>
+</ul>
+<h3 id="ground-truth">Ground Truth</h3>
+<ul>
+<li><code>restart_payment</code>
+<ul>
+<li>tempting local reflex</li>
+<li>globally dangerous under retry backlog</li>
+</ul></li>
+<li><code>shift_traffic</code>
+<ul>
+<li>plausible</li>
+<li>risks secondary-region spillover</li>
+</ul></li>
+<li><code>rate_limit_retries</code>
+<ul>
+<li>breaks the feedback loop</li>
+<li>is the safest first action</li>
+</ul></li>
+<li><code>enable_payment_circuit_breaker</code>
+<ul>
+<li>valid containment option</li>
+<li>safer than restart, but may be more user-visible than retry
+shaping</li>
+</ul></li>
+<li><code>increase_retry_backoff</code>
+<ul>
+<li>valid containment option</li>
+<li>improves pressure more slowly than rate limiting</li>
+</ul></li>
+<li><code>disable_flag</code>
+<ul>
+<li>technically effective</li>
+<li>too destructive for first response</li>
+</ul></li>
+</ul>
+<h3 id="what-winning-looks-like">What “Winning” Looks Like</h3>
+<p>The demo should clearly show:</p>
+<ul>
+<li>Baseline Agent chooses <code>restart_payment</code></li>
+<li>Guardrail Agent rejects it</li>
+<li>Guardrail Agent chooses <code>rate_limit_retries</code></li>
+<li>OpenClaw executes the safer action</li>
+<li>retry pressure and latency improve</li>
+<li>the final report states what dangerous action was avoided</li>
+</ul>
+<hr />
+<h2 id="real-issue-demo-path">2. Real Issue Demo Path</h2>
+<h3 id="primary-demo-base">Primary Demo Base</h3>
+<p>The primary live demo environment for Week 2 is:</p>
+<ul>
+<li><strong>OTel Demo on Kubernetes</strong></li>
+</ul>
+<p>The point is to make the issue happen in a real system, not only in a
+synthetic local fixture.</p>
+<h3 id="how-the-issue-is-triggered">How The Issue Is Triggered</h3>
+<p>Use the official OTel Demo feature-flag path to create the issue:</p>
+<ul>
+<li>open the OTel Demo feature UI at <code>/feature</code></li>
+<li>turn on the payment-unreachable failure flag
+<ul>
+<li><code>paymentServiceUnreachable</code> /
+<code>paymentUnreachable</code> depending on the OTel version</li>
+</ul></li>
+<li>turn on <code>loadgeneratorFloodHomepage</code></li>
+</ul>
+<p>This creates the closest live version of Scenario A:</p>
+<ul>
+<li>payment degrades</li>
+<li>checkout retries amplify the issue</li>
+<li>latency and retry alerts fire</li>
+</ul>
+<h3 id="how-the-issue-is-observed">How The Issue Is Observed</h3>
+<p>Use:</p>
+<ul>
+<li>Prometheus + Alertmanager</li>
+<li>OTel Demo dashboards</li>
+<li>browser-visible feature/UI state</li>
+</ul>
+<p>The product should treat this as one incident state, not separate
+disconnected tools.</p>
+<h3 id="how-the-issue-is-addressed">How The Issue Is Addressed</h3>
+<p>Execution path for Week 2:</p>
+<ul>
+<li><strong>Trigger path</strong>
+<ul>
+<li>OTel Demo feature-flag UI</li>
+</ul></li>
+<li><strong>Observation path</strong>
+<ul>
+<li>OTel Demo dashboards + Prometheus + Alertmanager</li>
+</ul></li>
+<li><strong>Remediation path</strong>
+<ul>
+<li>OpenClaw browser executes the selected safe action through the
+remediation surface</li>
+</ul></li>
+<li><strong>Verification path</strong>
+<ul>
+<li>Prometheus metrics + browser-visible state + final verdict
+report</li>
+</ul></li>
+</ul>
+<h3 id="fallback">Fallback</h3>
+<p>Keep the current local visual control plane only as a rehearsal /
+fallback path.</p>
+<p>It should be framed in the plan as:</p>
+<ul>
+<li>fallback for reliability</li>
+<li>not the flagship Week 2 demo</li>
+</ul>
+<h3 id="chaos-mesh">Chaos Mesh</h3>
+<p>Chaos Mesh remains:</p>
+<ul>
+<li>optional stretch</li>
+<li>not the primary Week 2 dependency</li>
+</ul>
+<hr />
+<h2 id="the-product-as-a-multi-agent-system">3. The Product As A
+Multi-Agent System</h2>
+<p>The product should be described and demoed as five named agents:</p>
+<ul>
+<li><strong>Sentinel Agent</strong>
+<ul>
+<li>gathers alert, Prometheus, trace, and browser-visible evidence</li>
+</ul></li>
+<li><strong>Planner Agent</strong>
+<ul>
+<li>selects the scenario shortlist from the retail action library</li>
+</ul></li>
+<li><strong>Challenger Agent</strong>
+<ul>
+<li>computes the non-Stratus baseline choice</li>
+</ul></li>
+<li><strong>Guardrail Agent</strong>
+<ul>
+<li>calls Stratus to simulate and rank futures before action</li>
+</ul></li>
+<li><strong>Operator + Verifier Agent</strong>
+<ul>
+<li>uses OpenClaw browser/tools to execute the chosen action and confirm
+the outcome</li>
+</ul></li>
+</ul>
+<h3 id="final-story-flow">Final Story Flow</h3>
+<ol type="1">
+<li><strong>Sentinel Agent</strong> observes the incident</li>
+<li><strong>Planner Agent</strong> selects the shortlist</li>
+<li><strong>Challenger Agent</strong> picks the obvious reflex</li>
+<li><strong>Guardrail Agent</strong> rejects it using Stratus</li>
+<li><strong>Operator Agent</strong> executes the safer move</li>
+<li><strong>Verifier Agent</strong> proves why that mattered</li>
+</ol>
+<h3 id="required-wow-moment">Required “Wow” Moment</h3>
+<p>The final demo must visibly show:</p>
+<ul>
+<li>the obvious action is <code>restart_payment</code></li>
+<li>the <strong>Guardrail Agent</strong> vetoes it</li>
+<li>the product explains the predicted blast radius</li>
+<li>the <strong>Operator Agent</strong> applies
+<code>rate_limit_retries</code></li>
+<li>the <strong>Verifier Agent</strong> shows retry pressure fell and
+blast radius stayed contained</li>
+</ul>
+<hr />
+<h2 id="current-branches-and-setup">4. Current Branches And Setup</h2>
+<p>Repo:</p>
+<ul>
+<li><code>https://github.com/hanshengzhu0001/stratusxpennai</code></li>
+</ul>
+<p>Current / planned branches:</p>
+<ul>
+<li><code>workflow</code></li>
+<li><code>ranking+rollback</code></li>
+<li><code>baseline</code></li>
+<li><code>scenario+eval</code> (planned)</li>
+</ul>
+<h3 id="recommended-base-setup">Recommended Base Setup</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone <span class="at">-b</span> workflow https://github.com/hanshengzhu0001/stratusxpennai.git</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> stratusxpennai</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> <span class="at">-m</span> venv .venv</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> fetch origin</span></code></pre></div>
+<h3 id="branch-usage">Branch Usage</h3>
+<ul>
+<li><code>workflow</code>
+<ul>
+<li>shared integration</li>
+<li>final verdict report</li>
+<li>OpenClaw flow</li>
+</ul></li>
+<li><code>ranking+rollback</code>
+<ul>
+<li>Stratus prompt/schema</li>
+<li>veto logic</li>
+<li>rollback reasoning</li>
+</ul></li>
+<li><code>baseline</code>
+<ul>
+<li>baseline chooser</li>
+<li>comparison artifact</li>
+</ul></li>
+<li><code>scenario+eval</code>
+<ul>
+<li>scenario spec</li>
+<li>evaluation rubric</li>
+<li>visual acceptance criteria</li>
+</ul></li>
+</ul>
+<h3 id="suggested-checkout">Suggested Checkout</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout workflow</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> ranking+rollback origin/ranking+rollback</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> baseline origin/baseline</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> scenario+eval workflow</span></code></pre></div>
+<h3 id="shared-workflow-usage">Shared Workflow Usage</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">.venv/bin/python</span> run.py alerts/latest.json <span class="at">--phase</span> plan</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">.venv/bin/python</span> run.py alerts/latest.json <span class="at">--phase</span> verify</span></code></pre></div>
+<h3 id="openclaw-usage">OpenClaw Usage</h3>
+<ul>
+<li>use this repo as the OpenClaw workspace</li>
+<li>run:
+<ul>
+<li><code>Use the incident_guardrail skill on the latest alert.</code></li>
+</ul></li>
+</ul>
+<h3 id="independent-starting-points">Independent Starting Points</h3>
+<ul>
+<li>ranking work can start immediately on
+<code>ranking+rollback</code></li>
+<li>baseline work can start immediately on <code>baseline</code></li>
+<li>scenario/eval work can start immediately on
+<code>scenario+eval</code></li>
+<li>integration/report work continues on <code>workflow</code></li>
+</ul>
+<hr />
+<h2 id="current-status">5. Current Status</h2>
+<p>We already have:</p>
+<ul>
+<li>a working end-to-end flow on <code>workflow</code></li>
+<li>OpenClaw orchestration + browser handoff</li>
+<li>live Stratus ranking in the guarded decision step</li>
+<li>Prometheus-backed verification</li>
+<li>outputs for:
+<ul>
+<li>plan</li>
+<li>browser playbook</li>
+<li>final report</li>
+</ul></li>
+</ul>
+<p>Week 1 contributions already established:</p>
+<ul>
+<li>workflow / integration backbone</li>
+<li>live Stratus path</li>
+<li>simulator/comparison shape</li>
+<li>Scenario A narrative and product framing</li>
+</ul>
+<p>So Week 2 is not about inventing the project anymore.</p>
+<p>Week 2 is about making one real incident story undeniable.</p>
+<hr />
+<h2 id="team-rules-for-week-2">6. Team Rules For Week 2</h2>
+<ul>
+<li>no overlap in <strong>primary ownership</strong></li>
+<li>everyone touches both <strong>OpenClaw</strong> and
+<strong>Stratus</strong></li>
+<li>everyone contributes in:
+<ul>
+<li><code>Develop</code></li>
+<li><code>Test</code></li>
+<li><code>Furnish</code></li>
+</ul></li>
+</ul>
+<p>Primary ownership means one person is the final owner of that
+lane.</p>
+<p>No one is assigned “generic workflow ownership.”</p>
+<p>Instead, each person owns a distinct piece of the product and a
+distinct agent-facing responsibility.</p>
+<hr />
+<h2 id="responsibilities">7. Responsibilities</h2>
+<h3 id="hansen">Hansen</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>final product coherence</li>
+<li>final verdict report</li>
+<li>integration on <code>workflow</code></li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>integrate the five-agent story into the repo outputs and demo
+language</li>
+<li>merge action library, shortlist, baseline, Stratus, execution, and
+verification into one final verdict output</li>
+<li>make the final report judge-facing:
+<ul>
+<li>dangerous action rejected</li>
+<li>why it was rejected</li>
+<li>chosen safer action</li>
+<li>predicted blast radius</li>
+<li>actual blast radius avoided</li>
+</ul></li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>rehearse full end-to-end runs</li>
+<li>test OpenClaw browser reliability</li>
+<li>test final demo timing and fallback path</li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>final demo script</li>
+<li>final verdict report template</li>
+<li>final OpenClaw demo prompt</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>owns the Operator + Verifier product experience</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>owns how Guardrail output is rendered and explained in the
+product</li>
+</ul>
+<h3 id="tony">Tony</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>Guardrail Agent behavior</li>
+<li>Stratus schema, prompt, veto logic</li>
+<li>work on <code>ranking+rollback</code></li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>harden <code>restart_payment</code> vs
+<code>rate_limit_retries</code></li>
+<li>make Stratus reliable on a 4 to 6 action shortlist, not a giant
+action dump</li>
+<li>make Stratus output stable on:
+<ul>
+<li>ranking</li>
+<li>confidence</li>
+<li>rationale</li>
+<li>predicted latency delta</li>
+<li>predicted retry reduction</li>
+<li>predicted blast radius</li>
+<li>rollback / veto reasoning</li>
+</ul></li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>repeated Stratus trials on the live Scenario A input</li>
+<li>compare prompt variants</li>
+<li>maintain <code>实验记录 TBD</code></li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>final request/response schema</li>
+<li>final prompt version</li>
+<li>one short “why restart is unsafe” explanation</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>ensure Guardrail output can directly drive OpenClaw browser
+execution and rollback messaging</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>deepest Stratus integration owner</li>
+</ul>
+<h3 id="charlie">Charlie</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>scenario truth</li>
+<li>evaluation rubric</li>
+<li>product positioning</li>
+<li>work on <code>scenario+eval</code></li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>write the canonical Scenario A spec</li>
+<li>define the retail action library categories and Scenario A shortlist
+policy</li>
+<li>define the action truth table</li>
+<li>define the exact visual cues the system must inspect before and
+after action</li>
+<li>define evaluation metrics:
+<ul>
+<li>decision fidelity</li>
+<li>predicted-vs-actual drift</li>
+<li>blast radius compression</li>
+<li>dangerous reflex rejected score</li>
+</ul></li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>validate that the live OTel-triggered demo matches the intended
+story</li>
+<li>validate that the report tells the right business and operational
+narrative</li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>scenario spec</li>
+<li>evaluation rubric</li>
+<li>judge-facing product narrative</li>
+<li>“why this category is new” positioning copy</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>defines what Sentinel and Verifier must inspect in the UI</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>defines the truths and failure physics the Guardrail must reason
+over</li>
+</ul>
+<h3 id="eason">Eason</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>Challenger Agent</li>
+<li>baseline path</li>
+<li>comparison artifact</li>
+<li>work on <code>baseline</code></li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>implement <code>baseline.py</code></li>
+<li>make baseline choose from the same Scenario A shortlist that
+Guardrail sees</li>
+<li>support:
+<ul>
+<li>restart-first baseline</li>
+<li>plain LLM no-Stratus baseline</li>
+</ul></li>
+<li>generate comparison output:
+<ul>
+<li>baseline choice</li>
+<li>Stratus choice</li>
+<li>ground-truth best choice</li>
+<li>which action is safer</li>
+<li>blast radius difference</li>
+<li>predicted-vs-actual gap</li>
+</ul></li>
+</ul>
+<p>Important default:</p>
+<ul>
+<li>this work must be independent of integration work</li>
+<li>the baseline branch should be buildable and testable using the
+existing incident input shape and candidate action schema</li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>confirm baseline tends to choose <code>restart_payment</code> under
+Scenario A</li>
+<li>confirm Stratus path beats baseline on the same input</li>
+<li>confirm comparison artifact is understandable in one screen</li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>baseline module</li>
+<li>comparison artifact</li>
+<li>one short baseline-vs-Stratus explanation</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>make baseline results visible in the final OpenClaw-driven report
+and demo narrative</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>compare Challenger output directly against Guardrail output on the
+same scenario</li>
+</ul>
+<hr />
+<h2 id="locked-interfaces">8. Locked Interfaces</h2>
+<p>Use these as stable interfaces:</p>
+<ul>
+<li>incident state</li>
+<li>action library</li>
+<li>candidate actions</li>
+<li>planner shortlist</li>
+<li>baseline output</li>
+<li>Stratus ranking output</li>
+<li>final verdict report</li>
+</ul>
+<p>Required final report fields:</p>
+<ul>
+<li><code>baseline_choice</code></li>
+<li><code>guardrail_choice</code></li>
+<li><code>ground_truth_best_action</code></li>
+<li><code>dangerous_action_rejected</code></li>
+<li><code>predicted_blast_radius</code></li>
+<li><code>actual_blast_radius</code></li>
+<li><code>blast_radius_avoided</code></li>
+<li><code>decision_fidelity</code></li>
+<li><code>predicted_vs_actual_drift</code></li>
+</ul>
+<hr />
+<h2 id="test-plan-and-demo-scenarios">9. Test Plan And Demo
+Scenarios</h2>
+<h3 id="primary-live-demo-test">Primary Live Demo Test</h3>
+<ul>
+<li>deploy OTel Demo on K8s</li>
+<li>trigger the payment-unreachable flag in the OTel feature UI</li>
+<li>trigger <code>loadgeneratorFloodHomepage</code></li>
+<li>confirm latency and retry alerts fire</li>
+<li>run:
+<ul>
+<li>Sentinel -&gt; Planner -&gt; Challenger -&gt; Guardrail</li>
+</ul></li>
+<li>confirm baseline recommends <code>restart_payment</code></li>
+<li>confirm Guardrail ranks <code>rate_limit_retries</code> first</li>
+<li>use OpenClaw browser to apply the safer action</li>
+<li>verify retry factor drops, alerts resolve or narrow, and the verdict
+report states the avoided catastrophe</li>
+</ul>
+<h3 id="minimum-acceptance-criteria">Minimum Acceptance Criteria</h3>
+<ul>
+<li>the dangerous action is explicitly shown and rejected</li>
+<li>Stratus reasoning is visibly necessary</li>
+<li>OpenClaw visibly acts in the UI</li>
+<li>Prometheus/browser verify the result</li>
+<li>the final output reads like a verdict, not debug output</li>
+</ul>
+<h3 id="fallback-rehearsal">Fallback Rehearsal</h3>
+<ul>
+<li>keep the current local visual control plane as a fallback</li>
+<li>frame it only as a rehearsal backup, not the flagship demo</li>
+</ul>
+<hr />
+<h2 id="assumptions-and-defaults">10. Assumptions And Defaults</h2>
+<ul>
+<li>primary Week 2 demo base: <strong>OTel Demo on
+Kubernetes</strong></li>
+<li>primary issue trigger: <strong>OTel Demo feature flags</strong></li>
+<li>primary real issue mechanics: <strong>payment degradation + retry
+amplification</strong></li>
+<li>primary differentiator: <strong>Stratus vetoes the dangerous local
+reflex</strong></li>
+<li>primary multi-agent story:
+<ul>
+<li><strong>Sentinel / Planner / Challenger / Guardrail /
+Operator+Verifier</strong></li>
+</ul></li>
+<li>recommended new branch: <code>scenario+eval</code></li>
+<li>Chaos Mesh remains optional stretch work, not the core Week 2
+dependency</li>
+</ul>
+<hr />
+<h2 id="grounding-sources">11. Grounding / Sources</h2>
+<p>The PDF should explicitly cite the official sources that justify the
+“real issue” path:</p>
+<ul>
+<li>OpenTelemetry Demo repo / deployment baseline
+<ul>
+<li><code>https://github.com/open-telemetry/opentelemetry-demo</code></li>
+</ul></li>
+<li>OTel Demo feature-flag UI release note
+<ul>
+<li><code>https://github.com/open-telemetry/opentelemetry-demo/releases</code></li>
+</ul></li>
+<li>Prometheus + Alertmanager alerting model
+<ul>
+<li><code>https://prometheus.io/docs/alerting/latest/alertmanager/</code></li>
+</ul></li>
+</ul>
+</body>
+</html>
