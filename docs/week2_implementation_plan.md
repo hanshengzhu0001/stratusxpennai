@@ -132,6 +132,62 @@ We should prepare a small **incident portfolio** with realistic metrics so the d
      - cautious traffic shift
      - or capacity-preserving workload shaping
 
+### Reference Incident Snapshots
+
+These are the target profiles for simulation and demo copy.
+
+1. **Scenario A: Retry Death Spiral**
+   - payment latency p95:
+     - `1400-2200 ms`
+   - checkout error rate:
+     - `12%-20%`
+   - retry amplification factor:
+     - `3.0x-5.0x`
+   - queue abandonment rate:
+     - `18%-30%`
+   - seat hold utilization:
+     - `70%-85%`
+   - expected first action:
+     - `rate_limit_retries`
+2. **Scenario B: Payment Gateway Flap**
+   - payment success rate:
+     - `72%-88%`
+   - payment timeout rate:
+     - `8%-15%`
+   - checkout latency p95:
+     - `1200-1800 ms`
+   - retry amplification factor:
+     - `1.8x-2.8x`
+   - queue abandonment rate:
+     - `10%-18%`
+   - expected first action:
+     - `enable_payment_circuit_breaker`
+     - or `increase_retry_backoff`
+3. **Scenario C: Seat Hold Clog**
+   - seat hold utilization:
+     - `88%-97%`
+   - seat hold expiration rate:
+     - `25%-40%`
+   - payment success rate:
+     - `55%-72%`
+   - queue abandonment rate:
+     - `20%-35%`
+   - fairness skew:
+     - elevated versus baseline
+   - expected first action:
+     - inventory-preserving mitigation
+4. **Scenario D: Regional Saturation / Spillover Risk**
+   - primary region saturation:
+     - `80%-92%`
+   - secondary region headroom:
+     - only `10%-20%`
+   - checkout latency p95:
+     - `1000-1700 ms`
+   - retry amplification factor:
+     - `1.5x-2.2x`
+   - expected first action:
+     - cautious partial shift, not full failover
+
 ### Realistic Simulation Approach
 
 The simulation should feel like a ticketing system, not a generic metrics toy.
@@ -156,6 +212,16 @@ These can be generated from:
 - OTel Demo service health
 - current runtime state
 - scenario-specific synthetic overlays
+
+Simulation rules:
+
+- each scenario should have a deterministic base profile
+- runtime state changes should move metrics within believable ranges
+- the same action should not produce identical business outcomes across every scenario
+- metric relationships should stay plausible:
+  - high retry factor should usually worsen payment latency and queue abandonment
+  - high seat hold utilization should usually increase fairness and conversion stress
+  - aggressive kill-switch actions should reduce technical pressure while hurting business outcomes
 
 This gives us a realistic hybrid:
 
@@ -312,7 +378,9 @@ Then it uses Stratus to produce:
 
 ### 5.5 Three-Action Sequence Planning Extension
 
-If time permits, the system should move from single-action choice to **three-action sequence planning**.
+This is an **optional extension**. The primary Week 2 goal is still to finish the **one-action workflow first**.
+
+Only after the one-action flow is stable should the system move from single-action choice to **three-action sequence planning**.
 
 The sequence should be designed in three stages:
 
@@ -340,6 +408,11 @@ Default Week 2 policy:
 - only replan when evaluation shows:
   - **partial failure**
   - or **severe failure**
+
+Priority rule:
+
+- ship one-action planning, execution, and verification first
+- add three-action planning only if the one-action loop is already demo-stable
 
 Suggested evaluation classes:
 
@@ -527,7 +600,7 @@ Primary ownership:
 - Shortlist Builder Agent
 - Guardrail Decision Agent
 - Stratus schema / prompt / ranking logic
-- three-action sequence planning policy
+- optional three-action sequence planning policy
 
 Develop:
 
@@ -535,22 +608,23 @@ Develop:
 - define action metadata schema for shortlist selection
 - implement the Stratus input/output contract
 - own the decision rationale, veto reasoning, and rollback criteria
-- design the three-action sequence output format
-- define which conditions should trigger Stratus replanning
+- design the three-action sequence output format as a stretch extension
+- define which conditions should trigger Stratus replanning after partial or severe failure
 
 Test:
 
 - compare shortlist stability across repeated runs
 - compare Stratus prompt variants
 - maintain `实验记录 TBD`
-- test whether three-action plans stay coherent across multiple scenarios
+- test one-action guardrail stability first
+- test whether three-action plans stay coherent across multiple scenarios if extension time remains
 
 Furnish:
 
 - final shortlist policy
 - final Stratus schema
 - final reasoning copy for why the dangerous reflex is rejected
-- final sequence-planning and replan policy
+- final sequence-planning and replan policy for the optional extension
 
 OpenClaw touchpoint:
 
@@ -577,7 +651,7 @@ Develop:
 
 - write the canonical concert ticket incident spec
 - define the list of demo incidents and their expected safe actions
-- define realistic metric ranges for each incident
+- define realistic metric ranges and reference snapshots for each incident
 - define the four sentinel outputs and anomaly tags
 - define case-library taxonomy and retrieval tags
 - define what fairness, seat hold stress, and operator-visible success mean
@@ -742,9 +816,9 @@ The cleanest live demo should be:
 3. Show similar prior cases retrieved from the case library
 4. Turn on baseline mode and show it picks `restart_payment`
 5. Switch to guardrail mode and show Stratus picks the safer action
-6. Show the optional 3-step plan before action
-7. Let OpenClaw execute the first action
-8. Show the verdict and save the case
+6. Let OpenClaw execute the first action
+7. Show the verdict and save the case
+8. If time permits, show the optional 3-step plan as a stretch preview
 
 ### Scenario Demonstration Plan
 
@@ -758,6 +832,12 @@ To stand out, we should prepare:
   - `Seat Hold Clog` or `Regional Saturation`
 
 This makes the project feel like a platform, not a one-off script.
+
+### Priority Order
+
+1. one flagship scenario with one-action guardrail flow
+2. one additional replay scenario with a different chosen action
+3. optional three-action sequence extension
 
 ### What Judges Should Remember
 
