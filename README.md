@@ -41,8 +41,9 @@ Core workflow:
 - `tools/prometheus_client.py`: evidence collection from Prometheus
 - `tools/alert_receiver.py`: local Alertmanager webhook receiver
 - `tools/metrics_target.py`: synthetic Prometheus scrape target
-- `tools/visual_control_plane.py`: browser-visible dashboard and feature-flag UI
+- `tools/visual_control_plane.py`: Guardrail Console shell, execution view, and feature-flag UI
 - `tools/runtime_state.py`: shared state across UI and metrics
+- `tools/scenario_catalog.py`: concert ticket scenario metadata and business-metric overlays
 - `outputs/`: generated plan, browser playbook, and report artifacts
 - `k8s/`: Level 3 Kubernetes and Chaos Mesh scaffolding
 
@@ -146,9 +147,10 @@ Either:
 or manually:
 
 1. open `http://127.0.0.1:8010/`
-2. open `http://127.0.0.1:8010/feature-flags`
-3. click the chosen remediation button from the playbook
-4. refresh the dashboard
+2. use the Guardrail Console to inspect the incident, shortlist, and execution flow
+3. open `http://127.0.0.1:8010/feature-flags`
+4. click the chosen remediation button from the playbook
+5. return to the console and refresh the verdict
 
 ### Verify after execution
 
@@ -160,6 +162,11 @@ This writes:
 
 - `outputs/alert_latest_report.json`
 - `outputs/alert_latest_report.md`
+
+## Demo Artifacts
+
+- `docs/final_demo_script.md`
+- `docs/openclaw_demo_prompt.md`
 
 ## Output Artifacts
 

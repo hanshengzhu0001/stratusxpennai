@@ -327,7 +327,6 @@
     "recommended_remediation_manifest": "k8s/remediations/rate-limit-retries-configmap.yaml"
   },
   "notes": [
-    "Using deterministic local ranking because Stratus credentials are missing or network access is unavailable.",
-    "Live Stratus call failed; using deterministic fallback: APITimeoutError"
+    "Using deterministic local ranking because Stratus credentials are missing or network access is unavailable."
   ]
 }
