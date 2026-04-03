@@ -330,7 +330,137 @@ the business need to preserve fair access?</p>
 <li>the case library stores the full situation, action, and result for
 future reuse</li>
 </ul>
-<h2 id="core-design-choices">3. Core Design Choices</h2>
+<h2 id="incident-portfolio-and-realistic-simulation">3. Incident
+Portfolio And Realistic Simulation</h2>
+<p>Week 2 should not rely on only one incident.</p>
+<p>We should prepare a small <strong>incident portfolio</strong> with
+realistic metrics so the demo can show different actions being chosen
+under different failure patterns.</p>
+<h3 id="recommended-incident-portfolio">Recommended Incident
+Portfolio</h3>
+<ol type="1">
+<li><strong>Scenario A: Retry Death Spiral</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>payment degradation + retry amplification</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>payment latency</li>
+<li>checkout error rate</li>
+<li>retry factor</li>
+<li>queue abandonment</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li><code>rate_limit_retries</code></li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario B: Payment Gateway Flap</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>payment is unstable but not fully down</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>payment timeout rate</li>
+<li>payment success rate</li>
+<li>checkout latency</li>
+<li>retry factor</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li><code>enable_payment_circuit_breaker</code></li>
+<li>or <code>increase_retry_backoff</code></li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario C: Seat Hold Clog</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>too many seats are locked but not converting</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>seat hold utilization</li>
+<li>seat hold expiration rate</li>
+<li>payment success rate</li>
+<li>queue abandonment</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li>shorten hold pressure</li>
+<li>release stale holds</li>
+<li>or other inventory-preserving action from the library</li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario D: Regional Saturation / Spillover Risk</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>primary region is stressed and failover looks tempting</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>region saturation</li>
+<li>checkout latency by region</li>
+<li>failover risk</li>
+<li>blast-radius risk</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li>cautious traffic shift</li>
+<li>or capacity-preserving workload shaping</li>
+</ul></li>
+</ul></li>
+</ol>
+<h3 id="realistic-simulation-approach">Realistic Simulation
+Approach</h3>
+<p>The simulation should feel like a ticketing system, not a generic
+metrics toy.</p>
+<p>Recommended Week 2 design:</p>
+<ul>
+<li>use <strong>OTel Demo on Kubernetes</strong> as the system base</li>
+<li>use OTel feature flags and load generation for core service
+disruption</li>
+<li>layer a <strong>ticket-drop metrics adapter</strong> on top for
+business-specific signals</li>
+</ul>
+<p>The ticket-drop metrics adapter should emit:</p>
+<ul>
+<li><code>queue_abandonment_rate</code></li>
+<li><code>retry_amplification_factor</code></li>
+<li><code>fairness_skew</code></li>
+<li><code>seat_hold_utilization</code></li>
+<li><code>seat_hold_expiration_rate</code></li>
+<li><code>payment_success_rate</code></li>
+</ul>
+<p>These can be generated from:</p>
+<ul>
+<li>OTel Demo service health</li>
+<li>current runtime state</li>
+<li>scenario-specific synthetic overlays</li>
+</ul>
+<p>This gives us a realistic hybrid:</p>
+<ul>
+<li>real microservice topology and observability</li>
+<li>ticketing-specific business metrics on top</li>
+</ul>
+<h3 id="ownership-of-the-incident-portfolio">Ownership Of The Incident
+Portfolio</h3>
+<ul>
+<li>Charlie owns the incident catalog, scenario truth, and metric
+definitions</li>
+<li>Eason owns the simulation profiles and fixture realism for those
+incidents</li>
+<li>Tony makes sure shortlist and Stratus behavior differ appropriately
+across incidents</li>
+<li>Hansen makes the scenario switch visible and understandable in the
+console</li>
+</ul>
+<h2 id="core-design-choices">4. Core Design Choices</h2>
 <h3 id="live-demo-base">Live Demo Base</h3>
 <ul>
 <li><strong>OTel Demo on Kubernetes</strong>
@@ -389,8 +519,8 @@ system</li>
 </ul></li>
 </ul>
 <p>This is enough for retrieval, comparison, and demo replay.</p>
-<h2 id="multi-agent-workflow">4. Multi-Agent Workflow</h2>
-<h3 id="observation-layer-parallel-sentinel-agents">4.1 Observation
+<h2 id="multi-agent-workflow">5. Multi-Agent Workflow</h2>
+<h3 id="observation-layer-parallel-sentinel-agents">5.1 Observation
 Layer: Parallel Sentinel Agents</h3>
 <p>Observation is the main parallelization moment in the system.</p>
 <p>Run these four agents in parallel:</p>
@@ -423,7 +553,7 @@ screenshots</li>
 <li>retrieved similar cases from the case library</li>
 <li>one short operator-facing summary</li>
 </ul>
-<h3 id="incident-fingerprint">4.2 Incident Fingerprint</h3>
+<h3 id="incident-fingerprint">5.2 Incident Fingerprint</h3>
 <p>After the four sentinel agents finish, merge their outputs into one
 <strong>incident fingerprint</strong>.</p>
 <p>This fingerprint should include:</p>
@@ -439,7 +569,7 @@ screenshots</li>
 </ul></li>
 </ul>
 <p>This fingerprint is the shared input to planning and evaluation.</p>
-<h3 id="shortlist-mechanism">4.3 Shortlist Mechanism</h3>
+<h3 id="shortlist-mechanism">5.3 Shortlist Mechanism</h3>
 <p>The shortlist step is a core Week 2 design problem.</p>
 <p>We want:</p>
 <ul>
@@ -495,7 +625,7 @@ shortlist</li>
 </ol>
 <p>This design keeps the shortlist explainable and stable, while still
 looking intelligent.</p>
-<h3 id="guardrail-decision">4.4 Guardrail Decision</h3>
+<h3 id="guardrail-decision">5.4 Guardrail Decision</h3>
 <p>The <strong>Guardrail Decision Agent</strong> takes:</p>
 <ul>
 <li>incident fingerprint</li>
@@ -512,7 +642,71 @@ looking intelligent.</p>
 <li>rollback trigger or stop condition</li>
 <li>final recommended action</li>
 </ul>
-<h3 id="baseline-mode">4.5 Baseline Mode</h3>
+<h3 id="three-action-sequence-planning-extension">5.5 Three-Action
+Sequence Planning Extension</h3>
+<p>If time permits, the system should move from single-action choice to
+<strong>three-action sequence planning</strong>.</p>
+<p>The sequence should be designed in three stages:</p>
+<ol type="1">
+<li><strong>stabilize</strong>
+<ul>
+<li>first action reduces immediate pressure</li>
+</ul></li>
+<li><strong>contain / clean up</strong>
+<ul>
+<li>second action prevents recurrence or clears residual risk</li>
+</ul></li>
+<li><strong>restore / normalize</strong>
+<ul>
+<li>third action returns the system toward normal operating mode</li>
+</ul></li>
+</ol>
+<p>The Guardrail Decision Agent should output:</p>
+<ul>
+<li><code>action_sequence</code>
+<ul>
+<li>up to three ordered actions</li>
+</ul></li>
+<li><code>stop_conditions</code>
+<ul>
+<li>what success looks like after each action</li>
+</ul></li>
+<li><code>replan_conditions</code>
+<ul>
+<li>when to ask Stratus to replan</li>
+</ul></li>
+</ul>
+<h3 id="replan-policy">Replan Policy</h3>
+<p>Default Week 2 policy:</p>
+<ul>
+<li>do <strong>not</strong> replan after every action</li>
+<li>only replan when evaluation shows:
+<ul>
+<li><strong>partial failure</strong></li>
+<li>or <strong>severe failure</strong></li>
+</ul></li>
+</ul>
+<p>Suggested evaluation classes:</p>
+<ul>
+<li><strong>strong recovery</strong>
+<ul>
+<li>continue planned sequence or stop early</li>
+</ul></li>
+<li><strong>partial failure</strong>
+<ul>
+<li>some improvement, but key constraints still violated</li>
+<li>ask Stratus to replan</li>
+</ul></li>
+<li><strong>severe failure</strong>
+<ul>
+<li>blast radius grows, fairness worsens, or primary metrics
+collapse</li>
+<li>immediately ask Stratus to replan</li>
+</ul></li>
+</ul>
+<p>This keeps the demo more autonomous without making it look random or
+over-reactive.</p>
+<h3 id="baseline-mode">5.6 Baseline Mode</h3>
 <p>Baseline is no longer a permanent agent in the main product
 story.</p>
 <p>Instead, Week 2 should support a <strong>baseline demo
@@ -527,7 +721,7 @@ toggle</strong>:</p>
 <li>baseline picks the obvious reflex</li>
 <li>guardrail path picks the safer action</li>
 </ul>
-<h3 id="execution">4.6 Execution</h3>
+<h3 id="execution">5.7 Execution</h3>
 <p>The <strong>Operator Agent</strong> uses OpenClaw browser to:</p>
 <ul>
 <li>open the console and source dashboards</li>
@@ -535,7 +729,7 @@ toggle</strong>:</p>
 <li>execute the remediation</li>
 <li>refresh and capture post-action evidence</li>
 </ul>
-<h3 id="evaluation-and-learning">4.7 Evaluation And Learning</h3>
+<h3 id="evaluation-and-learning">5.8 Evaluation And Learning</h3>
 <p>The <strong>Evaluation Agent</strong> measures:</p>
 <ul>
 <li>system metrics after action</li>
@@ -554,7 +748,7 @@ toggle</strong>:</p>
 </ul>
 <p>This is critical: we are saving full outcomes, not only
 success/failure.</p>
-<h2 id="optional-extension-abnormality-localization">5. Optional
+<h2 id="optional-extension-abnormality-localization">6. Optional
 Extension: Abnormality Localization</h2>
 <p>If we have time, we should extend the system beyond overall
 guardrailing and let it pinpoint specific abnormalities such as bot
@@ -595,7 +789,7 @@ abnormality, for example:</p>
 <p>The system did not only choose a safer action. It identified what
 kind of abnormality was happening and responded accordingly.</p>
 </blockquote>
-<h2 id="frontend-product-surface">6. Frontend Product Surface</h2>
+<h2 id="frontend-product-surface">7. Frontend Product Surface</h2>
 <p>Week 2 needs a real frontend, not just dashboards and JSON
 artifacts.</p>
 <p>The target frontend is one operator-facing surface:</p>
@@ -607,6 +801,7 @@ artifacts.</p>
 <li><strong>Incident View</strong>
 <ul>
 <li>incident summary</li>
+<li>scenario selector</li>
 <li>payment / queue / inventory / browser evidence</li>
 <li>active alerts</li>
 <li>recent similar cases</li>
@@ -617,11 +812,13 @@ artifacts.</p>
 <li>chosen shortlist</li>
 <li>baseline result vs guardrail result</li>
 <li>Stratus rationale and predicted blast radius</li>
+<li>optional 3-step planned sequence</li>
 </ul></li>
 <li><strong>Execution View</strong>
 <ul>
 <li>OpenClaw execution log</li>
 <li>chosen remediation target</li>
+<li>step-by-step sequence status</li>
 <li>before / after browser evidence</li>
 </ul></li>
 <li><strong>Verdict View</strong>
@@ -638,7 +835,7 @@ artifacts.</p>
 <li>no disconnected mini-pages</li>
 <li>one owner per view</li>
 </ul>
-<h2 id="responsibilities">7. Responsibilities</h2>
+<h2 id="responsibilities">8. Responsibilities</h2>
 <p>Everyone must touch both <strong>OpenClaw</strong> and
 <strong>Stratus</strong>, but with non-overlapping primary
 ownership.</p>
@@ -655,6 +852,8 @@ ownership.</p>
 integration</li>
 <li>own the <code>Execution View</code></li>
 <li>own overall console shell and navigation</li>
+<li>own scenario selection and sequence-progress presentation in the
+console</li>
 <li>connect plan -&gt; execute -&gt; verify -&gt; verdict into one clean
 product flow</li>
 </ul>
@@ -669,6 +868,7 @@ product flow</li>
 <li>final demo script</li>
 <li>final OpenClaw prompt</li>
 <li>final shell polish</li>
+<li>final scenario-switch UX and sequence-timeline UX</li>
 </ul>
 <p>OpenClaw touchpoint:</p>
 <ul>
@@ -688,6 +888,7 @@ product flow</li>
 <li>Shortlist Builder Agent</li>
 <li>Guardrail Decision Agent</li>
 <li>Stratus schema / prompt / ranking logic</li>
+<li>three-action sequence planning policy</li>
 </ul>
 <p>Develop:</p>
 <ul>
@@ -696,18 +897,23 @@ product flow</li>
 <li>implement the Stratus input/output contract</li>
 <li>own the decision rationale, veto reasoning, and rollback
 criteria</li>
+<li>design the three-action sequence output format</li>
+<li>define which conditions should trigger Stratus replanning</li>
 </ul>
 <p>Test:</p>
 <ul>
 <li>compare shortlist stability across repeated runs</li>
 <li>compare Stratus prompt variants</li>
 <li>maintain <code>实验记录 TBD</code></li>
+<li>test whether three-action plans stay coherent across multiple
+scenarios</li>
 </ul>
 <p>Furnish:</p>
 <ul>
 <li>final shortlist policy</li>
 <li>final Stratus schema</li>
 <li>final reasoning copy for why the dangerous reflex is rejected</li>
+<li>final sequence-planning and replan policy</li>
 </ul>
 <p>OpenClaw touchpoint:</p>
 <ul>
@@ -727,10 +933,14 @@ criteria</li>
 <li>concert-ticket scenario truth</li>
 <li>sentinel schemas</li>
 <li>abnormality attribution extension</li>
+<li>incident portfolio design</li>
 </ul>
 <p>Develop:</p>
 <ul>
 <li>write the canonical concert ticket incident spec</li>
+<li>define the list of demo incidents and their expected safe
+actions</li>
+<li>define realistic metric ranges for each incident</li>
 <li>define the four sentinel outputs and anomaly tags</li>
 <li>define case-library taxonomy and retrieval tags</li>
 <li>define what fairness, seat hold stress, and operator-visible success
@@ -748,6 +958,7 @@ story</li>
 <p>Furnish:</p>
 <ul>
 <li>scenario spec</li>
+<li>incident catalog</li>
 <li>UI labels and annotations for incident evidence</li>
 <li>concise product narrative</li>
 <li>abnormality-extension proposal</li>
@@ -772,6 +983,7 @@ for</li>
 <li>Evaluation Agent</li>
 <li>baseline demo toggle</li>
 <li>case-library writeback and replay</li>
+<li>realistic incident simulation profiles</li>
 </ul>
 <p>Develop:</p>
 <ul>
@@ -779,6 +991,10 @@ for</li>
 <li>own post-action evaluation and verdict generation</li>
 <li>implement case-library persistence format and replay-friendly
 outputs</li>
+<li>implement realistic simulation profiles for each incident in the
+portfolio</li>
+<li>define how ticket-drop metrics are generated from runtime state plus
+scenario overlays</li>
 <li>own comparison between:
 <ul>
 <li>baseline result</li>
@@ -791,12 +1007,15 @@ outputs</li>
 <li>confirm baseline picks the naive action in Scenario A</li>
 <li>confirm evaluation catches when predicted and actual diverge</li>
 <li>confirm case-library records are understandable and reusable</li>
+<li>validate that incident metrics look realistic and differ
+meaningfully across scenarios</li>
 </ul>
 <p>Furnish:</p>
 <ul>
 <li>final verdict schema</li>
 <li>baseline-vs-guardrail comparison artifact</li>
 <li>final copy for “what happened after action”</li>
+<li>simulation profile spec for the incident portfolio</li>
 </ul>
 <p>OpenClaw touchpoint:</p>
 <ul>
@@ -810,7 +1029,7 @@ outputs</li>
 <ul>
 <li><code>Verdict View</code></li>
 </ul>
-<h2 id="frontend-ownership-split">8. Frontend Ownership Split</h2>
+<h2 id="frontend-ownership-split">9. Frontend Ownership Split</h2>
 <p>To avoid overlap, frontend work is split by surface:</p>
 <ul>
 <li><strong>Hansen</strong>
@@ -834,7 +1053,7 @@ outputs</li>
 </ul>
 <p>If time permits, the team can review style together, but ownership
 remains by view.</p>
-<h2 id="repo-and-workstreams">9. Repo And Workstreams</h2>
+<h2 id="repo-and-workstreams">10. Repo And Workstreams</h2>
 <p>Repo:</p>
 <ul>
 <li><code>https://github.com/hanshengzhu0001/stratusxpennai</code></li>
@@ -851,6 +1070,7 @@ remains by view.</p>
 <ul>
 <li>shortlist logic</li>
 <li>Stratus schema and decision logic</li>
+<li>sequence planning</li>
 </ul></li>
 <li><code>baseline</code>
 <ul>
@@ -861,6 +1081,7 @@ remains by view.</p>
 <li><code>scenario+eval</code>
 <ul>
 <li>scenario truth</li>
+<li>incident portfolio</li>
 <li>sentinel schema</li>
 <li>anomaly extension</li>
 <li>UI labels</li>
@@ -877,14 +1098,14 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="
 <p>Independent starting points:</p>
 <ul>
 <li>Tony can start immediately on shortlist and Stratus logic</li>
-<li>Charlie can start immediately on scenario, sentinel schema, and
-anomaly design</li>
-<li>Eason can start immediately on baseline mode and
-verdict/case-library schema</li>
+<li>Charlie can start immediately on scenario, incident catalog,
+sentinel schema, and anomaly design</li>
+<li>Eason can start immediately on baseline mode, simulation profiles,
+and verdict/case-library schema</li>
 <li>Hansen can start immediately on OpenClaw execution flow and console
 shell</li>
 </ul>
-<h2 id="demo-prep-how-we-differentiate-and-impress">10. Demo Prep: How
+<h2 id="demo-prep-how-we-differentiate-and-impress">11. Demo Prep: How
 We Differentiate And Impress</h2>
 <p>This section matters as much as the code.</p>
 <h3 id="what-makes-the-project-different">What Makes The Project
@@ -900,16 +1121,35 @@ Different</h3>
 <h3 id="demo-structure">Demo Structure</h3>
 <p>The cleanest live demo should be:</p>
 <ol type="1">
-<li>Trigger the concert ticket incident live</li>
+<li>Trigger one concert ticket incident live</li>
 <li>Show all four sentinel panels update</li>
 <li>Show similar prior cases retrieved from the case library</li>
 <li>Turn on baseline mode and show it picks
 <code>restart_payment</code></li>
 <li>Switch to guardrail mode and show Stratus picks the safer
 action</li>
-<li>Let OpenClaw execute the action</li>
+<li>Show the optional 3-step plan before action</li>
+<li>Let OpenClaw execute the first action</li>
 <li>Show the verdict and save the case</li>
 </ol>
+<h3 id="scenario-demonstration-plan">Scenario Demonstration Plan</h3>
+<p>To stand out, we should prepare:</p>
+<ul>
+<li>one flagship live scenario
+<ul>
+<li><code>Retry Death Spiral</code></li>
+</ul></li>
+<li>one secondary scenario ready for quick replay
+<ul>
+<li><code>Payment Gateway Flap</code></li>
+</ul></li>
+<li>one stretch replay scenario if time allows
+<ul>
+<li><code>Seat Hold Clog</code> or <code>Regional Saturation</code></li>
+</ul></li>
+</ul>
+<p>This makes the project feel like a platform, not a one-off
+script.</p>
 <h3 id="what-judges-should-remember">What Judges Should Remember</h3>
 <ul>
 <li>“The obvious fix was wrong.”</li>
@@ -920,13 +1160,17 @@ action</li>
 <h3 id="rehearsal-checklist">Rehearsal Checklist</h3>
 <ul>
 <li>one polished Guardrail Console</li>
+<li>one scenario selector with realistic incident profiles</li>
 <li>one clean baseline-vs-guardrail toggle</li>
+<li>one incident portfolio with believable metrics</li>
 <li>one visible OpenClaw execution moment</li>
+<li>one visible sequence plan, even if only step 1 is executed in the
+live demo</li>
 <li>one before / after verdict slide inside the app</li>
 <li>one backup local-control-plane run recorded in case the K8s demo is
 flaky</li>
 </ul>
-<h2 id="grounding-sources">11. Grounding / Sources</h2>
+<h2 id="grounding-sources">12. Grounding / Sources</h2>
 <p>Official references supporting the live demo path:</p>
 <ul>
 <li>OpenTelemetry Demo scenarios and feature-flag path

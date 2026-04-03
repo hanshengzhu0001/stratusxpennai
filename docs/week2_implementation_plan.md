@@ -79,7 +79,97 @@ The demo should clearly show:
 - the final verdict explains what dangerous action was avoided
 - the case library stores the full situation, action, and result for future reuse
 
-## 3. Core Design Choices
+## 3. Incident Portfolio And Realistic Simulation
+
+Week 2 should not rely on only one incident.
+
+We should prepare a small **incident portfolio** with realistic metrics so the demo can show different actions being chosen under different failure patterns.
+
+### Recommended Incident Portfolio
+
+1. **Scenario A: Retry Death Spiral**
+   - dominant issue:
+     - payment degradation + retry amplification
+   - key metrics:
+     - payment latency
+     - checkout error rate
+     - retry factor
+     - queue abandonment
+   - expected safe action:
+     - `rate_limit_retries`
+2. **Scenario B: Payment Gateway Flap**
+   - dominant issue:
+     - payment is unstable but not fully down
+   - key metrics:
+     - payment timeout rate
+     - payment success rate
+     - checkout latency
+     - retry factor
+   - expected safe action:
+     - `enable_payment_circuit_breaker`
+     - or `increase_retry_backoff`
+3. **Scenario C: Seat Hold Clog**
+   - dominant issue:
+     - too many seats are locked but not converting
+   - key metrics:
+     - seat hold utilization
+     - seat hold expiration rate
+     - payment success rate
+     - queue abandonment
+   - expected safe action:
+     - shorten hold pressure
+     - release stale holds
+     - or other inventory-preserving action from the library
+4. **Scenario D: Regional Saturation / Spillover Risk**
+   - dominant issue:
+     - primary region is stressed and failover looks tempting
+   - key metrics:
+     - region saturation
+     - checkout latency by region
+     - failover risk
+     - blast-radius risk
+   - expected safe action:
+     - cautious traffic shift
+     - or capacity-preserving workload shaping
+
+### Realistic Simulation Approach
+
+The simulation should feel like a ticketing system, not a generic metrics toy.
+
+Recommended Week 2 design:
+
+- use **OTel Demo on Kubernetes** as the system base
+- use OTel feature flags and load generation for core service disruption
+- layer a **ticket-drop metrics adapter** on top for business-specific signals
+
+The ticket-drop metrics adapter should emit:
+
+- `queue_abandonment_rate`
+- `retry_amplification_factor`
+- `fairness_skew`
+- `seat_hold_utilization`
+- `seat_hold_expiration_rate`
+- `payment_success_rate`
+
+These can be generated from:
+
+- OTel Demo service health
+- current runtime state
+- scenario-specific synthetic overlays
+
+This gives us a realistic hybrid:
+
+- real microservice topology and observability
+- ticketing-specific business metrics on top
+
+### Ownership Of The Incident Portfolio
+
+- Charlie owns the incident catalog, scenario truth, and metric definitions
+- Eason owns the simulation profiles and fixture realism for those incidents
+- Tony makes sure shortlist and Stratus behavior differ appropriately across incidents
+- Hansen makes the scenario switch visible and understandable in the console
+
+## 4. Core Design Choices
 
 ### Live Demo Base
 
@@ -124,9 +214,9 @@ Week 2 case library choice:
 
 This is enough for retrieval, comparison, and demo replay.
 
-## 4. Multi-Agent Workflow
+## 5. Multi-Agent Workflow
 
-### 4.1 Observation Layer: Parallel Sentinel Agents
+### 5.1 Observation Layer: Parallel Sentinel Agents
 
 Observation is the main parallelization moment in the system.
 
@@ -148,7 +238,7 @@ Each sentinel should output:
 - retrieved similar cases from the case library
 - one short operator-facing summary
 
-### 4.2 Incident Fingerprint
+### 5.2 Incident Fingerprint
 
 After the four sentinel agents finish, merge their outputs into one **incident fingerprint**.
 
@@ -164,7 +254,7 @@ This fingerprint should include:
 
 This fingerprint is the shared input to planning and evaluation.
 
-### 4.3 Shortlist Mechanism
+### 5.3 Shortlist Mechanism
 
 The shortlist step is a core Week 2 design problem.
 
@@ -202,7 +292,7 @@ Use a hybrid mechanism, not pure prompting.
 
 This design keeps the shortlist explainable and stable, while still looking intelligent.
 
-### 4.4 Guardrail Decision
+### 5.4 Guardrail Decision
 
 The **Guardrail Decision Agent** takes:
 
@@ -220,7 +310,51 @@ Then it uses Stratus to produce:
 - rollback trigger or stop condition
 - final recommended action
 
-### 4.5 Baseline Mode
+### 5.5 Three-Action Sequence Planning Extension
+
+If time permits, the system should move from single-action choice to **three-action sequence planning**.
+
+The sequence should be designed in three stages:
+
+1. **stabilize**
+   - first action reduces immediate pressure
+2. **contain / clean up**
+   - second action prevents recurrence or clears residual risk
+3. **restore / normalize**
+   - third action returns the system toward normal operating mode
+
+The Guardrail Decision Agent should output:
+
+- `action_sequence`
+  - up to three ordered actions
+- `stop_conditions`
+  - what success looks like after each action
+- `replan_conditions`
+  - when to ask Stratus to replan
+
+### Replan Policy
+
+Default Week 2 policy:
+
+- do **not** replan after every action
+- only replan when evaluation shows:
+  - **partial failure**
+  - or **severe failure**
+
+Suggested evaluation classes:
+
+- **strong recovery**
+  - continue planned sequence or stop early
+- **partial failure**
+  - some improvement, but key constraints still violated
+  - ask Stratus to replan
+- **severe failure**
+  - blast radius grows, fairness worsens, or primary metrics collapse
+  - immediately ask Stratus to replan
+
+This keeps the demo more autonomous without making it look random or over-reactive.
+
+### 5.6 Baseline Mode
 
 Baseline is no longer a permanent agent in the main product story.
 
@@ -235,7 +369,7 @@ The purpose is to show:
 - baseline picks the obvious reflex
 - guardrail path picks the safer action
 
-### 4.6 Execution
+### 5.7 Execution
 
 The **Operator Agent** uses OpenClaw browser to:
 
@@ -244,7 +378,7 @@ The **Operator Agent** uses OpenClaw browser to:
 - execute the remediation
 - refresh and capture post-action evidence
 
-### 4.7 Evaluation And Learning
+### 5.8 Evaluation And Learning
 
 The **Evaluation Agent** measures:
 
@@ -264,7 +398,7 @@ Then it writes a new case into the case library with:
 
 This is critical: we are saving full outcomes, not only success/failure.
 
-## 5. Optional Extension: Abnormality Localization
+## 6. Optional Extension: Abnormality Localization
 
 If we have time, we should extend the system beyond overall guardrailing and let it pinpoint specific abnormalities such as bot attacks.
 
@@ -302,7 +436,7 @@ It lets us say:
 
 > The system did not only choose a safer action. It identified what kind of abnormality was happening and responded accordingly.
 
-## 6. Frontend Product Surface
+## 7. Frontend Product Surface
 
 Week 2 needs a real frontend, not just dashboards and JSON artifacts.
 
@@ -314,6 +448,7 @@ The target frontend is one operator-facing surface:
 
 1. **Incident View**
    - incident summary
+   - scenario selector
    - payment / queue / inventory / browser evidence
    - active alerts
    - recent similar cases
@@ -322,9 +457,11 @@ The target frontend is one operator-facing surface:
    - chosen shortlist
    - baseline result vs guardrail result
    - Stratus rationale and predicted blast radius
+   - optional 3-step planned sequence
 3. **Execution View**
    - OpenClaw execution log
    - chosen remediation target
+   - step-by-step sequence status
    - before / after browser evidence
 4. **Verdict View**
    - predicted vs actual
@@ -338,7 +475,7 @@ The target frontend is one operator-facing surface:
 - no disconnected mini-pages
 - one owner per view
 
-## 7. Responsibilities
+## 8. Responsibilities
 
 Everyone must touch both **OpenClaw** and **Stratus**, but with non-overlapping primary ownership.
 
@@ -355,6 +492,7 @@ Develop:
 - own the OpenClaw execution handoff and browser playbook integration
 - own the `Execution View`
 - own overall console shell and navigation
+- own scenario selection and sequence-progress presentation in the console
 - connect plan -> execute -> verify -> verdict into one clean product flow
 
 Test:
@@ -368,6 +506,7 @@ Furnish:
 - final demo script
 - final OpenClaw prompt
 - final shell polish
+- final scenario-switch UX and sequence-timeline UX
 
 OpenClaw touchpoint:
 
@@ -388,6 +527,7 @@ Primary ownership:
 - Shortlist Builder Agent
 - Guardrail Decision Agent
 - Stratus schema / prompt / ranking logic
+- three-action sequence planning policy
 
 Develop:
 
@@ -395,18 +535,22 @@ Develop:
 - define action metadata schema for shortlist selection
 - implement the Stratus input/output contract
 - own the decision rationale, veto reasoning, and rollback criteria
+- design the three-action sequence output format
+- define which conditions should trigger Stratus replanning
 
 Test:
 
 - compare shortlist stability across repeated runs
 - compare Stratus prompt variants
 - maintain `实验记录 TBD`
+- test whether three-action plans stay coherent across multiple scenarios
 
 Furnish:
 
 - final shortlist policy
 - final Stratus schema
 - final reasoning copy for why the dangerous reflex is rejected
+- final sequence-planning and replan policy
 
 OpenClaw touchpoint:
 
@@ -427,10 +571,13 @@ Primary ownership:
 - concert-ticket scenario truth
 - sentinel schemas
 - abnormality attribution extension
+- incident portfolio design
 
 Develop:
 
 - write the canonical concert ticket incident spec
+- define the list of demo incidents and their expected safe actions
+- define realistic metric ranges for each incident
 - define the four sentinel outputs and anomaly tags
 - define case-library taxonomy and retrieval tags
 - define what fairness, seat hold stress, and operator-visible success mean
@@ -445,6 +592,7 @@ Test:
 Furnish:
 
 - scenario spec
+- incident catalog
 - UI labels and annotations for incident evidence
 - concise product narrative
 - abnormality-extension proposal
@@ -468,12 +616,15 @@ Primary ownership:
 - Evaluation Agent
 - baseline demo toggle
 - case-library writeback and replay
+- realistic incident simulation profiles
 
 Develop:
 
 - implement baseline mode on the same shortlist used by Stratus
 - own post-action evaluation and verdict generation
 - implement case-library persistence format and replay-friendly outputs
+- implement realistic simulation profiles for each incident in the portfolio
+- define how ticket-drop metrics are generated from runtime state plus scenario overlays
 - own comparison between:
   - baseline result
   - guardrail result
@@ -484,12 +635,14 @@ Test:
 - confirm baseline picks the naive action in Scenario A
 - confirm evaluation catches when predicted and actual diverge
 - confirm case-library records are understandable and reusable
+- validate that incident metrics look realistic and differ meaningfully across scenarios
 
 Furnish:
 
 - final verdict schema
 - baseline-vs-guardrail comparison artifact
 - final copy for “what happened after action”
+- simulation profile spec for the incident portfolio
 
 OpenClaw touchpoint:
 
@@ -503,7 +656,7 @@ Frontend touchpoint:
 
 - `Verdict View`
 
-## 8. Frontend Ownership Split
+## 9. Frontend Ownership Split
 
 To avoid overlap, frontend work is split by surface:
 
@@ -520,7 +673,7 @@ To avoid overlap, frontend work is split by surface:
 
 If time permits, the team can review style together, but ownership remains by view.
 
-## 9. Repo And Workstreams
+## 10. Repo And Workstreams
 
 Repo:
 
@@ -535,12 +688,14 @@ Branches:
 - `ranking+rollback`
   - shortlist logic
   - Stratus schema and decision logic
+  - sequence planning
 - `baseline`
   - baseline mode
   - evaluation
   - case-library writeback / replay
 - `scenario+eval`
   - scenario truth
+  - incident portfolio
   - sentinel schema
   - anomaly extension
   - UI labels
@@ -559,11 +714,11 @@ git fetch origin
 Independent starting points:
 
 - Tony can start immediately on shortlist and Stratus logic
-- Charlie can start immediately on scenario, sentinel schema, and anomaly design
-- Eason can start immediately on baseline mode and verdict/case-library schema
+- Charlie can start immediately on scenario, incident catalog, sentinel schema, and anomaly design
+- Eason can start immediately on baseline mode, simulation profiles, and verdict/case-library schema
 - Hansen can start immediately on OpenClaw execution flow and console shell
 
-## 10. Demo Prep: How We Differentiate And Impress
+## 11. Demo Prep: How We Differentiate And Impress
 
 This section matters as much as the code.
 
@@ -582,13 +737,27 @@ We are showing:
 
 The cleanest live demo should be:
 
-1. Trigger the concert ticket incident live
+1. Trigger one concert ticket incident live
 2. Show all four sentinel panels update
 3. Show similar prior cases retrieved from the case library
 4. Turn on baseline mode and show it picks `restart_payment`
 5. Switch to guardrail mode and show Stratus picks the safer action
-6. Let OpenClaw execute the action
-7. Show the verdict and save the case
+6. Show the optional 3-step plan before action
+7. Let OpenClaw execute the first action
+8. Show the verdict and save the case
+
+### Scenario Demonstration Plan
+
+To stand out, we should prepare:
+
+- one flagship live scenario
+  - `Retry Death Spiral`
+- one secondary scenario ready for quick replay
+  - `Payment Gateway Flap`
+- one stretch replay scenario if time allows
+  - `Seat Hold Clog` or `Regional Saturation`
+
+This makes the project feel like a platform, not a one-off script.
 
 ### What Judges Should Remember
 
@@ -600,12 +769,15 @@ The cleanest live demo should be:
 ### Rehearsal Checklist
 
 - one polished Guardrail Console
+- one scenario selector with realistic incident profiles
 - one clean baseline-vs-guardrail toggle
+- one incident portfolio with believable metrics
 - one visible OpenClaw execution moment
+- one visible sequence plan, even if only step 1 is executed in the live demo
 - one before / after verdict slide inside the app
 - one backup local-control-plane run recorded in case the K8s demo is flaky
 
-## 11. Grounding / Sources
+## 12. Grounding / Sources
 
 Official references supporting the live demo path:
 
