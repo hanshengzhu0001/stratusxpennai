@@ -48,19 +48,19 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 ## Stratus Ranking
 
-- Rank 1: `rate_limit_retries` (0.84)
-- Rank 2: `enable_payment_circuit_breaker` (0.78)
-- Rank 3: `increase_retry_backoff` (0.72)
-- Rank 4: `restart_payment` (0.43)
-- Rank 5: `shift_traffic` (0.30)
-- Rank 6: `disable_flag` (0.24)
+- Rank 1: `enable_payment_circuit_breaker` (0.94)
+- Rank 2: `increase_retry_backoff` (0.89)
+- Rank 3: `rate_limit_retries` (0.85)
+- Rank 4: `shift_traffic` (0.72)
+- Rank 5: `restart_payment` (0.68)
+- Rank 6: `disable_flag` (0.45)
 
 ## Browser Workflow
 
 - Open the dashboard.
 - Inspect the incident metrics and active flags.
 - Open the feature-flag page.
-- Click 'Apply Retry Rate Limit'.
+- Click 'Enable Payment Circuit Breaker'.
 - Refresh the dashboard.
 - Summarize before/after state and then run verify phase.
 
@@ -71,8 +71,8 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 ## Decision
 
-- Chosen action: `rate_limit_retries`
-- Confidence: `0.84`
+- Chosen action: `enable_payment_circuit_breaker`
+- Confidence: `0.91`
 - Dashboard: `http://127.0.0.1:8010/`
 - Feature flags: `http://127.0.0.1:8010/feature-flags`
 

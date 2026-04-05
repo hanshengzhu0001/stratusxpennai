@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 
 from agents.candidate_actions import build_scenario_shortlist
@@ -10,7 +11,7 @@ from agents.incident_classifier import classify_incident
 from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
 from tools.execute_action import execute_action
 from tools.prometheus_client import collect_evidence
-from tools.runtime_state import control_plane_urls, load_state
+from tools.runtime_state import control_plane_urls, derive_metrics, load_state
 from tools.stratus_guardrail import rank_actions
 
 
@@ -35,7 +36,7 @@ def main() -> None:
     args = parser.parse_args()
 
     input_path = Path(args.input_path)
-    payload = json.loads(input_path.read_text())
+    payload = load_json_path(input_path)
     source_type, state, evidence = load_incident_input(payload)
     scenario_id = payload.get("id", "alert_latest")
 
@@ -68,7 +69,14 @@ def main() -> None:
     plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
     chosen = plan["best_action"]
     execution = execute_action(chosen)
-    refreshed_evidence = collect_evidence(payload)
+    refreshed_evidence = wait_for_updated_evidence(
+        payload,
+        before_evidence={
+            "metrics": plan["observed_condition"]["metrics"],
+            "prometheus": plan["observed_condition"].get("prometheus", {}),
+        },
+        expected_metrics=derive_metrics(execution["state_after_action"]),
+    )
     refreshed_state = classify_incident(payload, refreshed_evidence)
     report = build_verify_report(
         payload=payload,
@@ -299,6 +307,20 @@ Given a payment-related latency incident with retry amplification, which of thes
 """
 
 
+def load_json_path(path: Path) -> dict:
+    raw = path.read_text()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        try:
+            payload, index = json.JSONDecoder().raw_decode(raw)
+        except json.JSONDecodeError:
+            raise exc
+        if raw[index:].strip():
+            path.write_text(json.dumps(payload, indent=2))
+        return payload
+
+
 def load_incident_input(payload: dict) -> tuple[str, dict, dict]:
     evidence = collect_evidence(payload)
     state = classify_incident(payload, evidence)
@@ -412,7 +434,7 @@ def kubernetes_plan(chosen: dict) -> dict:
 
 def load_saved_plan(scenario_id: str) -> dict:
     plan_path = Path("outputs") / f"{scenario_id}_plan.json"
-    return json.loads(plan_path.read_text())
+    return load_json_path(plan_path)
 
 
 def write_outputs(payload: dict, scenario_id: str, suffix: str) -> None:
@@ -505,6 +527,46 @@ def write_browser_playbook(plan: dict, scenario_id: str) -> None:
     out.write_text(json.dumps(playbook, indent=2))
     md_out = Path("outputs") / f"{scenario_id}_browser_playbook.md"
     md_out.write_text(render_browser_playbook_markdown(playbook))
+
+
+def wait_for_updated_evidence(
+    payload: dict,
+    before_evidence: dict,
+    expected_metrics: dict | None = None,
+    timeout_seconds: float | None = None,
+    poll_interval_seconds: float = 2.0,
+) -> dict:
+    if before_evidence.get("prometheus", {}).get("source") != "live":
+        return collect_evidence(payload)
+
+    timeout = (
+        float(os.environ.get("AUTO_VERIFY_SETTLE_SECONDS", "20"))
+        if timeout_seconds is None
+        else timeout_seconds
+    )
+    if timeout <= 0:
+        return collect_evidence(payload)
+
+    before_metrics = before_evidence.get("metrics", {})
+    before_alerts = before_evidence.get("prometheus", {}).get("active_alerts", [])
+    deadline = time.monotonic() + timeout
+    latest = collect_evidence(payload)
+
+    while True:
+        if latest.get("prometheus", {}).get("source") != "live":
+            return latest
+        latest_metrics = latest.get("metrics", {})
+        if expected_metrics and latest_metrics == expected_metrics:
+            return latest
+        if expected_metrics is None and latest_metrics != before_metrics:
+            return latest
+        if expected_metrics is None and latest.get("prometheus", {}).get("active_alerts", []) != before_alerts:
+            return latest
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return latest
+        time.sleep(min(poll_interval_seconds, remaining))
+        latest = collect_evidence(payload)
 
 
 if __name__ == "__main__":

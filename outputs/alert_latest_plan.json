@@ -28,12 +28,11 @@
     ],
     "metrics": {
       "latency_p95_ms": 2300,
-      "error_rate": 0.18,
+      "error_rate": 0.16,
       "retry_rate": 0.31
     },
     "logs": [
-      "payment timeout spikes observed",
-      "checkout retries exceeding normal threshold"
+      "Retry pressure above baseline"
     ],
     "traces": [
       "checkout -> payment span dominates p95",
@@ -45,17 +44,16 @@
       "high_checkout_latency"
     ],
     "prometheus": {
-      "source": "mock",
+      "source": "live",
       "queries": {
-        "checkout_latency_p95_ms": 2300,
-        "checkout_error_rate": 0.18,
+        "checkout_latency_p95_ms": 2300.0,
+        "checkout_error_rate": 0.16,
         "checkout_retry_rate": 0.31
       },
       "active_alerts": [
         "CheckoutLatencyHigh",
         "CheckoutRetryStorm"
-      ],
-      "note": "Prometheus query failed; using mock evidence: URLError"
+      ]
     },
     "browser_targets": {
       "dashboard": "http://127.0.0.1:8010/",
@@ -213,57 +211,57 @@
   ],
   "stratus_ranking": [
     {
-      "id": "rate_limit_retries",
-      "rank": 1,
-      "confidence": 0.84,
-      "rationale": "Controls retry amplification directly with low blast radius."
-    },
-    {
       "id": "enable_payment_circuit_breaker",
-      "rank": 2,
-      "confidence": 0.78,
-      "rationale": "Fails fast at the dependency edge and contains retry pressure, but may drop some payment attempts."
+      "rank": 1,
+      "confidence": 0.94,
+      "rationale": "Breaks retry amplification at source by failing fast on degraded payment dependency"
     },
     {
       "id": "increase_retry_backoff",
-      "rank": 3,
-      "confidence": 0.72,
-      "rationale": "Reduces retry pressure more gently, but takes longer to stabilize the feedback loop."
+      "rank": 2,
+      "confidence": 0.89,
+      "rationale": "Reduces retry storm pressure while maintaining eventual consistency for transient failures"
     },
     {
-      "id": "restart_payment",
-      "rank": 4,
-      "confidence": 0.43,
-      "rationale": "Tempting local fix, but it can amplify retries while payment is unstable."
+      "id": "rate_limit_retries",
+      "rank": 3,
+      "confidence": 0.85,
+      "rationale": "Controls retry rate but may cause legitimate request failures during recovery"
     },
     {
       "id": "shift_traffic",
+      "rank": 4,
+      "confidence": 0.72,
+      "rationale": "Reduces load but requires secondary region capacity and introduces routing complexity"
+    },
+    {
+      "id": "restart_payment",
       "rank": 5,
-      "confidence": 0.3,
-      "rationale": "Widens exposure without directly reducing the retry storm."
+      "confidence": 0.68,
+      "rationale": "May clear state but risks worsening errors during restart without addressing retry amplification"
     },
     {
       "id": "disable_flag",
       "rank": 6,
-      "confidence": 0.24,
-      "rationale": "Stops the pain quickly, but is too destructive to be the first safe move."
+      "confidence": 0.45,
+      "rationale": "Nuclear option that stops payment entirely; only use if other mitigations fail"
     }
   ],
   "best_action": {
-    "id": "rate_limit_retries",
-    "type": "throttle",
-    "target": "checkout",
+    "id": "enable_payment_circuit_breaker",
+    "type": "circuit_breaker",
+    "target": "payment",
     "category": "retry_overload_control",
-    "description": "Rate-limit checkout retries to break retry amplification.",
+    "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
     "execution_surface": "browser"
   },
-  "overall_confidence": 0.84,
+  "overall_confidence": 0.91,
   "predicted_effects_by_action": {
-    "restart_payment": {
-      "latency_direction": "mixed",
-      "error_direction": "down",
+    "rate_limit_retries": {
+      "latency_direction": "down",
+      "error_direction": "mixed",
       "blast_radius": "medium",
-      "retry_storm_risk": "high"
+      "retry_storm_risk": "low"
     },
     "enable_payment_circuit_breaker": {
       "latency_direction": "down",
@@ -273,40 +271,40 @@
     },
     "increase_retry_backoff": {
       "latency_direction": "down",
-      "error_direction": "mixed",
-      "blast_radius": "low",
-      "retry_storm_risk": "medium"
-    },
-    "disable_flag": {
-      "latency_direction": "down",
       "error_direction": "down",
       "blast_radius": "low",
       "retry_storm_risk": "low"
     },
-    "rate_limit_retries": {
-      "latency_direction": "down",
-      "error_direction": "mixed",
-      "blast_radius": "low",
-      "retry_storm_risk": "low"
+    "restart_payment": {
+      "latency_direction": "mixed",
+      "error_direction": "up",
+      "blast_radius": "high",
+      "retry_storm_risk": "high"
     },
     "shift_traffic": {
       "latency_direction": "mixed",
-      "error_direction": "mixed",
+      "error_direction": "down",
       "blast_radius": "high",
       "retry_storm_risk": "medium"
+    },
+    "disable_flag": {
+      "latency_direction": "down",
+      "error_direction": "up",
+      "blast_radius": "high",
+      "retry_storm_risk": "low"
     }
   },
   "browser_workflow": {
     "dashboard_url": "http://127.0.0.1:8010/",
     "feature_flags_url": "http://127.0.0.1:8010/feature-flags",
     "state_api_url": "http://127.0.0.1:8010/api/state",
-    "button_label": "Apply Retry Rate Limit",
-    "button_selector": "#action-rate_limit_retries",
+    "button_label": "Enable Payment Circuit Breaker",
+    "button_selector": "#action-enable_payment_circuit_breaker",
     "steps": [
       "Open the dashboard.",
       "Inspect the incident metrics and active flags.",
       "Open the feature-flag page.",
-      "Click 'Apply Retry Rate Limit'.",
+      "Click 'Enable Payment Circuit Breaker'.",
       "Refresh the dashboard.",
       "Summarize before/after state and then run verify phase."
     ]
@@ -324,9 +322,9 @@
       "k8s/chaos/payment-unreachable-networkchaos.yaml",
       "k8s/chaos/payment-latency-httpchaos.yaml"
     ],
-    "recommended_remediation_manifest": "k8s/remediations/rate-limit-retries-configmap.yaml"
+    "recommended_remediation_manifest": "k8s/remediations/enable-payment-circuit-breaker-configmap.yaml"
   },
   "notes": [
-    "Using deterministic local ranking because Stratus credentials are missing or network access is unavailable."
+    "Used live Stratus ranking."
   ]
 }

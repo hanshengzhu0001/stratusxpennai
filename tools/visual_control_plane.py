@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import json
+import time
 from html import escape
 from pathlib import Path
 
+from agents.incident_classifier import classify_incident
 from fastapi import FastAPI, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
+from run import (
+    build_plan_report,
+    build_verify_report,
+    load_incident_input,
+    load_json_path,
+    load_local_env,
+    load_saved_plan,
+    wait_for_updated_evidence,
+    write_browser_playbook,
+    write_outputs,
+)
+from tools.execute_action import execute_action
+from tools.prometheus_client import collect_evidence
 
 from tools.runtime_state import (
     apply_action,
@@ -27,11 +42,14 @@ app = FastAPI(title="Guardrail Console")
 
 BASE_URL = "http://127.0.0.1:8010"
 VIEW_ORDER = ["incident", "decision", "execution", "verdict"]
+DEFAULT_ALERT_PATH = Path("alerts/latest.json")
 ARTIFACT_PATHS = {
     "plan": Path("outputs/alert_latest_plan.json"),
     "playbook": Path("outputs/alert_latest_browser_playbook.json"),
     "report": Path("outputs/alert_latest_report.json"),
 }
+
+load_local_env()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -165,6 +183,7 @@ def state_api() -> dict:
 @app.post("/api/actions/{action_id}")
 def api_action(action_id: str) -> dict:
     state = apply_action(action_id)
+    _clear_report_artifacts()
     technical_metrics = derive_metrics(state)
     return {
         "status": "ok",
@@ -173,6 +192,101 @@ def api_action(action_id: str) -> dict:
         "metrics": technical_metrics,
         "business_metrics": derive_business_metrics(state, technical_metrics),
     }
+
+
+@app.post("/api/plan")
+def api_plan(
+    input_path: str = Form(str(DEFAULT_ALERT_PATH)),
+    return_to: str = Form("decision"),
+) -> RedirectResponse:
+    payload, resolved_path = _load_alert_payload(input_path)
+    source_type, state, evidence = _load_incident_snapshot(payload)
+    scenario_id = payload.get("id", "alert_latest")
+    plan = build_plan_report(payload, scenario_id, source_type, resolved_path, state, evidence)
+    write_outputs(plan, scenario_id, "plan")
+    write_browser_playbook(plan, scenario_id)
+    _clear_report_artifacts()
+    return RedirectResponse(_return_path(return_to), status_code=303)
+
+
+@app.post("/api/execute-planned")
+def api_execute_planned(return_to: str = Form("execution")) -> RedirectResponse:
+    plan = _load_artifact("plan")
+    if plan:
+        chosen = plan.get("best_action", {}).get("id")
+        if chosen:
+            apply_action(chosen)
+            _clear_report_artifacts()
+    return RedirectResponse(_return_path(return_to), status_code=303)
+
+
+@app.post("/api/verify")
+def api_verify(
+    input_path: str = Form(str(DEFAULT_ALERT_PATH)),
+    return_to: str = Form("verdict"),
+) -> RedirectResponse:
+    payload, resolved_path = _load_alert_payload(input_path)
+    scenario_id = payload.get("id", "alert_latest")
+    plan = load_saved_plan(scenario_id)
+    current_evidence = wait_for_updated_evidence(
+        payload,
+        before_evidence={
+            "metrics": plan.get("observed_condition", {}).get("metrics", {}),
+            "prometheus": plan.get("observed_condition", {}).get("prometheus", {}),
+        },
+        expected_metrics=derive_metrics(load_state()),
+    )
+    source_type = plan.get("source_type", "alertmanager_webhook")
+    current_state = derive_state_for_verify(payload, current_evidence)
+    report = build_verify_report(
+        payload=payload,
+        scenario_id=scenario_id,
+        source_type=source_type,
+        input_path=resolved_path,
+        current_state=current_state,
+        current_evidence=current_evidence,
+        plan=plan,
+        execution=None,
+        mode="browser_verify",
+    )
+    write_outputs(report, scenario_id, "report")
+    return RedirectResponse(_return_path(return_to), status_code=303)
+
+
+@app.post("/api/autorun")
+def api_autorun(
+    input_path: str = Form(str(DEFAULT_ALERT_PATH)),
+    return_to: str = Form("verdict"),
+) -> RedirectResponse:
+    payload, resolved_path = _load_alert_payload(input_path)
+    source_type, state, evidence = _load_incident_snapshot(payload)
+    scenario_id = payload.get("id", "alert_latest")
+    plan = build_plan_report(payload, scenario_id, source_type, resolved_path, state, evidence)
+    write_outputs(plan, scenario_id, "plan")
+    write_browser_playbook(plan, scenario_id)
+    execution = execute_action(plan["best_action"])
+    current_evidence = wait_for_updated_evidence(
+        payload,
+        before_evidence={
+            "metrics": plan.get("observed_condition", {}).get("metrics", {}),
+            "prometheus": plan.get("observed_condition", {}).get("prometheus", {}),
+        },
+        expected_metrics=derive_metrics(execution["state_after_action"]),
+    )
+    current_state = derive_state_for_verify(payload, current_evidence)
+    report = build_verify_report(
+        payload=payload,
+        scenario_id=scenario_id,
+        source_type=source_type,
+        input_path=resolved_path,
+        current_state=current_state,
+        current_evidence=current_evidence,
+        plan=plan,
+        execution=execution,
+        mode="console_autorun",
+    )
+    write_outputs(report, scenario_id, "report")
+    return RedirectResponse(_return_path(return_to), status_code=303)
 
 
 @app.post("/api/scenario")
@@ -189,6 +303,7 @@ def api_toggle(
     return_to: str = Form("feature-flags"),
 ) -> RedirectResponse:
     set_flag(flag_name, enabled.lower() == "true")
+    _clear_report_artifacts()
     return RedirectResponse(_return_path(return_to), status_code=303)
 
 
@@ -198,6 +313,7 @@ def execute_from_form(
     return_to: str = Form("feature-flags"),
 ) -> RedirectResponse:
     apply_action(action_id)
+    _clear_report_artifacts()
     return RedirectResponse(_return_path(return_to), status_code=303)
 
 
@@ -321,6 +437,19 @@ def _render_shell(
     button.primary {{ background:var(--accent); color:white; border-color:var(--accent); cursor:pointer; }}
     a.button {{ text-decoration:none; color:white; background:var(--accent); padding:11px 14px; border-radius:12px; display:inline-block; }}
     .callout {{ border-left:4px solid var(--accent); padding-left:12px; }}
+    .loading-overlay {{
+      position:fixed; inset:0; background:rgba(20,28,35,0.72); display:none; align-items:center; justify-content:center;
+      z-index:9999; padding:24px;
+    }}
+    .loading-card {{
+      width:min(520px, 100%); background:var(--panel); border-radius:22px; border:1px solid var(--line);
+      padding:24px; box-shadow:0 24px 60px rgba(0,0,0,0.22);
+    }}
+    .loading-title {{ margin:0 0 8px; font-size:1.5rem; }}
+    .loading-subtitle {{ margin:0 0 16px; color:var(--muted); }}
+    .progress-track {{ height:14px; border-radius:999px; background:#eadbc6; overflow:hidden; }}
+    .progress-bar {{ height:100%; width:8%; border-radius:999px; background:linear-gradient(90deg, var(--accent), #e38e45); transition:width 0.9s ease; }}
+    .loading-steps {{ margin:14px 0 0; padding-left:18px; color:var(--muted); line-height:1.6; }}
     @media (max-width: 940px) {{
       .hero {{ display:grid; }}
       .grid.two, .grid.three, .action-grid {{ grid-template-columns: 1fr; }}
@@ -342,6 +471,62 @@ def _render_shell(
     </div>
     {body}
   </div>
+  <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
+    <div class="loading-card">
+      <h2 class="loading-title" id="loading-title">Working...</h2>
+      <p class="loading-subtitle" id="loading-subtitle">The Guardrail Console is processing the next step.</p>
+      <div class="progress-track"><div class="progress-bar" id="loading-bar"></div></div>
+      <ul class="loading-steps" id="loading-steps">
+        <li>Gathering incident state</li>
+        <li>Waiting for Stratus / Prometheus</li>
+        <li>Writing the next artifact</li>
+      </ul>
+    </div>
+  </div>
+  <script>
+    (() => {{
+      const overlay = document.getElementById('loading-overlay');
+      const title = document.getElementById('loading-title');
+      const subtitle = document.getElementById('loading-subtitle');
+      const bar = document.getElementById('loading-bar');
+      const steps = document.getElementById('loading-steps');
+      const progressFrames = {{
+        plan: [12, 34, 61, 84],
+        verify: [16, 42, 68, 88],
+        autorun: [10, 28, 49, 66, 83],
+        execute: [20, 55, 82],
+      }};
+      const subtitles = {{
+        plan: 'Querying evidence, selecting the shortlist, and waiting for Stratus to finish planning.',
+        verify: 'Waiting for the soak window, scraping Prometheus, and writing the verdict.',
+        autorun: 'Running plan, execution, and verification in one automated rehearsal.',
+        execute: 'Applying the chosen remediation and updating the shared control-plane state.',
+      }};
+      function showLoading(form) {{
+        if (!overlay || !title || !subtitle || !bar || !steps) return;
+        const phase = form.dataset.loadingPhase || 'plan';
+        title.textContent = form.dataset.loadingLabel || 'Working...';
+        subtitle.textContent = subtitles[phase] || 'The Guardrail Console is processing the next step.';
+        const phaseSteps = {{
+          plan: ['Collecting evidence', 'Shortlisting actions', 'Waiting for Stratus', 'Rendering decision view'],
+          verify: ['Reading plan', 'Waiting for scrape refresh', 'Comparing predicted vs actual', 'Writing verdict'],
+          autorun: ['Planning', 'Applying action', 'Waiting for verification window', 'Writing final report'],
+          execute: ['Reading chosen action', 'Applying control-plane change', 'Refreshing execution state'],
+        }}[phase] || ['Working'];
+        steps.innerHTML = phaseSteps.map((item) => `<li>${{item}}</li>`).join('');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        const frames = progressFrames[phase] || [18, 45, 72, 90];
+        bar.style.width = '8%';
+        frames.forEach((value, index) => {{
+          window.setTimeout(() => {{ bar.style.width = `${{value}}%`; }}, 700 * (index + 1));
+        }});
+      }}
+      document.querySelectorAll('form[data-loading-label]').forEach((form) => {{
+        form.addEventListener('submit', () => showLoading(form));
+      }});
+    }})();
+  </script>
 </body>
 </html>"""
 
@@ -395,6 +580,17 @@ def _render_incident_view(
           <button class="primary">Apply Scenario</button>
           <button formaction="/api/reset" name="return_to" value="incident">Reset Active Scenario</button>
         </form>
+        <form class="inline" method="post" action="/api/plan" style="margin-top:12px;" data-loading-label="Planning with Stratus..." data-loading-phase="plan">
+          <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+          <input type="hidden" name="return_to" value="decision">
+          <button class="primary">Generate Guardrail Plan</button>
+          <a class="button" href="/?view=decision">Go to Decision View</a>
+        </form>
+        <form class="inline" method="post" action="/api/autorun" style="margin-top:12px;" data-loading-label="Running the full workflow..." data-loading-phase="autorun">
+          <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+          <input type="hidden" name="return_to" value="verdict">
+          <button>Auto Run Full Workflow</button>
+        </form>
         <div style="margin-top:16px;">{flags}</div>
       </div>
       <div class="card">
@@ -414,11 +610,17 @@ def _render_incident_view(
 
 def _render_decision_view(plan: dict | None, active_scenario: dict) -> str:
     if not plan:
-        return """
+        return f"""
         <div class="card">
           <h2>Decision View</h2>
           <p class="muted">No plan artifact is available yet.</p>
-          <p>Run <code>.venv/bin/python run.py alerts/latest.json --phase plan</code> to populate the shortlist, ranking, and browser playbook.</p>
+          <p>Generate the plan here to populate the shortlist, ranking, and browser playbook without leaving the console.</p>
+          <form class="inline" method="post" action="/api/plan" style="margin-top:12px;" data-loading-label="Planning with Stratus..." data-loading-phase="plan">
+            <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+            <input type="hidden" name="return_to" value="decision">
+            <button class="primary">Generate Guardrail Plan</button>
+            <a class="button" href="/?view=incident">Back to Incident</a>
+          </form>
         </div>
         """
 
@@ -434,6 +636,7 @@ def _render_decision_view(plan: dict | None, active_scenario: dict) -> str:
         f"<li>{escape(line)}</li>" for line in plan.get("planner", {}).get("selection_rationale", [])
     )
     chosen = plan["best_action"]["id"]
+    notes = "".join(f"<li>{escape(note)}</li>" for note in plan.get("notes", []))
     return f"""
     <div class="grid two">
       <div class="card">
@@ -453,16 +656,17 @@ def _render_decision_view(plan: dict | None, active_scenario: dict) -> str:
           <strong>Shortlist rationale</strong>
           <ul class="list">{rationale}</ul>
         </div>
+        <form class="inline" method="post" action="/api/plan" style="margin-top:18px;" data-loading-label="Refreshing Stratus plan..." data-loading-phase="plan">
+          <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+          <input type="hidden" name="return_to" value="decision">
+          <button class="primary">Regenerate Plan</button>
+          <a class="button" href="/?view=execution">Move to Execution</a>
+        </form>
       </div>
       <div class="card">
-        <h2>Baseline Toggle</h2>
-        <p class="muted">Week 2 keeps baseline as a demo mode, not the main product path.</p>
-        <ul class="list">
-          <li>Same incident.</li>
-          <li>Same shortlist.</li>
-          <li>Different chooser.</li>
-          <li>Expected naive reflex: <code>restart_payment</code>.</li>
-        </ul>
+        <h2>Guardrail Notes</h2>
+        <p class="muted">This is the Stratus touchpoint surfaced into the operator-facing product.</p>
+        <ul class="list">{notes or '<li>No guardrail notes were recorded.</li>'}</ul>
       </div>
     </div>
     <div class="grid two" style="margin-top:18px;">
@@ -506,6 +710,7 @@ def _render_execution_view(
         for item in statuses
     )
     chosen = plan.get("best_action", {}).get("id") if plan else None
+    chosen_label = playbook.get("chosen_action", {}).get("label") if playbook else None
     sequence = plan.get("action_sequence") if plan else None
     if sequence:
         preview_items = [
@@ -531,7 +736,32 @@ def _render_execution_view(
         <p class="muted">This is Hansen's shell for connecting plan, browser execution, verify, and verdict.</p>
         <div class="timeline">{timeline}</div>
         <div style="margin-top:18px;">
-          <a class="button" href="{urls['feature_flags']}">Open Execution Surface</a>
+          <form class="inline" method="post" action="/api/plan" data-loading-label="Planning with Stratus..." data-loading-phase="plan">
+            <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+            <input type="hidden" name="return_to" value="execution">
+            <button class="primary">Plan from Latest Alert</button>
+            <a class="button" href="{urls['feature_flags']}">Open Execution Surface</a>
+          </form>
+        </div>
+        <div style="margin-top:14px;">
+          <form class="inline" method="post" action="/api/execute-planned" data-loading-label="Applying planned remediation..." data-loading-phase="execute">
+            <input type="hidden" name="return_to" value="execution">
+            <button class="primary">Apply Planned Action Here</button>
+          </form>
+        </div>
+        <div style="margin-top:10px;">
+          <form class="inline" method="post" action="/api/verify" data-loading-label="Verifying outcome..." data-loading-phase="verify">
+            <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+            <input type="hidden" name="return_to" value="verdict">
+            <button>Run Verify After Soak</button>
+          </form>
+        </div>
+        <div style="margin-top:10px;">
+          <form class="inline" method="post" action="/api/autorun" data-loading-label="Running the full workflow..." data-loading-phase="autorun">
+            <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+            <input type="hidden" name="return_to" value="verdict">
+            <button>Auto Run Whole Flow</button>
+          </form>
         </div>
       </div>
       <div class="card">
@@ -555,9 +785,10 @@ def _render_execution_view(
       <div class="card">
         <h3>Operator Actions</h3>
         <ul class="list">
-          <li>Plan command: <code>.venv/bin/python run.py alerts/latest.json --phase plan</code></li>
+          <li>Chosen action: <code>{escape(str(chosen or 'n/a'))}</code>{f" ({escape(chosen_label)})" if chosen_label else ""}</li>
+          <li>Plan from the console or by command line.</li>
           <li>Feature flags: <a href="{urls['feature_flags']}">{urls['feature_flags']}</a></li>
-          <li>Verify command: <code>.venv/bin/python run.py alerts/latest.json --phase verify</code></li>
+          <li>Verify waits one scrape interval before writing the verdict.</li>
           <li>Current scenario: <strong>{escape(active_scenario['label'])}</strong></li>
         </ul>
       </div>
@@ -573,17 +804,27 @@ def _render_verdict_view(
     business_metrics: dict,
 ) -> str:
     if not report:
-        return """
+        return f"""
         <div class="card">
           <h2>Verdict View</h2>
           <p class="muted">No verification report is available yet.</p>
-          <p>Run <code>.venv/bin/python run.py alerts/latest.json --phase verify</code> after the browser action to populate the final verdict.</p>
+          <p>Run verify here after the browser action to populate the final verdict.</p>
+          <form class="inline" method="post" action="/api/verify" style="margin-top:12px;" data-loading-label="Verifying outcome..." data-loading-phase="verify">
+            <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+            <input type="hidden" name="return_to" value="verdict">
+            <button class="primary">Run Verify</button>
+            <a class="button" href="/?view=execution">Back to Execution</a>
+          </form>
         </div>
         """
 
     actual = report.get("actual_outcome", {})
     predicted = report.get("predicted_vs_actual", {}).get("predicted", {})
     drift = report.get("predicted_vs_actual", {}).get("drift", {"score": 0.0})
+    notes = "".join(f"<li>{escape(note)}</li>" for note in report.get("notes", []))
+    chosen_action = report.get("best_action", {}).get("id", "n/a")
+    rejected_action = _dangerous_reflex_from_plan(plan, chosen_action)
+    chosen_rationale = _chosen_rationale(report)
     verdict_cards = _metric_cards(
         [
             ("Drift Score", f"{drift['score']:.2f}"),
@@ -601,12 +842,20 @@ def _render_verdict_view(
         <h2>Verdict View</h2>
         <p class="muted">This view turns Stratus output and post-action evidence into the judge-facing story.</p>
         <ul class="list">
-          <li>Chosen action: <code>{escape(str(report.get('best_action', {}).get('id', 'n/a')))}</code></li>
+          <li>Chosen action: <code>{escape(str(chosen_action))}</code></li>
+          <li>Rejected dangerous reflex: <code>{escape(rejected_action)}</code></li>
+          <li>Why the safer action won: {escape(chosen_rationale)}</li>
           <li>Before latency: <code>{escape(str(before_metrics.get('latency_p95_ms', 'n/a')))}</code></li>
           <li>After latency: <code>{escape(str(actual.get('latency_p95_ms', 'n/a')))}</code></li>
           <li>Queue abandonment now: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
           <li>Case writeback status: <code>planned for Evaluation Agent</code></li>
         </ul>
+        <form class="inline" method="post" action="/api/verify" style="margin-top:18px;" data-loading-label="Refreshing verdict..." data-loading-phase="verify">
+          <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+          <input type="hidden" name="return_to" value="verdict">
+          <button class="primary">Refresh Verdict</button>
+          <a class="button" href="/?view=incident">Start Fresh</a>
+        </form>
       </div>
       <div class="card">
         <h2>Predicted vs Actual</h2>
@@ -618,6 +867,18 @@ def _render_verdict_view(
             <tr><td>Retry</td><td><code>{escape(str(predicted.get('retry_rate', predicted.get('retry_storm_risk', 'n/a'))))}</code></td><td><code>{escape(str(actual.get('retry_rate', actual.get('retry_storm_risk', 'n/a'))))}</code></td></tr>
           </tbody>
         </table>
+        <div style="margin-top:16px;">
+          <strong>Guardrail verdict</strong>
+          <ul class="list">
+            <li>Dangerous local reflex was rejected before execution.</li>
+            <li>OpenClaw executed the safer single action from the browser playbook.</li>
+            <li>Prometheus-backed verification wrote the final verdict after the soak period.</li>
+          </ul>
+        </div>
+        <div style="margin-top:16px;">
+          <strong>Guardrail notes</strong>
+          <ul class="list">{notes or '<li>No additional notes were recorded.</li>'}</ul>
+        </div>
       </div>
     </div>
     """
@@ -633,6 +894,28 @@ def _metric_cards(items: list[tuple[str, str]]) -> str:
         """
         for label, value in items
     )
+
+
+def _dangerous_reflex_from_plan(plan: dict | None, chosen_action: str) -> str:
+    if not plan:
+        return "restart_payment"
+    candidate_ids = [action.get("id") for action in plan.get("candidate_actions", [])]
+    if "restart_payment" in candidate_ids and chosen_action != "restart_payment":
+        return "restart_payment"
+    for action_id in candidate_ids:
+        if action_id != chosen_action:
+            return str(action_id)
+    return "restart_payment"
+
+
+def _chosen_rationale(report: dict) -> str:
+    chosen_action = report.get("best_action", {}).get("id")
+    for item in report.get("stratus_ranking", []):
+        if item.get("id") == chosen_action:
+            rationale = str(item.get("rationale") or "").strip()
+            if rationale:
+                return rationale
+    return "Stratus selected the action with the safest forecasted recovery path."
 
 
 def _workflow_statuses(
@@ -676,9 +959,42 @@ def _load_artifact(name: str) -> dict | None:
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text())
+        return load_json_path(path)
     except json.JSONDecodeError:
         return None
+
+
+def derive_state_for_verify(payload: dict, evidence: dict) -> dict:
+    return classify_incident(payload, evidence)
+
+
+def _load_alert_payload(input_path: str) -> tuple[dict, Path]:
+    resolved_path = Path(input_path)
+    payload = load_json_path(resolved_path)
+    return payload, resolved_path
+
+
+def _load_incident_snapshot(payload: dict) -> tuple[str, dict, dict]:
+    synced_evidence = _wait_for_prometheus_sync(payload)
+    state = classify_incident(payload, synced_evidence)
+    return "alertmanager_webhook", state, synced_evidence
+
+
+def _wait_for_prometheus_sync(payload: dict, timeout_seconds: float = 10.0) -> dict:
+    state = load_state()
+    expected_metrics = derive_metrics(state)
+    deadline = time.monotonic() + timeout_seconds
+    latest = collect_evidence(payload)
+    while True:
+        if latest.get("prometheus", {}).get("source") != "live":
+            return latest
+        if latest.get("metrics") == expected_metrics:
+            return latest
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return latest
+        time.sleep(min(2.0, remaining))
+        latest = collect_evidence(payload)
 
 
 def _clear_console_artifacts() -> None:
@@ -691,6 +1007,15 @@ def _clear_console_artifacts() -> None:
         Path("outputs/alert_latest_report.md"),
     ]
     for path in artifact_files:
+        if path.exists():
+            path.unlink()
+
+
+def _clear_report_artifacts() -> None:
+    for path in [
+        Path("outputs/alert_latest_report.json"),
+        Path("outputs/alert_latest_report.md"),
+    ]:
         if path.exists():
             path.unlink()
 

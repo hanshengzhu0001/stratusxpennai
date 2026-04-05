@@ -16,26 +16,51 @@ Given a payment-related latency incident with retry amplification, which of thes
 - Services: frontend, checkout, payment
 - Pattern matches: payment_degradation
 
+## Action Strategy
+
+- Planner strategy: `broader_retail_action_library -> scenario_shortlist -> stratus_ranking`
+- Library size: `12`
+- Shortlist size: `6`
+
+## Action Library
+
+- `rate_limit_retries`: retry_overload_control (browser)
+- `enable_payment_circuit_breaker`: retry_overload_control (browser)
+- `increase_retry_backoff`: retry_overload_control (browser)
+- `restart_payment`: service_recovery (browser)
+- `shift_traffic`: traffic_management (browser)
+- `disable_flag`: graceful_degradation (browser)
+- `rollback_payment_deploy`: deployment_recovery (k8s)
+- `rollback_checkout_deploy`: deployment_recovery (k8s)
+- `disable_nonessential_checkout_features`: graceful_degradation (future)
+- `serve_stale_catalog_cache`: graceful_degradation (future)
+- `failover_to_secondary_region`: traffic_management (k8s)
+- `pause_noncritical_background_jobs`: capacity_management (k8s)
+
 ## Candidate Actions
 
-- `restart_payment`: Restart payment pods
-- `disable_flag`: Disable the payment feature flag
-- `rate_limit_retries`: Rate-limit checkout retries
-- `shift_traffic`: Shift traffic to the secondary region
+- `rate_limit_retries`: Rate-limit checkout retries to break retry amplification.
+- `enable_payment_circuit_breaker`: Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.
+- `increase_retry_backoff`: Increase retry backoff so checkout stops hammering payment during partial degradation.
+- `restart_payment`: Restart payment pods to clear local state after backlog is reduced.
+- `shift_traffic`: Shift a slice of checkout traffic to the secondary region.
+- `disable_flag`: Disable the payment feature flag as a last-resort kill switch.
 
 ## Stratus Ranking
 
-- Rank 1: `rate_limit_retries` (0.87)
-- Rank 2: `restart_payment` (0.72)
-- Rank 3: `disable_flag` (0.58)
-- Rank 4: `shift_traffic` (0.45)
+- Rank 1: `enable_payment_circuit_breaker` (0.94)
+- Rank 2: `increase_retry_backoff` (0.89)
+- Rank 3: `rate_limit_retries` (0.85)
+- Rank 4: `shift_traffic` (0.72)
+- Rank 5: `restart_payment` (0.68)
+- Rank 6: `disable_flag` (0.45)
 
 ## Browser Workflow
 
 - Open the dashboard.
 - Inspect the incident metrics and active flags.
 - Open the feature-flag page.
-- Click 'Apply Retry Rate Limit'.
+- Click 'Enable Payment Circuit Breaker'.
 - Refresh the dashboard.
 - Summarize before/after state and then run verify phase.
 
@@ -46,13 +71,13 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 ## Decision
 
-- Chosen action: `rate_limit_retries`
-- Confidence: `0.87`
+- Chosen action: `enable_payment_circuit_breaker`
+- Confidence: `0.91`
 - Dashboard: `http://127.0.0.1:8010/`
 - Feature flags: `http://127.0.0.1:8010/feature-flags`
 
 ## Predicted vs Actual
 
-- Predicted: `{"blast_radius": "checkout service only", "error_rate": 0.08, "latency_p95_ms": 1200, "retry_rate": 0.05, "time_to_effect_seconds": 30}`
-- Actual: `{"action_id": "rate_limit_retries", "blast_radius": "low", "error_direction": "up", "error_rate": 0.18, "impact": "medium_high", "latency_direction": "down", "latency_p95_ms": 1650, "notes": "Observed live metrics after rate_limit_retries via Prometheus-backed verification.", "recovery": "strong", "retry_rate": 0.1, "retry_storm_risk": "low", "risk_level": "low", "time_to_effect_seconds": 30}`
-- Drift score: `0.50`
+- Predicted: `{"blast_radius": "low", "error_direction": "mixed", "latency_direction": "down", "retry_storm_risk": "low"}`
+- Actual: `{"action_id": "enable_payment_circuit_breaker", "blast_radius": "low", "error_direction": "down", "error_rate": 0.13, "impact": "medium_high", "latency_direction": "down", "latency_p95_ms": 1780, "notes": "Observed live metrics after enable_payment_circuit_breaker via Prometheus-backed verification.", "recovery": "strong", "retry_rate": 0.11, "retry_storm_risk": "low", "risk_level": "low", "time_to_effect_seconds": 30}`
+- Drift score: `0.95`

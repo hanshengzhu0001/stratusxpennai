@@ -97,9 +97,9 @@ def derive_metrics(state: dict) -> dict:
         error_rate += 0.03
         retry_rate += 0.10
     if state["payment_circuit_breaker_enabled"]:
-        latency -= 420
-        error_rate -= 0.01
-        retry_rate -= 0.14
+        latency -= 520
+        error_rate -= 0.03
+        retry_rate -= 0.20
     if state["retry_backoff_enabled"]:
         latency -= 280
         retry_rate -= 0.12

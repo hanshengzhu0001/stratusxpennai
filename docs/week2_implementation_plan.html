@@ -231,9 +231,325 @@
     code span.va { color: #19177c; } /* Variable */
     code span.vs { color: #4070a0; } /* VerbatimString */
     code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+    :root {
+      --page: #efe7dc;
+      --paper: #fffaf4;
+      --ink: #182431;
+      --muted: #5f6a73;
+      --title: #0f2033;
+      --accent: #b55b33;
+      --accent-soft: #f1ddcb;
+      --accent-2: #14656b;
+      --line: #deccb6;
+      --shadow: 0 24px 48px rgba(24, 36, 49, 0.08);
+    }
+
+    html {
+      background:
+        radial-gradient(circle at top left, #fff7ef 0%, transparent 28%),
+        linear-gradient(180deg, #f7f1e8 0%, var(--page) 100%);
+      color: var(--ink);
+    }
+
+    body {
+      max-width: 72rem;
+      padding: 46px 56px 72px;
+      color: var(--ink);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    p, li, td, th {
+      color: var(--ink);
+    }
+
+    h1, h2, h3, h4 {
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      color: var(--title);
+      font-size: 3rem;
+      line-height: 0.98;
+      margin: 0.2rem 0 0.3rem;
+    }
+
+    h2 {
+      color: var(--accent);
+      font-size: 1.58rem;
+      margin-top: 2.6rem;
+      padding-top: 1.15rem;
+      border-top: 1px solid var(--line);
+    }
+
+    h1 + h2 {
+      border-top: none;
+      padding-top: 0;
+      margin-top: 0.2rem;
+      color: var(--accent-2);
+      font-size: 1.62rem;
+    }
+
+    h3 {
+      color: var(--accent-2);
+      font-size: 1.08rem;
+      margin-top: 1.5rem;
+    }
+
+    blockquote {
+      margin: 1.3rem 0;
+      padding: 1rem 1.1rem 1rem 1.25rem;
+      border-left: 4px solid var(--accent);
+      background: rgba(241, 221, 203, 0.45);
+      border-radius: 0 16px 16px 0;
+      color: var(--ink);
+    }
+
+    code {
+      background: rgba(20, 101, 107, 0.08);
+      padding: 0.08rem 0.38rem;
+      border-radius: 0.45rem;
+      color: #174955;
+    }
+
+    table {
+      display: table;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--line);
+    }
+
+    tbody {
+      border-top: none;
+      border-bottom: none;
+    }
+
+    th {
+      background: rgba(181, 91, 51, 0.08);
+      border-top: none;
+      color: var(--muted);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    td {
+      border-bottom: 1px solid rgba(222, 204, 182, 0.65);
+    }
+
+    ul, ol {
+      padding-left: 1.35rem;
+    }
+
+    li + li {
+      margin-top: 0.24rem;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 0.7rem;
+      padding: 0.38rem 0.72rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.74rem;
+      font-weight: 700;
+    }
+
+    .hero-note {
+      max-width: 56rem;
+      font-size: 1.06rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+
+    .executive-grid,
+    .section-split,
+    .scenario-matrix,
+    .agent-flow {
+      display: grid;
+      gap: 18px;
+      margin: 1.4rem 0 1.8rem;
+    }
+
+    .executive-grid,
+    .section-split {
+      grid-template-columns: 1.02fr 1.18fr;
+      align-items: stretch;
+    }
+
+    .scenario-matrix {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .agent-flow {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      align-items: center;
+    }
+
+    .spotlight-card,
+    .graph-card,
+    .text-card,
+    .scenario-card,
+    .agent-node {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .spotlight-card h3,
+    .graph-card h3,
+    .text-card h3,
+    .scenario-card h3,
+    .agent-node h3 {
+      margin-top: 0;
+      margin-bottom: 0.6rem;
+      font-size: 1.18rem;
+    }
+
+    .spotlight-card p,
+    .graph-card p,
+    .text-card p,
+    .scenario-card p,
+    .agent-node p {
+      margin-top: 0.4rem;
+      color: var(--muted);
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 12px;
+      align-items: center;
+      margin: 0.72rem 0;
+      font-size: 0.94rem;
+    }
+
+    .metric-row strong {
+      font-weight: 700;
+    }
+
+    .metric-track {
+      height: 6px;
+      border-radius: 999px;
+      background: #e9e0d3;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .metric-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-2) 0%, var(--accent) 100%);
+    }
+
+    .metric-value {
+      color: var(--muted);
+      font-size: 0.83rem;
+      text-align: right;
+    }
+
+    .scenario-card h4 {
+      margin: 0 0 0.4rem;
+      color: var(--title);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 0.88rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .tagline {
+      display: inline-block;
+      margin-bottom: 0.55rem;
+      color: var(--accent-2);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+    }
+
+    .agent-node {
+      text-align: center;
+      padding: 16px 12px;
+      position: relative;
+    }
+
+    .agent-node::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -14px;
+      transform: translateY(-50%);
+      color: var(--accent);
+      font-size: 1.1rem;
+      font-family: "Avenir Next", sans-serif;
+    }
+
+    .agent-node:last-child::after {
+      display: none;
+    }
+
+    .agent-node.parallel {
+      background: linear-gradient(180deg, #fffaf4 0%, #f7f4ef 100%);
+    }
+
+    .section-summary {
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding: 24px 20px 48px;
+      }
+      .executive-grid,
+      .section-split,
+      .scenario-matrix,
+      .agent-flow {
+        grid-template-columns: 1fr;
+      }
+      .agent-node::after {
+        display: none;
+      }
+    }
+
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body {
+        max-width: none;
+        padding: 22px 26px 34px;
+        background: white;
+        font-size: 11.6pt;
+      }
+      .spotlight-card,
+      .graph-card,
+      .text-card,
+      .scenario-card,
+      .agent-node,
+      table,
+      blockquote {
+        break-inside: avoid;
+        box-shadow: none;
+      }
+    }
   </style>
 </head>
 <body>
+<div class="eyebrow">Stratus X1 Hackathon · Multi-Agent Systems</div>
 <h1 id="week-2-implementation-plan">Week 2 Implementation Plan</h1>
 <h2
 id="openclaw-stratus-counterfactual-guardrail-for-concert-ticket-drops">OpenClaw
@@ -241,6 +557,43 @@ id="openclaw-stratus-counterfactual-guardrail-for-concert-ticket-drops">OpenClaw
 <h3 id="track">Track</h3>
 <p>Stratus X1 Hackathon<br />
 Track: <code>Multi-Agent Systems</code></p>
+<p class="hero-note"><strong>Design brief:</strong> turn the current workflow into a judge-ready product narrative where a high-stakes ticket drop incident is observed, constrained, simulated, executed, and verified inside one polished Guardrail Console.</p>
+<section class="executive-grid">
+  <div class="spotlight-card">
+    <span class="tagline">Week 2 Target</span>
+    <h3>Ship a 90% Final Product</h3>
+    <p>This week is about proving one memorable claim: the guardrail rejects the dangerous reflex, OpenClaw executes the safer action, and the verdict shows why that mattered.</p>
+    <div class="metric-row">
+      <strong>Real incident realism</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:92%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Guardrail necessity</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:88%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Operator-visible execution</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:90%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Final demo polish</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:84%"></div></div>
+    </div>
+  </div>
+  <div class="text-card">
+    <span class="tagline">Judge Story</span>
+    <h3>What the demo should make obvious</h3>
+    <ul>
+      <li><strong>Baseline vs guardrail:</strong> the obvious human reflex is visible and wrong.</li>
+      <li><strong>World-model value:</strong> Stratus is not decorative; it changes the action taken.</li>
+      <li><strong>OpenClaw value:</strong> the system visibly acts in the UI and then verifies the outcome.</li>
+      <li><strong>Business value:</strong> the product protects fairness, conversion, and seat availability, not just system uptime.</li>
+    </ul>
+    <blockquote>
+      <p>We are building a counterfactual remediation guardrail for high-stakes digital drops: a world-model safety layer that tells an operational agent when the “obvious” fix is the dangerous one.</p>
+    </blockquote>
+  </div>
+</section>
 <h2 id="objective">0. Objective</h2>
 <p>Week 2 should deliver a <strong>90% final product</strong>, not
 another prototype.</p>
@@ -288,6 +641,39 @@ operational agents</strong>, not a generic incident copilot.</p>
 story.</p>
 <h2 id="scenario-a-concert-ticket-drop-death-spiral">2. Scenario A:
 Concert Ticket Drop Death Spiral</h2>
+<section class="section-split">
+  <div class="graph-card">
+    <span class="tagline">Drop-Day Stress Signature</span>
+    <h3>Observed pressure profile</h3>
+    <div class="metric-row">
+      <strong>Payment latency</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:78%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Retry amplification</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:86%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Queue abandonment</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:62%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Seat hold stress</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:71%"></div></div>
+    </div>
+    <p class="section-summary">Use thin bars and business-facing metrics so the document feels like an operator memo, not raw markdown exported from notes.</p>
+  </div>
+  <div class="text-card">
+    <span class="tagline">Operator Reality</span>
+    <h3>The first five minutes of a concert drop</h3>
+    <p>At 10:00 AM, the queue opens, checkout begins to surge, and payment gets slow but does not fully fail. Retry logic, user resubmits, and seat holds interact to create a system that looks “up” but behaves unfairly and unpredictably.</p>
+    <ul>
+      <li><strong>Local intuition:</strong> restart payment and hope the pods come back clean.</li>
+      <li><strong>System reality:</strong> the retry backlog can crush the new capacity immediately.</li>
+      <li><strong>Business constraint:</strong> ticketing must preserve fairness and seat access while keeping conversion alive.</li>
+    </ul>
+  </div>
+</section>
 <p>It is 10:00 AM and a major concert ticket drop opens.</p>
 <p>Traffic surges instantly. Users move through queue, seat hold,
 checkout, and payment. The <code>payment</code> path is not fully down,
@@ -336,6 +722,28 @@ Portfolio And Realistic Simulation</h2>
 <p>We should prepare a small <strong>incident portfolio</strong> with
 realistic metrics so the demo can show different actions being chosen
 under different failure patterns.</p>
+<div class="scenario-matrix">
+  <div class="scenario-card">
+    <h4>Scenario A</h4>
+    <h3>Retry Death Spiral</h3>
+    <p>Payment degrades, checkout retries amplify, and the obvious restart reflex becomes the trap.</p>
+  </div>
+  <div class="scenario-card">
+    <h4>Scenario B</h4>
+    <h3>Payment Gateway Flap</h3>
+    <p>Partial payment instability calls for fail-fast containment rather than broad infrastructure movement.</p>
+  </div>
+  <div class="scenario-card">
+    <h4>Scenario C</h4>
+    <h3>Seat Hold Clog</h3>
+    <p>Inventory is technically “available” but operationally locked, creating fairness and conversion failure.</p>
+  </div>
+  <div class="scenario-card">
+    <h4>Scenario D</h4>
+    <h3>Regional Spillover Risk</h3>
+    <p>Failover is tempting, but secondary-region headroom is too thin for a full move.</p>
+  </div>
+</div>
 <h3 id="recommended-incident-portfolio">Recommended Incident
 Portfolio</h3>
 <ol type="1">
@@ -646,6 +1054,32 @@ system</li>
 </ul>
 <p>This is enough for retrieval, comparison, and demo replay.</p>
 <h2 id="multi-agent-workflow">5. Multi-Agent Workflow</h2>
+<div class="agent-flow">
+  <div class="agent-node parallel">
+    <h3>Payment Sentinel</h3>
+    <p>latency, timeouts, dependency health</p>
+  </div>
+  <div class="agent-node parallel">
+    <h3>Queue &amp; Fairness</h3>
+    <p>abandonment, retry factor, fairness skew</p>
+  </div>
+  <div class="agent-node parallel">
+    <h3>Inventory Sentinel</h3>
+    <p>seat holds, expirations, lock pressure</p>
+  </div>
+  <div class="agent-node parallel">
+    <h3>Browser Sentinel</h3>
+    <p>dashboard state, flags, screenshots</p>
+  </div>
+  <div class="agent-node">
+    <h3>Guardrail Decision</h3>
+    <p>shortlist + Stratus ranking</p>
+  </div>
+  <div class="agent-node">
+    <h3>Operator + Evaluation</h3>
+    <p>execute, verify, case writeback</p>
+  </div>
+</div>
 <h3 id="observation-layer-parallel-sentinel-agents">5.1 Observation
 Layer: Parallel Sentinel Agents</h3>
 <p>Observation is the main parallelization moment in the system.</p>

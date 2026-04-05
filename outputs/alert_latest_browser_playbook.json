@@ -7,9 +7,9 @@
   "scenario_id": "alert_latest",
   "goal": "Open the dashboard, apply the selected remediation in the feature-flag UI, refresh the dashboard, and then run verify automatically.",
   "chosen_action": {
-    "id": "rate_limit_retries",
-    "label": "Apply Retry Rate Limit",
-    "selector": "#action-rate_limit_retries"
+    "id": "enable_payment_circuit_breaker",
+    "label": "Enable Payment Circuit Breaker",
+    "selector": "#action-enable_payment_circuit_breaker"
   },
   "urls": {
     "dashboard": "http://127.0.0.1:8010/",
@@ -34,8 +34,8 @@
     },
     {
       "kind": "click",
-      "target": "#action-rate_limit_retries",
-      "label": "Apply Retry Rate Limit",
+      "target": "#action-enable_payment_circuit_breaker",
+      "label": "Enable Payment Circuit Breaker",
       "purpose": "apply_chosen_remediation"
     },
     {
@@ -61,7 +61,7 @@
   ],
   "expected_before": {
     "latency_p95_ms": 2300,
-    "error_rate": 0.18,
+    "error_rate": 0.16,
     "retry_rate": 0.31
   },
   "predicted_after": {

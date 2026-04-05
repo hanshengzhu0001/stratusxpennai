@@ -6,9 +6,9 @@ Open the dashboard, apply the selected remediation in the feature-flag UI, refre
 
 ## Chosen Action
 
-- Action: `rate_limit_retries`
-- Button label: `Apply Retry Rate Limit`
-- Button selector: `#action-rate_limit_retries`
+- Action: `enable_payment_circuit_breaker`
+- Button label: `Enable Payment Circuit Breaker`
+- Button selector: `#action-enable_payment_circuit_breaker`
 
 ## URLs
 
@@ -21,7 +21,7 @@ Open the dashboard, apply the selected remediation in the feature-flag UI, refre
 - `open`: `http://127.0.0.1:8010/` (capture_before_dashboard)
 - `inspect`: `http://127.0.0.1:8010/` (read_before_metrics_and_flags)
 - `open`: `http://127.0.0.1:8010/feature-flags` (open_execution_surface)
-- `click`: `#action-rate_limit_retries` (apply_chosen_remediation)
+- `click`: `#action-enable_payment_circuit_breaker` (apply_chosen_remediation)
 - `open`: `http://127.0.0.1:8010/` (capture_after_dashboard)
 - `inspect`: `http://127.0.0.1:8010/api/state` (confirm_state_after_action)
 - `exec`: `.venv/bin/python run.py alerts/latest.json --phase verify` (run_post_action_verification)
