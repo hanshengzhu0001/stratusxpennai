@@ -27,6 +27,11 @@ GROUND_TRUTH_ACTION_ID = "rate_limit_retries"
 # --- Output paths ---
 BASELINE_REPORT_PATH = "outputs/baseline_report.json"
 
+# --- Scenario / Case Library ---
+DEFAULT_SCENARIO_ID = "retry_death_spiral"
+CASES_DIR = "cases"
+VERDICT_OUTPUT_SUFFIX = "verdict"
+
 # --- Default evidence (mock, when Prometheus is not available) ---
 DEFAULT_EVIDENCE = {
     "services": ["frontend", "checkout", "payment"],

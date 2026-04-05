@@ -1,14 +1,15 @@
 {
   "workflow": {
     "orchestrator": "openclaw",
-    "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase plan",
+    "entrypoint": ".venv/bin/python run.py alerts\\latest.json --phase plan --mode stratus",
     "workspace_skill": "incident_guardrail",
     "level": "level_3_browser_k8s_scaffold",
     "phase": "plan"
   },
   "source_type": "alertmanager_webhook",
-  "input_path": "alerts/latest.json",
+  "input_path": "alerts\\latest.json",
   "scenario_id": "alert_latest",
+  "mode": "stratus",
   "incident_summary": "Retry pressure above baseline",
   "observed_condition": {
     "services": [
@@ -18,11 +19,12 @@
     ],
     "metrics": {
       "latency_p95_ms": 2300,
-      "error_rate": 0.16,
+      "error_rate": 0.18,
       "retry_rate": 0.31
     },
     "logs": [
-      "Retry pressure above baseline"
+      "payment timeout spikes observed",
+      "checkout retries exceeding normal threshold"
     ],
     "traces": [
       "checkout -> payment span dominates p95",
@@ -34,16 +36,17 @@
       "high_checkout_latency"
     ],
     "prometheus": {
-      "source": "live",
+      "source": "mock",
       "queries": {
-        "checkout_latency_p95_ms": 2300.0,
-        "checkout_error_rate": 0.16,
+        "checkout_latency_p95_ms": 2300,
+        "checkout_error_rate": 0.18,
         "checkout_retry_rate": 0.31
       },
       "active_alerts": [
         "CheckoutLatencyHigh",
         "CheckoutRetryStorm"
-      ]
+      ],
+      "note": "PROMETHEUS_BASE_URL not set; using mock evidence."
     },
     "browser_targets": {
       "dashboard": "http://127.0.0.1:8010/",
@@ -81,67 +84,97 @@
     {
       "id": "rate_limit_retries",
       "rank": 1,
-      "confidence": 0.87,
-      "reasoning": "Directly addresses retry amplification pattern. Stops cascade without service disruption."
-    },
-    {
-      "id": "restart_payment",
-      "rank": 2,
-      "confidence": 0.72,
-      "reasoning": "Targets root cause (payment degradation) but carries restart risk and doesn't prevent retry storm recurrence."
+      "confidence": 0.84,
+      "rationale": "Controls retry amplification directly with low blast radius."
     },
     {
       "id": "disable_flag",
+      "rank": 2,
+      "confidence": 0.79,
+      "rationale": "Safely sheds risky dependency traffic, but is more user-visible."
+    },
+    {
+      "id": "restart_payment",
       "rank": 3,
-      "confidence": 0.58,
-      "reasoning": "Reduces load on payment service but degrades user experience significantly."
+      "confidence": 0.43,
+      "rationale": "Tempting local fix, but it can amplify retries while payment is unstable."
     },
     {
       "id": "shift_traffic",
       "rank": 4,
-      "confidence": 0.45,
-      "reasoning": "May propagate problem to secondary region if payment service issue is systemic."
+      "confidence": 0.3,
+      "rationale": "Widens exposure without directly reducing the retry storm."
     }
   ],
   "best_action": {
     "id": "rate_limit_retries",
     "type": "throttle",
     "target": "checkout",
-    "expected_outcome": "Break retry amplification feedback loop, stabilize checkout service, reduce payment service load",
-    "risk_level": "low",
-    "reversible": true
+    "description": "Rate-limit checkout retries"
   },
-  "overall_confidence": 0.87,
+  "overall_confidence": 0.84,
   "predicted_effects_by_action": {
-    "rate_limit_retries": {
-      "latency_p95_ms": 1200,
-      "error_rate": 0.08,
-      "retry_rate": 0.05,
-      "time_to_effect_seconds": 30,
-      "blast_radius": "checkout service only"
-    },
     "restart_payment": {
-      "latency_p95_ms": 1500,
-      "error_rate": 0.22,
-      "retry_rate": 0.28,
-      "time_to_effect_seconds": 90,
-      "blast_radius": "payment + checkout during restart window"
+      "latency_direction": "mixed",
+      "error_direction": "down",
+      "blast_radius": "medium",
+      "retry_storm_risk": "high"
     },
     "disable_flag": {
-      "latency_p95_ms": 800,
-      "error_rate": 0.02,
-      "retry_rate": 0.01,
-      "time_to_effect_seconds": 15,
-      "blast_radius": "all users lose payment functionality"
+      "latency_direction": "down",
+      "error_direction": "down",
+      "blast_radius": "low",
+      "retry_storm_risk": "low"
+    },
+    "rate_limit_retries": {
+      "latency_direction": "down",
+      "error_direction": "mixed",
+      "blast_radius": "low",
+      "retry_storm_risk": "low"
     },
     "shift_traffic": {
-      "latency_p95_ms": 1800,
-      "error_rate": 0.14,
-      "retry_rate": 0.29,
-      "time_to_effect_seconds": 120,
-      "blast_radius": "global - may cascade to secondary region"
+      "latency_direction": "mixed",
+      "error_direction": "mixed",
+      "blast_radius": "high",
+      "retry_storm_risk": "medium"
     }
   },
+  "baseline_ranking": [
+    {
+      "id": "restart_payment",
+      "rank": 1,
+      "confidence": 0.5,
+      "rationale": "Keyword match (score: 3)."
+    },
+    {
+      "id": "disable_flag",
+      "rank": 2,
+      "confidence": 0.1,
+      "rationale": "Not chosen."
+    },
+    {
+      "id": "rate_limit_retries",
+      "rank": 3,
+      "confidence": 0.1,
+      "rationale": "Not chosen."
+    },
+    {
+      "id": "shift_traffic",
+      "rank": 4,
+      "confidence": 0.1,
+      "rationale": "Not chosen."
+    }
+  ],
+  "baseline_best_action": {
+    "id": "restart_payment",
+    "type": "restart",
+    "target": "payment",
+    "description": "Restart payment pods"
+  },
+  "baseline_confidence": 0.5,
+  "baseline_notes": [
+    "Baseline chooser (keyword_fallback). No Stratus reasoning."
+  ],
   "browser_workflow": {
     "dashboard_url": "http://127.0.0.1:8010/",
     "feature_flags_url": "http://127.0.0.1:8010/feature-flags",
@@ -159,7 +192,7 @@
   },
   "artifacts": {
     "browser_playbook": "outputs/alert_latest_browser_playbook.json",
-    "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify"
+    "verify_command": ".venv/bin/python run.py alerts\\latest.json --phase verify"
   },
   "kubernetes_plan": {
     "cluster_stack": {
@@ -173,6 +206,6 @@
     "recommended_remediation_manifest": "k8s/remediations/rate-limit-retries-configmap.yaml"
   },
   "notes": [
-    "Used live Stratus ranking."
+    "Using deterministic local ranking because Stratus credentials are missing or network access is unavailable."
   ]
 }

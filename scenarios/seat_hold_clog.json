@@ -1,0 +1,112 @@
+{
+  "id": "seat_hold_clog",
+  "name": "Seat Hold Clog",
+  "description": "Regional cache hot spot causes seat hold timeouts in the primary region, blocking ticket purchases for a major concert event.",
+
+  "alert_template": {
+    "commonLabels": {
+      "alertname": "SeatHoldTimeout",
+      "severity": "critical",
+      "service": "checkout",
+      "dependency": "seat_hold_cache"
+    },
+    "commonAnnotations": {
+      "summary": "Seat hold acquisition timeout rate exceeds threshold — primary region cache saturated during concert ticket drop."
+    }
+  },
+
+  "evidence": {
+    "services": ["frontend", "checkout", "payment"],
+    "metrics": {
+      "latency_p95_ms": 4500,
+      "error_rate": 0.25,
+      "retry_rate": 0.18
+    },
+    "logs": [
+      "seat hold cache timeout in us-east-1 — 98% utilization",
+      "seat hold acquisition failing for concert event ID 7823",
+      "customers receiving 'seats unavailable' despite inventory remaining"
+    ],
+    "traces": [
+      "checkout -> seat_hold_cache spans show 4s+ latency in us-east-1",
+      "us-west-2 seat_hold_cache responding normally at 120ms"
+    ]
+  },
+
+  "initial_state": {
+    "payment_service_unreachable": false,
+    "loadgenerator_flood_homepage": true,
+    "retry_rate_limit_enabled": false,
+    "traffic_shift_enabled": false,
+    "payment_feature_disabled": false,
+    "last_action": null
+  },
+
+  "candidate_actions": [
+    {"id": "restart_payment", "type": "restart", "target": "payment", "description": "Restart payment pods"},
+    {"id": "disable_flag", "type": "flag", "target": "payment_feature", "description": "Disable the payment feature flag"},
+    {"id": "rate_limit_retries", "type": "throttle", "target": "checkout", "description": "Rate-limit checkout retries"},
+    {"id": "shift_traffic", "type": "traffic_shift", "target": "secondary_region", "description": "Shift traffic to the secondary region"}
+  ],
+
+  "simulated_outcomes": {
+    "restart_payment": {
+      "latency_p95_ms": 4200,
+      "error_rate": 0.23,
+      "retry_rate": 0.17,
+      "time_to_effect_seconds": 120,
+      "risk_level": "medium",
+      "blast_radius": "medium",
+      "recovery": "partial",
+      "notes": "Restarting payment pods has minimal effect because the bottleneck is the regional seat hold cache, not the payment service itself."
+    },
+    "disable_flag": {
+      "latency_p95_ms": 400,
+      "error_rate": 0.90,
+      "retry_rate": 0.01,
+      "time_to_effect_seconds": 10,
+      "risk_level": "very_high",
+      "blast_radius": "high",
+      "recovery": "mixed",
+      "notes": "Disabling the payment feature flag kills all seat hold and ticket purchase functionality. Customers cannot buy tickets at all. This is catastrophic during a concert drop."
+    },
+    "rate_limit_retries": {
+      "latency_p95_ms": 3800,
+      "error_rate": 0.22,
+      "retry_rate": 0.06,
+      "time_to_effect_seconds": 30,
+      "risk_level": "low",
+      "blast_radius": "low",
+      "recovery": "partial",
+      "notes": "Rate limiting reduces retry noise but does not address the regional cache saturation. Seat holds still time out."
+    },
+    "shift_traffic": {
+      "latency_p95_ms": 1200,
+      "error_rate": 0.08,
+      "retry_rate": 0.05,
+      "time_to_effect_seconds": 60,
+      "risk_level": "medium",
+      "blast_radius": "medium",
+      "recovery": "strong",
+      "notes": "Shifting traffic to the secondary region distributes seat hold load across both regional caches. us-west-2 has capacity. Latency normalizes."
+    }
+  },
+
+  "ground_truth": {
+    "action_id": "shift_traffic",
+    "why": "Traffic shifting distributes the seat hold cache load across regions, relieving the saturated us-east-1 cache while preserving full ticket purchase functionality."
+  },
+
+  "naive_reflex": {
+    "action_id": "disable_flag",
+    "why": "A panicking engineer disables the feature flag to stop the errors, but this kills all ticket purchasing during the most critical revenue moment."
+  },
+
+  "evaluation_labels": {
+    "dangerous_reflex": "disable_flag",
+    "safe_action": "shift_traffic",
+    "reflex_rejected_reason": "Disabling the payment feature flag during a concert ticket drop destroys the revenue event entirely. While it eliminates errors, it eliminates all ticket purchases too. The business impact is catastrophic — customers are locked out during a time-sensitive sale.",
+    "blast_radius_avoided": "high to medium",
+    "fairness_impact": "Traffic shifting preserves ticket purchase access for all customers by distributing load. It prevents the scenario where only customers routed to the healthy region can buy tickets while others are completely blocked."
+  }
+}

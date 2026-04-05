@@ -1,14 +1,11 @@
 # OpenClaw Incident Guardrail Report
 
-## Guardrail Question
-
-Given a payment-related latency incident with retry amplification, which of these fixes is safest globally?
-
 ## Workflow
 
 - Level: `level_3_browser_k8s_scaffold`
 - Phase: `plan`
-- Entrypoint: `.venv/bin/python run.py alerts/latest.json --phase plan`
+- Entrypoint: `.venv/bin/python run.py alerts\latest.json --phase plan --mode stratus`
+- Mode: `stratus`
 
 ## Incident
 
@@ -25,10 +22,10 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 ## Stratus Ranking
 
-- Rank 1: `rate_limit_retries` (0.87)
-- Rank 2: `restart_payment` (0.72)
-- Rank 3: `disable_flag` (0.58)
-- Rank 4: `shift_traffic` (0.45)
+- Rank 1: `rate_limit_retries` (0.84)
+- Rank 2: `disable_flag` (0.79)
+- Rank 3: `restart_payment` (0.43)
+- Rank 4: `shift_traffic` (0.30)
 
 ## Browser Workflow
 
@@ -42,14 +39,12 @@ Given a payment-related latency incident with retry amplification, which of thes
 ## Automation Handoff
 
 - Browser playbook: `outputs/alert_latest_browser_playbook.json`
-- Verify command: `.venv/bin/python run.py alerts/latest.json --phase verify`
+- Verify command: `.venv/bin/python run.py alerts\latest.json --phase verify`
 
 ## Decision
 
 - Chosen action: `rate_limit_retries`
-- Confidence: `0.87`
-- Dashboard: `http://127.0.0.1:8010/`
-- Feature flags: `http://127.0.0.1:8010/feature-flags`
+- Confidence: `0.84`
 
 ## Predicted vs Actual
 

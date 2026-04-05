@@ -1,0 +1,112 @@
+{
+  "id": "payment_gateway_flap",
+  "name": "Payment Gateway Flap",
+  "description": "Payment gateway oscillates between healthy and degraded states, causing cascading timeouts and checkout failures.",
+
+  "alert_template": {
+    "commonLabels": {
+      "alertname": "PaymentGatewayFlap",
+      "severity": "critical",
+      "service": "payment",
+      "dependency": "payment_gateway"
+    },
+    "commonAnnotations": {
+      "summary": "Payment gateway health check oscillating — service flapping between UP and DOWN states."
+    }
+  },
+
+  "evidence": {
+    "services": ["frontend", "checkout", "payment"],
+    "metrics": {
+      "latency_p95_ms": 3100,
+      "error_rate": 0.35,
+      "retry_rate": 0.22
+    },
+    "logs": [
+      "payment gateway health check failed — connection reset",
+      "payment gateway recovered — 3 seconds later health check failed again",
+      "checkout requests timing out during payment flap window"
+    ],
+    "traces": [
+      "payment span alternates between 50ms (healthy) and timeout (30s)",
+      "checkout -> payment shows bimodal latency distribution"
+    ]
+  },
+
+  "initial_state": {
+    "payment_service_unreachable": true,
+    "loadgenerator_flood_homepage": false,
+    "retry_rate_limit_enabled": false,
+    "traffic_shift_enabled": false,
+    "payment_feature_disabled": false,
+    "last_action": null
+  },
+
+  "candidate_actions": [
+    {"id": "restart_payment", "type": "restart", "target": "payment", "description": "Restart payment pods"},
+    {"id": "disable_flag", "type": "flag", "target": "payment_feature", "description": "Disable the payment feature flag"},
+    {"id": "rate_limit_retries", "type": "throttle", "target": "checkout", "description": "Rate-limit checkout retries"},
+    {"id": "shift_traffic", "type": "traffic_shift", "target": "secondary_region", "description": "Shift traffic to the secondary region"}
+  ],
+
+  "simulated_outcomes": {
+    "restart_payment": {
+      "latency_p95_ms": 2800,
+      "error_rate": 0.32,
+      "retry_rate": 0.24,
+      "time_to_effect_seconds": 90,
+      "risk_level": "high",
+      "blast_radius": "high",
+      "recovery": "mixed",
+      "notes": "Restart triggers another flap cycle. The gateway briefly recovers then degrades again. Net effect: no improvement, added instability."
+    },
+    "disable_flag": {
+      "latency_p95_ms": 450,
+      "error_rate": 0.04,
+      "retry_rate": 0.03,
+      "time_to_effect_seconds": 10,
+      "risk_level": "medium",
+      "blast_radius": "medium",
+      "recovery": "strong",
+      "notes": "Disabling the payment feature flag isolates the flapping gateway. Checkout proceeds without payment, which is a controlled degradation. Gateway can stabilize without traffic pressure."
+    },
+    "rate_limit_retries": {
+      "latency_p95_ms": 2600,
+      "error_rate": 0.28,
+      "retry_rate": 0.08,
+      "time_to_effect_seconds": 30,
+      "risk_level": "medium",
+      "blast_radius": "low",
+      "recovery": "partial",
+      "notes": "Rate limiting reduces retry pressure but the gateway continues flapping. Latency remains high because the root cause (flapping) is not addressed."
+    },
+    "shift_traffic": {
+      "latency_p95_ms": 1800,
+      "error_rate": 0.15,
+      "retry_rate": 0.12,
+      "time_to_effect_seconds": 120,
+      "risk_level": "high",
+      "blast_radius": "high",
+      "recovery": "partial",
+      "notes": "Shifting traffic to secondary region reduces exposure but introduces cross-region latency and does not fix the flapping gateway."
+    }
+  },
+
+  "ground_truth": {
+    "action_id": "disable_flag",
+    "why": "Disabling the payment feature flag isolates the flapping gateway, allowing it to stabilize without traffic pressure while maintaining checkout availability in a controlled degradation mode."
+  },
+
+  "naive_reflex": {
+    "action_id": "restart_payment",
+    "why": "A tired engineer sees 'payment is down' and restarts it, but a restart triggers another flap cycle because the underlying gateway instability is not resolved."
+  },
+
+  "evaluation_labels": {
+    "dangerous_reflex": "restart_payment",
+    "safe_action": "disable_flag",
+    "reflex_rejected_reason": "Restarting the payment service during a gateway flap triggers another oscillation cycle. The restart itself becomes a perturbation that extends the flapping window. Each restart attempt resets the gateway's backoff timer, preventing natural stabilization.",
+    "blast_radius_avoided": "high to medium",
+    "fairness_impact": "Feature flag isolation preserves checkout flow for non-payment operations. Customers can still browse and add to cart. Payment is deferred gracefully rather than failing unpredictably mid-transaction."
+  }
+}

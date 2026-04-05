@@ -1,0 +1,111 @@
+{
+  "id": "retry_death_spiral",
+  "name": "Retry Death Spiral",
+  "description": "Payment dependency degrades, checkout retries amplify into a death spiral, latency spikes across the checkout path.",
+
+  "alert_template": {
+    "commonLabels": {
+      "alertname": "CheckoutRetryStorm",
+      "severity": "critical",
+      "service": "checkout",
+      "dependency": "payment"
+    },
+    "commonAnnotations": {
+      "summary": "Retry pressure above baseline — checkout retry rate exceeds 0.25 threshold with payment service degraded."
+    }
+  },
+
+  "evidence": {
+    "services": ["frontend", "checkout", "payment"],
+    "metrics": {
+      "latency_p95_ms": 2300,
+      "error_rate": 0.18,
+      "retry_rate": 0.31
+    },
+    "logs": [
+      "payment timeout spikes observed",
+      "checkout retries exceeding normal threshold"
+    ],
+    "traces": [
+      "checkout -> payment span dominates p95",
+      "retry fan-out visible across checkout service"
+    ]
+  },
+
+  "initial_state": {
+    "payment_service_unreachable": true,
+    "loadgenerator_flood_homepage": true,
+    "retry_rate_limit_enabled": false,
+    "traffic_shift_enabled": false,
+    "payment_feature_disabled": false,
+    "last_action": null
+  },
+
+  "candidate_actions": [
+    {"id": "restart_payment", "type": "restart", "target": "payment", "description": "Restart payment pods"},
+    {"id": "disable_flag", "type": "flag", "target": "payment_feature", "description": "Disable the payment feature flag"},
+    {"id": "rate_limit_retries", "type": "throttle", "target": "checkout", "description": "Rate-limit checkout retries"},
+    {"id": "shift_traffic", "type": "traffic_shift", "target": "secondary_region", "description": "Shift traffic to the secondary region"}
+  ],
+
+  "simulated_outcomes": {
+    "restart_payment": {
+      "latency_p95_ms": 1900,
+      "error_rate": 0.14,
+      "retry_rate": 0.30,
+      "time_to_effect_seconds": 120,
+      "risk_level": "medium",
+      "blast_radius": "medium",
+      "recovery": "partial",
+      "notes": "Restarting refreshes pods, but the retry loop keeps pressure on payment."
+    },
+    "disable_flag": {
+      "latency_p95_ms": 500,
+      "error_rate": 0.92,
+      "retry_rate": 0.02,
+      "time_to_effect_seconds": 15,
+      "risk_level": "very_high",
+      "blast_radius": "high",
+      "recovery": "mixed",
+      "notes": "Feature disable sheds the degraded dependency path quickly, but disables payment capability entirely."
+    },
+    "rate_limit_retries": {
+      "latency_p95_ms": 1250,
+      "error_rate": 0.20,
+      "retry_rate": 0.10,
+      "time_to_effect_seconds": 30,
+      "risk_level": "low",
+      "blast_radius": "low",
+      "recovery": "strong",
+      "notes": "Retry shaping stabilizes the system while keeping the product mostly available."
+    },
+    "shift_traffic": {
+      "latency_p95_ms": 1450,
+      "error_rate": 0.11,
+      "retry_rate": 0.13,
+      "time_to_effect_seconds": 180,
+      "risk_level": "high",
+      "blast_radius": "high",
+      "recovery": "partial",
+      "notes": "Traffic shifting spreads load but does not fix the core degraded dependency."
+    }
+  },
+
+  "ground_truth": {
+    "action_id": "rate_limit_retries",
+    "why": "Rate limiting directly addresses the retry amplification root cause with minimal blast radius."
+  },
+
+  "naive_reflex": {
+    "action_id": "restart_payment",
+    "why": "A tired engineer restarts what looks broken, but restarting does not stop the retry amplification loop."
+  },
+
+  "evaluation_labels": {
+    "dangerous_reflex": "restart_payment",
+    "safe_action": "rate_limit_retries",
+    "reflex_rejected_reason": "Restarting payment pods does not stop the retry amplification loop. The retries continue hammering the recovering service, causing re-degradation within minutes. The system remains in a degraded oscillation.",
+    "blast_radius_avoided": "medium to low",
+    "fairness_impact": "Rate limiting preserves payment availability for legitimate requests while shedding excess retry load from the amplification loop."
+  }
+}

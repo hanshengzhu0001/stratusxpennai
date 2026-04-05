@@ -1,26 +1,31 @@
 """
-Incident response pipeline — teammate's run.py with baseline integrated.
-
-Runs both Stratus and baseline in the plan phase, compares their choices
-against simulated ground truth in the verify phase.
+Incident response pipeline with scenario profiles, baseline toggle,
+evaluation agent, and case library.
 
 Usage:
     python run.py [alerts/latest.json] [--phase plan|verify|auto]
+                  [--mode stratus|baseline] [--scenario SCENARIO_ID]
+                  [--list-scenarios]
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
+from config import RETRY_RISK_LOW_MAX
 from agents.baseline import choose_action as baseline_choose
 from agents.candidate_actions import generate_candidate_actions
+from agents.evaluator import evaluate as evaluate_verdict
 from agents.incident_classifier import classify_incident
-from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
+from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction, simulate_action
+from scenarios import list_scenarios, load_scenario
+from tools.case_library import save_case
 from tools.execute_action import execute_action
 from tools.prometheus_client import collect_evidence
-from tools.runtime_state import control_plane_urls, load_state
+from tools.runtime_state import control_plane_urls, load_state, save_state
 from tools.stratus_guardrail import rank_actions
 
 
@@ -41,15 +46,41 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path", nargs="?", default="alerts/latest.json")
     parser.add_argument("--phase", choices=["plan", "verify", "auto"], default="auto")
+    parser.add_argument("--mode", choices=["stratus", "baseline"], default="stratus")
+    parser.add_argument("--scenario", default=None,
+                        help="Scenario ID. Use --list-scenarios to see options.")
+    parser.add_argument("--list-scenarios", action="store_true",
+                        help="List available scenarios and exit.")
     args = parser.parse_args()
+
+    if args.list_scenarios:
+        for sid in list_scenarios():
+            print(sid)
+        return
+
+    # Load scenario if specified
+    scenario = None
+    if args.scenario:
+        try:
+            scenario = load_scenario(args.scenario)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     input_path = Path(args.input_path)
     payload = json.loads(input_path.read_text())
-    source_type, state, evidence = load_incident_input(payload)
-    scenario_id = payload.get("id", "alert_latest")
+    source_type, state, evidence = load_incident_input(payload, scenario)
+    scenario_id = args.scenario or payload.get("id", "alert_latest")
+
+    # Reset runtime state to scenario's initial state
+    if scenario:
+        save_state(scenario["initial_state"])
 
     if args.phase == "plan":
-        plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
+        plan = build_plan_report(
+            payload, scenario_id, source_type, input_path,
+            state, evidence, args.mode, scenario,
+        )
         write_outputs(plan, scenario_id, "plan")
         write_browser_playbook(plan, scenario_id)
         print(json.dumps(plan, indent=2))
@@ -67,7 +98,8 @@ def main() -> None:
             current_evidence=evidence,
             plan=plan,
             execution=None,
-            mode="browser_verify",
+            mode_label="browser_verify",
+            scenario=scenario,
         )
         write_outputs(verify, scenario_id, "report")
         print(json.dumps(verify, indent=2))
@@ -75,11 +107,16 @@ def main() -> None:
         return
 
     # auto mode
-    plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
+    plan = build_plan_report(
+        payload, scenario_id, source_type, input_path,
+        state, evidence, args.mode, scenario,
+    )
     chosen = plan["best_action"]
     execution = execute_action(chosen)
+
     refreshed_evidence = collect_evidence(payload)
     refreshed_state = classify_incident(payload, refreshed_evidence)
+
     report = build_verify_report(
         payload=payload,
         scenario_id=scenario_id,
@@ -89,8 +126,10 @@ def main() -> None:
         current_evidence=refreshed_evidence,
         plan=plan,
         execution=execution,
-        mode="auto_apply",
+        mode_label="auto_apply",
+        scenario=scenario,
     )
+
     write_outputs(plan, scenario_id, "plan")
     write_browser_playbook(plan, scenario_id)
     write_outputs(report, scenario_id, "report")
@@ -105,20 +144,36 @@ def build_plan_report(
     input_path: Path,
     state: dict,
     evidence: dict,
+    mode: str = "stratus",
+    scenario: dict | None = None,
 ) -> dict:
-    actions = generate_candidate_actions(state)
-    ranking = rank_actions(state, actions)
-    chosen = normalize_best_action(ranking["best_action"], actions)
+    # Use scenario candidate actions if available
+    if scenario:
+        actions = scenario["candidate_actions"]
+    else:
+        actions = generate_candidate_actions(state)
 
-    # --- BASELINE INTEGRATION ---
+    # Always run BOTH rankers
+    ranking = rank_actions(state, actions)
     baseline_ranking = baseline_choose(state, actions)
+
+    stratus_chosen = normalize_best_action(ranking["best_action"], actions)
     baseline_chosen = normalize_best_action(baseline_ranking["best_action"], actions)
+
+    # Mode switch: which ranker is primary?
+    if mode == "baseline":
+        primary_chosen = baseline_chosen
+        primary_confidence = baseline_ranking["overall_confidence"]
+    else:
+        primary_chosen = stratus_chosen
+        primary_confidence = ranking["overall_confidence"]
 
     playbook_path = f"outputs/{scenario_id}_browser_playbook.json"
     return {
         "workflow": {
             "orchestrator": "openclaw",
-            "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase plan",
+            "entrypoint": f".venv/bin/python run.py {input_path} --phase plan --mode {mode}"
+                          + (f" --scenario {scenario_id}" if scenario else ""),
             "workspace_skill": "incident_guardrail",
             "level": "level_3_browser_k8s_scaffold",
             "phase": "plan",
@@ -126,6 +181,7 @@ def build_plan_report(
         "source_type": source_type,
         "input_path": str(input_path),
         "scenario_id": scenario_id,
+        "mode": mode,
         "incident_summary": state["summary"],
         "observed_condition": {
             "services": state.get("services", []),
@@ -140,20 +196,21 @@ def build_plan_report(
         },
         "candidate_actions": actions,
         "stratus_ranking": ranking["ranked_actions"],
-        "best_action": chosen,
-        "overall_confidence": ranking["overall_confidence"],
+        "best_action": primary_chosen,
+        "overall_confidence": primary_confidence,
         "predicted_effects_by_action": ranking["predicted_effects_by_action"],
-        # --- BASELINE FIELDS ---
+        # Baseline fields (always present for comparison)
         "baseline_ranking": baseline_ranking["ranked_actions"],
         "baseline_best_action": baseline_chosen,
         "baseline_confidence": baseline_ranking["overall_confidence"],
         "baseline_notes": baseline_ranking["notes"],
-        "browser_workflow": browser_workflow(chosen),
+        "browser_workflow": browser_workflow(primary_chosen),
         "artifacts": {
             "browser_playbook": playbook_path,
-            "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify",
+            "verify_command": f".venv/bin/python run.py {input_path} --phase verify"
+                              + (f" --scenario {scenario_id}" if scenario else ""),
         },
-        "kubernetes_plan": kubernetes_plan(chosen),
+        "kubernetes_plan": kubernetes_plan(primary_chosen),
         "notes": ranking.get("notes", []),
     }
 
@@ -167,39 +224,52 @@ def build_verify_report(
     current_evidence: dict,
     plan: dict,
     execution: dict | None,
-    mode: str,
+    mode_label: str,
+    scenario: dict | None = None,
 ) -> dict:
     chosen = plan["best_action"]
     predicted = plan["predicted_effects_by_action"].get(chosen["id"], {})
-    actual = actual_outcome_from_evidence(
-        before_metrics=plan["observed_condition"]["metrics"],
-        after_metrics=current_evidence["metrics"],
-        action_id=chosen["id"],
-    )
+
+    # When scenario is provided, use deterministic simulated outcomes
+    # instead of re-collecting evidence (which returns unchanged mock data).
+    if scenario:
+        actual = simulate_action(
+            {"metrics": plan["observed_condition"]["metrics"]},
+            chosen,
+            scenario,
+        )
+    else:
+        actual = actual_outcome_from_evidence(
+            before_metrics=plan["observed_condition"]["metrics"],
+            after_metrics=current_evidence.get("metrics", current_evidence),
+            action_id=chosen["id"],
+        )
     drift = compare_prediction_to_actual(chosen["id"], predicted, actual)
 
-    # --- BASELINE COMPARISON ---
+    # Baseline comparison
     baseline_chosen = plan.get("baseline_best_action", {})
     baseline_vs_stratus = {
-        "stratus_chose": chosen["id"],
+        "stratus_chose": plan.get("stratus_ranking", [{}])[0].get("id", "unknown")
+            if plan.get("stratus_ranking") else "unknown",
         "baseline_chose": baseline_chosen.get("id", "unknown"),
         "same_choice": chosen["id"] == baseline_chosen.get("id"),
         "stratus_confidence": plan["overall_confidence"],
         "baseline_confidence": plan.get("baseline_confidence", 0),
     }
 
-    return {
+    report = {
         "workflow": {
             "orchestrator": "openclaw",
-            "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase verify",
+            "entrypoint": f".venv/bin/python run.py {input_path} --phase verify",
             "workspace_skill": "incident_guardrail",
             "level": "level_3_browser_k8s_scaffold",
             "phase": "verify",
-            "mode": mode,
+            "mode": mode_label,
         },
         "source_type": source_type,
         "input_path": str(input_path),
         "scenario_id": scenario_id,
+        "mode": plan.get("mode", "stratus"),
         "incident_summary": current_state["summary"],
         "observed_condition": {
             "services": current_state.get("services", []),
@@ -236,13 +306,26 @@ def build_verify_report(
             "normalized_actual": normalize_actual(actual),
             "drift": drift,
         },
-        # --- BASELINE COMPARISON ---
         "baseline_vs_stratus": baseline_vs_stratus,
         "baseline_ranking": plan.get("baseline_ranking", []),
+        "baseline_best_action": plan.get("baseline_best_action", {}),
+        "baseline_confidence": plan.get("baseline_confidence", 0),
         "baseline_notes": plan.get("baseline_notes", []),
         "evidence_summary": current_evidence,
         "notes": plan.get("notes", []),
     }
+
+    # --- Evaluation + Case Library (when scenario is available) ---
+    if scenario:
+        verdict = evaluate_verdict(plan, actual, scenario)
+        case_id = save_case(verdict, plan, scenario)
+        verdict["case_id"] = case_id if case_id else "unsaved"
+        write_outputs(verdict, scenario_id, "verdict")
+
+        report["verdict"] = verdict
+        report["case_id"] = verdict["case_id"]
+
+    return report
 
 
 def render_markdown(report: dict) -> str:
@@ -260,7 +343,7 @@ def render_markdown(report: dict) -> str:
     browser_steps = "\n".join(f"- {step}" for step in report["browser_workflow"]["steps"])
     playbook = report.get("artifacts", {}).get("browser_playbook")
 
-    # --- BASELINE SECTION ---
+    # Baseline section
     baseline_section = ""
     bvs = report.get("baseline_vs_stratus", {})
     if bvs:
@@ -274,6 +357,28 @@ def render_markdown(report: dict) -> str:
 - Baseline confidence: `{bvs.get('baseline_confidence', 'n/a')}`
 """
 
+    # Verdict section (new)
+    verdict_section = ""
+    verdict = report.get("verdict", {})
+    if verdict:
+        vd = verdict.get("verdict", {})
+        dc = verdict.get("decision_comparison", {})
+        verdict_section = f"""
+## Verdict
+
+- Classification: `{vd.get('classification', 'n/a')}`
+- Dangerous reflex rejected: `{vd.get('dangerous_reflex_rejected', 'n/a')}`
+- Safe action chosen: `{vd.get('safe_action_chosen', 'n/a')}`
+- Blast radius avoided: `{vd.get('blast_radius_avoided', 'n/a')}`
+- Ground truth: `{dc.get('ground_truth', 'n/a')}`
+- Stratus correct: `{dc.get('stratus_correct', 'n/a')}`
+- Baseline correct: `{dc.get('baseline_correct', 'n/a')}`
+
+### Narrative
+
+{vd.get('narrative', 'No narrative generated.')}
+"""
+
     return f"""# OpenClaw Incident Guardrail Report
 
 ## Workflow
@@ -281,6 +386,7 @@ def render_markdown(report: dict) -> str:
 - Level: `{report['workflow']['level']}`
 - Phase: `{report['workflow']['phase']}`
 - Entrypoint: `{report['workflow']['entrypoint']}`
+- Mode: `{report.get('mode', 'stratus')}`
 
 ## Incident
 
@@ -315,12 +421,84 @@ def render_markdown(report: dict) -> str:
 - Predicted: `{json.dumps(predicted, sort_keys=True)}`
 - Actual: `{json.dumps(actual, sort_keys=True)}`
 - Drift score: `{drift['score']:.2f}`
+{verdict_section}"""
+
+
+def render_verdict_markdown(verdict: dict) -> str:
+    """Render a verdict dict as markdown."""
+    dc = verdict.get("decision_comparison", {})
+    oe = verdict.get("outcome_evaluation", {})
+    vd = verdict.get("verdict", {})
+    cs = verdict.get("case_summary", {})
+    mb = oe.get("metrics_before", {})
+    ma = oe.get("metrics_after", {})
+
+    return f"""# Incident Verdict
+
+## Summary
+
+- Scenario: `{verdict.get("scenario_id", "n/a")}`
+- Mode: `{verdict.get("mode", "n/a")}`
+- Timestamp: `{verdict.get("timestamp", "n/a")}`
+- Classification: `{vd.get("classification", "n/a")}`
+
+## Decision Comparison
+
+| | Stratus | Baseline | Ground Truth |
+|---|---|---|---|
+| **Chose** | `{dc.get("stratus_chose", "n/a")}` | `{dc.get("baseline_chose", "n/a")}` | `{dc.get("ground_truth", "n/a")}` |
+| **Correct** | `{dc.get("stratus_correct", "n/a")}` | `{dc.get("baseline_correct", "n/a")}` | - |
+| **Confidence** | `{dc.get("stratus_confidence", "n/a")}` | `{dc.get("baseline_confidence", "n/a")}` | - |
+
+## Outcome Evaluation
+
+| Metric | Before | After |
+|---|---|---|
+| Latency P95 (ms) | {mb.get("latency_p95_ms", "-")} | {ma.get("latency_p95_ms", "-")} |
+| Error Rate | {mb.get("error_rate", "-")} | {ma.get("error_rate", "-")} |
+| Retry Rate | {mb.get("retry_rate", "-")} | {ma.get("retry_rate", "-")} |
+
+- Drift score: `{oe.get("drift_score", "-")}`
+- Recovery class: `{oe.get("recovery_class", "-")}`
+
+## Verdict
+
+- Dangerous reflex rejected: `{vd.get("dangerous_reflex_rejected", "n/a")}`
+- Safe action chosen: `{vd.get("safe_action_chosen", "n/a")}`
+- Blast radius avoided: `{vd.get("blast_radius_avoided", "n/a")}`
+- Fairness preserved: `{vd.get("fairness_preserved", "n/a")}`
+
+### Narrative
+
+{vd.get("narrative", "No narrative generated.")}
+
+## Case Summary
+
+- Situation: {cs.get("situation", "n/a")}
+- Chosen action: `{cs.get("chosen_action", "n/a")}`
+- Verdict: {cs.get("narrative_verdict", "n/a")}
 """
 
 
-def load_incident_input(payload: dict) -> tuple[str, dict, dict]:
-    evidence = collect_evidence(payload)
-    state = classify_incident(payload, evidence)
+def load_incident_input(payload: dict, scenario: dict | None = None) -> tuple[str, dict, dict]:
+    """Load incident input, optionally overlaying scenario evidence and alert template."""
+    if scenario:
+        evidence = scenario["evidence"]
+        # Use scenario's alert template so classify_incident picks up the right summary
+        alert_payload = dict(payload)
+        if "alert_template" in scenario:
+            alert_payload.setdefault("commonAnnotations", {})
+            alert_payload["commonAnnotations"].update(
+                scenario["alert_template"].get("commonAnnotations", {})
+            )
+            alert_payload.setdefault("commonLabels", {})
+            alert_payload["commonLabels"].update(
+                scenario["alert_template"].get("commonLabels", {})
+            )
+    else:
+        evidence = collect_evidence(payload)
+        alert_payload = payload
+    state = classify_incident(alert_payload, evidence)
     return "alertmanager_webhook", state, evidence
 
 
@@ -342,9 +520,9 @@ def actual_outcome_from_evidence(before_metrics: dict, after_metrics: dict, acti
         "error_rate": error_rate,
         "retry_rate": retry_rate,
         "time_to_effect_seconds": 30,
-        "risk_level": "low" if retry_rate <= 0.12 else "medium",
+        "risk_level": "low" if retry_rate <= RETRY_RISK_LOW_MAX else "medium",
         "impact": "medium_high",
-        "blast_radius": "low" if retry_rate <= 0.12 else "medium",
+        "blast_radius": "low" if retry_rate <= RETRY_RISK_LOW_MAX else "medium",
         "recovery": "strong" if latency < before_metrics.get("latency_p95_ms", latency) else "partial",
         "notes": f"Observed live metrics after {action_id} via Prometheus-backed verification.",
         "action_id": action_id,
@@ -355,21 +533,15 @@ def actual_outcome_from_evidence(before_metrics: dict, after_metrics: dict, acti
 
 
 def direction(before: float | int | None, after: float | int | None) -> str:
-    if before is None or after is None:
-        return "mixed"
-    if after < before:
-        return "down"
-    if after > before:
-        return "up"
-    return "mixed"
+    """Reuse simulator's direction logic."""
+    from agents.simulator import _direction
+    return _direction(before, after)
 
 
 def retry_risk(retry_rate: float) -> str:
-    if retry_rate <= 0.12:
-        return "low"
-    if retry_rate <= 0.25:
-        return "medium"
-    return "high"
+    """Reuse simulator's retry risk logic (uses config thresholds)."""
+    from agents.simulator import _retry_risk
+    return _retry_risk(retry_rate)
 
 
 def browser_workflow(chosen: dict) -> dict:
@@ -425,6 +597,13 @@ def kubernetes_plan(chosen: dict) -> dict:
 
 def load_saved_plan(scenario_id: str) -> dict:
     plan_path = Path("outputs") / f"{scenario_id}_plan.json"
+    if not plan_path.exists():
+        print(
+            f"ERROR: Plan file not found: {plan_path}\n"
+            f"Run the plan phase first: python run.py alerts/latest.json --phase plan",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     return json.loads(plan_path.read_text())
 
 
@@ -432,8 +611,13 @@ def write_outputs(payload: dict, scenario_id: str, suffix: str) -> None:
     out = Path("outputs") / f"{scenario_id}_{suffix}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(payload, indent=2))
-    md_out = Path("outputs") / f"{scenario_id}_{suffix}.md"
-    md_out.write_text(render_markdown(payload))
+    # Verdict dicts have a different shape — use verdict-specific markdown
+    if suffix == "verdict":
+        md_out = Path("outputs") / f"{scenario_id}_{suffix}.md"
+        md_out.write_text(render_verdict_markdown(payload))
+    else:
+        md_out = Path("outputs") / f"{scenario_id}_{suffix}.md"
+        md_out.write_text(render_markdown(payload))
 
 
 def build_browser_playbook(plan: dict) -> dict:
@@ -471,10 +655,10 @@ def build_browser_playbook(plan: dict) -> dict:
             {"kind": "inspect", "target": browser["state_api_url"], "purpose": "confirm_state_after_action"},
             {
                 "kind": "exec",
-                "command": ".venv/bin/python run.py alerts/latest.json --phase verify",
+                "command": plan["artifacts"]["verify_command"],
                 "purpose": "run_post_action_verification",
             },
-            {"kind": "read", "target": "outputs/alert_latest_report.json", "purpose": "summarize_final_report"},
+            {"kind": "read", "target": f"outputs/{plan['scenario_id']}_report.json", "purpose": "summarize_final_report"},
         ],
         "expected_before": plan["observed_condition"]["metrics"],
         "predicted_after": plan["predicted_effects_by_action"].get(chosen["id"], {}),

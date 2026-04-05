@@ -51,9 +51,23 @@ SIMULATED_OUTCOMES = {
 }
 
 
-def simulate_action(state: dict, action: dict) -> dict:
+def simulate_action(state: dict, action: dict, scenario: dict | None = None) -> dict:
+    """
+    Simulate the outcome of an action.
+
+    If scenario is provided, use its simulated_outcomes.
+    Otherwise, fall back to the hardcoded SIMULATED_OUTCOMES dict.
+    """
+    outcomes = scenario["simulated_outcomes"] if scenario else SIMULATED_OUTCOMES
+
+    if action["id"] not in outcomes:
+        raise KeyError(
+            f"No simulated outcome for action '{action['id']}'. "
+            f"Available: {list(outcomes.keys())}"
+        )
+
     baseline = state.get("metrics", {})
-    outcome = dict(SIMULATED_OUTCOMES[action["id"]])
+    outcome = dict(outcomes[action["id"]])
     outcome["action_id"] = action["id"]
     outcome["latency_direction"] = _direction(
         baseline.get("latency_p95_ms"), outcome["latency_p95_ms"]

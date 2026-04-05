@@ -50,7 +50,7 @@
     },
     {
       "kind": "exec",
-      "command": ".venv/bin/python run.py alerts/latest.json --phase verify",
+      "command": ".venv/bin/python run.py alerts\\latest.json --phase verify",
       "purpose": "run_post_action_verification"
     },
     {
@@ -61,14 +61,13 @@
   ],
   "expected_before": {
     "latency_p95_ms": 2300,
-    "error_rate": 0.16,
+    "error_rate": 0.18,
     "retry_rate": 0.31
   },
   "predicted_after": {
-    "latency_p95_ms": 1200,
-    "error_rate": 0.08,
-    "retry_rate": 0.05,
-    "time_to_effect_seconds": 30,
-    "blast_radius": "checkout service only"
+    "latency_direction": "down",
+    "error_direction": "mixed",
+    "blast_radius": "low",
+    "retry_storm_risk": "low"
   }
 }

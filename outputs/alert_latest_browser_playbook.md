@@ -24,5 +24,5 @@ Open the dashboard, apply the selected remediation in the feature-flag UI, refre
 - `click`: `#action-rate_limit_retries` (apply_chosen_remediation)
 - `open`: `http://127.0.0.1:8010/` (capture_after_dashboard)
 - `inspect`: `http://127.0.0.1:8010/api/state` (confirm_state_after_action)
-- `exec`: `.venv/bin/python run.py alerts/latest.json --phase verify` (run_post_action_verification)
+- `exec`: `.venv/bin/python run.py alerts\latest.json --phase verify` (run_post_action_verification)
 - `read`: `outputs/alert_latest_report.json` (summarize_final_report)
