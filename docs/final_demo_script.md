@@ -6,23 +6,24 @@ Show that OpenClaw + Stratus does not just automate remediation. It rejects the 
 
 ## 90-Second Version
 
-1. Open the Guardrail Console at `http://127.0.0.1:8010/`.
-2. Set the scenario to `Retry Death Spiral`.
+1. Start in the OpenClaw dashboard chat, not the console.
+2. Paste the prompt from `docs/openclaw_demo_prompt.md`.
 3. Explain:
    - major concert ticket drop
    - payment wobbles
    - checkout retries amplify the issue
    - fairness and seat access are now at risk
-4. Run planning:
-   - `.venv/bin/python run.py alerts/latest.json --phase plan`
-5. In the console's `Decision View`, show:
+4. Let OpenClaw run:
+   - `.venv/bin/python run.py alerts/latest.json --phase demo`
+5. In the Guardrail Console, show:
    - shortlist
    - Stratus ranking
    - expected baseline reflex: `restart_payment`
-   - guardrail choice: `rate_limit_retries`
-6. Move to `Execution View`.
-7. Let OpenClaw browser or the operator open `/feature-flags` and apply the chosen action.
-8. Run verify:
+   - guardrail choice
+6. Let OpenClaw browser execute the browser playbook end to end.
+7. If browser control fails, let OpenClaw run the saved-plan fallback instead:
+   - `.venv/bin/python run.py alerts/latest.json --phase fallback`
+8. If browser control succeeds, let OpenClaw run verify:
    - `.venv/bin/python run.py alerts/latest.json --phase verify`
 9. In the `Verdict View`, show:
    - before vs after metrics
@@ -46,7 +47,7 @@ Next, the planner narrows a broad action library into a scenario-specific shortl
 
 ### Execution
 
-Now OpenClaw takes over the browser step. It reads the playbook, opens the remediation surface, applies the chosen action, and then we verify the system state again.
+Now OpenClaw takes over the browser step. It starts from the generated demo-mode artifact, reads the playbook, opens the dedicated `/openclaw-execution` surface, clicks one stable execution button, and then we verify the system state again. If browser control flakes out, OpenClaw still completes the saved plan through the fallback command instead of abandoning the demo.
 
 ### Verdict
 

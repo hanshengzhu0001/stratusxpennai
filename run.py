@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from agents.candidate_actions import build_scenario_shortlist
@@ -11,7 +13,7 @@ from agents.incident_classifier import classify_incident
 from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
 from tools.execute_action import execute_action
 from tools.prometheus_client import collect_evidence
-from tools.runtime_state import control_plane_urls, derive_metrics, load_state
+from tools.runtime_state import control_plane_urls, derive_metrics, load_state, reset_state
 from tools.stratus_guardrail import rank_actions
 
 
@@ -32,20 +34,72 @@ def main() -> None:
     load_local_env()
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path", nargs="?", default="alerts/latest.json")
-    parser.add_argument("--phase", choices=["plan", "verify", "auto"], default="auto")
+    parser.add_argument("--phase", choices=["plan", "demo", "fallback", "verify", "auto"], default="auto")
     args = parser.parse_args()
 
     input_path = Path(args.input_path)
     payload = load_json_path(input_path)
-    source_type, state, evidence = load_incident_input(payload)
+
+    if args.phase == "demo":
+        state, evidence = prepare_demo_state(payload)
+        source_type = "alertmanager_webhook"
+    else:
+        source_type, state, evidence = load_incident_input(payload)
+
     scenario_id = payload.get("id", "alert_latest")
 
     if args.phase == "plan":
         plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
         write_outputs(plan, scenario_id, "plan")
         write_browser_playbook(plan, scenario_id)
+        write_openclaw_demo_mode(plan, scenario_id)
         print(json.dumps(plan, indent=2))
         print(f"Wrote plan to outputs/{scenario_id}_plan.json")
+        return
+
+    if args.phase == "demo":
+        plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
+        write_outputs(plan, scenario_id, "plan")
+        write_browser_playbook(plan, scenario_id)
+        demo_mode = build_openclaw_demo_mode(plan)
+        write_openclaw_demo_mode(plan, scenario_id)
+        print(json.dumps(demo_mode, indent=2))
+        print(f"Wrote OpenClaw demo mode artifact to outputs/{scenario_id}_openclaw_demo.json")
+        return
+
+    if args.phase == "fallback":
+        plan = load_saved_plan(scenario_id)
+        chosen = plan["best_action"]
+        execution = execute_action(chosen)
+        execution["executor"] = "openclaw_saved_plan_fallback"
+        execution["mode"] = "saved_plan_fallback"
+        execution["notes"] = (
+            "Browser control was unavailable, so OpenClaw executed the saved plan action "
+            "through the local fallback path and then verified the outcome."
+        )
+        refreshed_evidence = wait_for_updated_evidence(
+            payload,
+            before_evidence={
+                "metrics": plan["observed_condition"]["metrics"],
+                "prometheus": plan["observed_condition"].get("prometheus", {}),
+            },
+            expected_metrics=derive_metrics(execution["state_after_action"]),
+        )
+        refreshed_state = classify_incident(payload, refreshed_evidence)
+        report = build_verify_report(
+            payload=payload,
+            scenario_id=scenario_id,
+            source_type=source_type,
+            input_path=input_path,
+            current_state=refreshed_state,
+            current_evidence=refreshed_evidence,
+            plan=plan,
+            execution=execution,
+            mode="openclaw_browser_fallback",
+        )
+        write_outputs(report, scenario_id, "report")
+        print(json.dumps(report, indent=2))
+        print(f"Wrote fallback report to outputs/{scenario_id}_report.json")
         return
 
     if args.phase == "verify":
@@ -91,6 +145,7 @@ def main() -> None:
     )
     write_outputs(plan, scenario_id, "plan")
     write_browser_playbook(plan, scenario_id)
+    write_openclaw_demo_mode(plan, scenario_id)
     write_outputs(report, scenario_id, "report")
     print(json.dumps(report, indent=2))
     print(f"Wrote report to outputs/{scenario_id}_report.json")
@@ -108,11 +163,15 @@ def build_plan_report(
     shortlist = planner["shortlist"]
     ranking = rank_actions(state, shortlist)
     chosen = normalize_best_action(ranking["best_action"], shortlist)
+    plan_id = f"{scenario_id}-{uuid.uuid4().hex[:8]}"
     playbook_path = f"outputs/{scenario_id}_browser_playbook.json"
+    demo_path = f"outputs/{scenario_id}_openclaw_demo.json"
     return {
+        "plan_id": plan_id,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "workflow": {
             "orchestrator": "openclaw",
-            "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase plan",
+            "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase demo",
             "workspace_skill": "incident_guardrail",
             "level": "level_3_browser_k8s_scaffold",
             "phase": "plan",
@@ -148,6 +207,7 @@ def build_plan_report(
         "browser_workflow": browser_workflow(chosen),
         "artifacts": {
             "browser_playbook": playbook_path,
+            "openclaw_demo_mode": demo_path,
             "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify",
         },
         "kubernetes_plan": kubernetes_plan(chosen),
@@ -166,15 +226,23 @@ def build_verify_report(
     execution: dict | None,
     mode: str,
 ) -> dict:
-    chosen = plan["best_action"]
-    predicted = plan["predicted_effects_by_action"].get(chosen["id"], {})
+    planned_action = plan["best_action"]
+    executed_action = resolve_executed_action(plan, execution)
+    predicted = plan["predicted_effects_by_action"].get(executed_action["id"], {})
     actual = actual_outcome_from_evidence(
         before_metrics=plan["observed_condition"]["metrics"],
         after_metrics=current_evidence["metrics"],
-        action_id=chosen["id"],
+        action_id=executed_action["id"],
     )
-    drift = compare_prediction_to_actual(chosen["id"], predicted, actual)
+    drift = compare_prediction_to_actual(executed_action["id"], predicted, actual)
+    alignment = {
+        "planned_action_id": planned_action["id"],
+        "executed_action_id": executed_action["id"],
+        "matches_plan": planned_action["id"] == executed_action["id"],
+    }
     return {
+        "plan_id": plan.get("plan_id"),
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "workflow": {
             "orchestrator": "openclaw",
             "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase verify",
@@ -202,15 +270,18 @@ def build_verify_report(
         "action_library": plan.get("action_library", []),
         "candidate_actions": plan["candidate_actions"],
         "stratus_ranking": plan["stratus_ranking"],
-        "best_action": chosen,
+        "best_action": planned_action,
+        "executed_action": executed_action,
+        "action_alignment": alignment,
         "overall_confidence": plan["overall_confidence"],
         "predicted_effects_by_action": plan["predicted_effects_by_action"],
-        "browser_workflow": browser_workflow(chosen),
-        "kubernetes_plan": kubernetes_plan(chosen),
+        "browser_workflow": browser_workflow(planned_action),
+        "artifacts": plan.get("artifacts", {}),
+        "kubernetes_plan": kubernetes_plan(planned_action),
         "execution": execution or {
             "executor": "browser_expected",
             "mode": "awaiting_or_completed_browser_action",
-            "action_id": chosen["id"],
+            "action_id": executed_action["id"],
             "control_plane_urls": control_plane_urls(
                 os.environ.get("CONTROL_PLANE_BASE_URL", "http://127.0.0.1:8010")
             ),
@@ -231,9 +302,11 @@ def build_verify_report(
 
 def render_markdown(report: dict) -> str:
     chosen = report["best_action"]
+    executed = report.get("executed_action", chosen)
     predicted = report.get("predicted_vs_actual", {}).get("predicted", {})
     actual = report.get("actual_outcome", {})
     drift = report.get("predicted_vs_actual", {}).get("drift", {"score": 0.0})
+    alignment = report.get("action_alignment", {})
     actions = "\n".join(
         f"- `{action['id']}`: {action['description']}" for action in report["candidate_actions"]
     )
@@ -247,6 +320,7 @@ def render_markdown(report: dict) -> str:
     )
     browser_steps = "\n".join(f"- {step}" for step in report["browser_workflow"]["steps"])
     playbook = report.get("artifacts", {}).get("browser_playbook")
+    demo_mode = report.get("artifacts", {}).get("openclaw_demo_mode")
     return f"""# OpenClaw Incident Guardrail Report
 
 ## Guardrail Question
@@ -289,12 +363,15 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 ## Automation Handoff
 
+- OpenClaw demo mode: `{demo_mode or "n/a"}`
 - Browser playbook: `{playbook or "n/a"}`
 - Verify command: `{report.get('artifacts', {}).get('verify_command', 'n/a')}`
 
 ## Decision
 
-- Chosen action: `{chosen['id']}`
+- Guardrail choice: `{chosen['id']}`
+- Executed action: `{executed['id']}`
+- Plan/execution match: `{alignment.get('matches_plan', True)}`
 - Confidence: `{report['overall_confidence']:.2f}`
 - Dashboard: `{report['observed_condition']['browser_targets']['dashboard']}`
 - Feature flags: `{report['observed_condition']['browser_targets']['feature_flags']}`
@@ -325,6 +402,25 @@ def load_incident_input(payload: dict) -> tuple[str, dict, dict]:
     evidence = collect_evidence(payload)
     state = classify_incident(payload, evidence)
     return "alertmanager_webhook", state, evidence
+
+
+def prepare_demo_state(payload: dict, timeout_seconds: float = 20.0) -> tuple[dict, dict]:
+    reset_runtime = reset_state()
+    expected_metrics = derive_metrics(reset_runtime)
+    deadline = time.monotonic() + timeout_seconds
+    latest = collect_evidence(payload)
+    while True:
+        if latest.get("prometheus", {}).get("source") != "live":
+            break
+        if latest.get("metrics") == expected_metrics:
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(2.0, remaining))
+        latest = collect_evidence(payload)
+    state = classify_incident(payload, latest)
+    return state, latest
 
 
 def normalize_best_action(best_action: dict | str, actions: list[dict]) -> dict:
@@ -396,16 +492,17 @@ def browser_workflow(chosen: dict) -> dict:
     return {
         "dashboard_url": base_url + "/",
         "feature_flags_url": base_url + "/feature-flags",
+        "openclaw_execution_url": base_url + "/openclaw-execution",
+        "openclaw_verdict_url": base_url + "/openclaw-execution?stage=verdict",
         "state_api_url": base_url + "/api/state",
         "button_label": button_map.get(chosen["id"], chosen["id"]),
-        "button_selector": selector_map.get(chosen["id"], f"#action-{chosen['id']}"),
+        "button_selector": "#openclaw-demo-run",
+        "fallback_button_selector": selector_map.get(chosen["id"], f"#action-{chosen['id']}"),
         "steps": [
-            "Open the dashboard.",
-            "Inspect the incident metrics and active flags.",
-            "Open the feature-flag page.",
-            f"Click '{button_map.get(chosen['id'], chosen['id'])}'.",
-            "Refresh the dashboard.",
-            "Summarize before/after state and then run verify phase.",
+            "Open the dedicated OpenClaw execution page.",
+            "Inspect the before-action incident card and chosen remediation.",
+            "Click the single OpenClaw execution button to apply the chosen remediation.",
+            "Run verify and inspect the dedicated verdict page.",
         ],
     }
 
@@ -449,45 +546,164 @@ def build_browser_playbook(plan: dict) -> dict:
     browser = plan["browser_workflow"]
     chosen = plan["best_action"]
     return {
+        "plan_id": plan.get("plan_id"),
         "workflow": {
             "orchestrator": "openclaw",
             "level": plan["workflow"]["level"],
             "phase": "browser_playbook",
         },
         "scenario_id": plan["scenario_id"],
-        "goal": "Open the dashboard, apply the selected remediation in the feature-flag UI, refresh the dashboard, and then run verify automatically.",
+        "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the verdict page.",
         "chosen_action": {
             "id": chosen["id"],
             "label": browser["button_label"],
             "selector": browser["button_selector"],
+            "fallback_selector": browser["fallback_button_selector"],
         },
         "urls": {
             "dashboard": browser["dashboard_url"],
+            "openclaw_execution": browser["openclaw_execution_url"],
+            "openclaw_verdict": browser["openclaw_verdict_url"],
             "feature_flags": browser["feature_flags_url"],
             "state_api": browser["state_api_url"],
         },
         "steps": [
-            {"kind": "open", "target": browser["dashboard_url"], "purpose": "capture_before_dashboard"},
-            {"kind": "inspect", "target": browser["dashboard_url"], "purpose": "read_before_metrics_and_flags"},
-            {"kind": "open", "target": browser["feature_flags_url"], "purpose": "open_execution_surface"},
+            {"kind": "open", "target": browser["openclaw_execution_url"], "purpose": "open_dedicated_execution_surface"},
+            {"kind": "inspect", "target": browser["openclaw_execution_url"], "purpose": "read_before_metrics_and_chosen_action"},
             {
                 "kind": "click",
                 "target": browser["button_selector"],
-                "label": browser["button_label"],
+                "label": f"Execute Planned Action: {browser['button_label']}",
                 "purpose": "apply_chosen_remediation",
             },
-            {"kind": "open", "target": browser["dashboard_url"], "purpose": "capture_after_dashboard"},
-            {"kind": "inspect", "target": browser["state_api_url"], "purpose": "confirm_state_after_action"},
             {
                 "kind": "exec",
                 "command": ".venv/bin/python run.py alerts/latest.json --phase verify",
                 "purpose": "run_post_action_verification",
             },
+            {"kind": "open", "target": browser["openclaw_verdict_url"], "purpose": "open_dedicated_verdict_surface"},
+            {"kind": "inspect", "target": browser["state_api_url"], "purpose": "confirm_state_after_action"},
             {"kind": "read", "target": "outputs/alert_latest_report.json", "purpose": "summarize_final_report"},
         ],
         "expected_before": plan["observed_condition"]["metrics"],
         "predicted_after": plan["predicted_effects_by_action"].get(chosen["id"], {}),
     }
+
+
+def build_openclaw_demo_mode(plan: dict) -> dict:
+    chosen = plan["best_action"]
+    playbook = build_browser_playbook(plan)
+    execution_surface = playbook["urls"]["openclaw_execution"]
+    verdict_surface = playbook["urls"]["openclaw_verdict"]
+    state_api = playbook["urls"]["state_api"]
+    return {
+        "plan_id": plan.get("plan_id"),
+        "workflow": {
+            "orchestrator": "openclaw",
+            "phase": "demo_mode",
+            "workspace_skill": "incident_guardrail",
+            "launch_style": "start_from_openclaw_chat",
+        },
+        "scenario_id": plan["scenario_id"],
+        "goal": "Start from OpenClaw chat, generate the guardrail plan, execute the browser remediation from one dedicated execution page, run verify, and summarize the final verdict without using the console shortcut buttons.",
+        "starter_prompt": default_openclaw_demo_prompt(),
+        "artifacts": {
+            "plan": f"outputs/{plan['scenario_id']}_plan.json",
+            "browser_playbook": f"outputs/{plan['scenario_id']}_browser_playbook.json",
+            "report": f"outputs/{plan['scenario_id']}_report.json",
+        },
+        "demo_contract": {
+            "run_first_command": ".venv/bin/python run.py alerts/latest.json --phase demo",
+            "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify",
+            "fallback_command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
+            "must_start_in_chat": True,
+            "manual_console_buttons_are_fallback_only": True,
+        },
+        "browser_sequence": [
+            {
+                "step": 1,
+                "kind": "open",
+                "target": execution_surface,
+                "purpose": "open_dedicated_execution_surface",
+            },
+            {
+                "step": 2,
+                "kind": "inspect",
+                "target": execution_surface,
+                "purpose": "read_before_metrics_and_chosen_action",
+            },
+            {
+                "step": 3,
+                "kind": "click",
+                "target": playbook["chosen_action"]["selector"],
+                "label": f"Execute Planned Action: {playbook['chosen_action']['label']}",
+                "purpose": "apply_guardrail_choice",
+            },
+            {
+                "step": 4,
+                "kind": "exec",
+                "command": ".venv/bin/python run.py alerts/latest.json --phase verify",
+                "purpose": "write_final_verdict",
+            },
+            {
+                "step": 5,
+                "kind": "open",
+                "target": verdict_surface,
+                "purpose": "inspect_final_verdict_surface",
+            },
+            {
+                "step": 6,
+                "kind": "inspect",
+                "target": state_api,
+                "purpose": "confirm_shared_state_after_action",
+            },
+        ],
+        "summary_contract": {
+            "must_include": [
+                "incident summary",
+                "dangerous local reflex rejected",
+                "chosen safer action",
+                "before and after browser-visible evidence",
+                "predicted versus actual drift",
+            ],
+            "dangerous_reflex": "restart_payment",
+            "chosen_action": chosen["id"],
+        },
+        "fallback_contract": {
+            "trigger": "browser tool times out, fails to load the dashboard, or loses browser control",
+            "command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
+            "must_say": "execution used the saved-plan fallback because browser control was unavailable",
+        },
+    }
+
+
+def resolve_executed_action(plan: dict, execution: dict | None) -> dict:
+    action_by_id = {action["id"]: action for action in plan.get("candidate_actions", [])}
+    planned_action = plan["best_action"]
+    execution_action_id = None
+    if execution:
+        execution_action_id = execution.get("action_id")
+    if not execution_action_id:
+        execution_action_id = load_state().get("last_action")
+    if execution_action_id and execution_action_id in action_by_id:
+        return action_by_id[execution_action_id]
+    return planned_action
+
+
+def default_openclaw_demo_prompt() -> str:
+    return (
+        "Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode. "
+        "Run `.venv/bin/python run.py alerts/latest.json --phase demo`, read "
+        "`outputs/alert_latest_openclaw_demo.json` and "
+        "`outputs/alert_latest_browser_playbook.json`, then use the browser to open the "
+        "dedicated OpenClaw execution page, inspect the before-action incident card, click the "
+        "single execution button for the chosen remediation, run verify, inspect the verdict page, and summarize "
+        "the final verdict with the dangerous reflex that was avoided. If the browser tool "
+        "fails or times out, do not stop and do not replan. Instead run "
+        "`.venv/bin/python run.py alerts/latest.json --phase fallback`, then read "
+        "`outputs/alert_latest_report.json` and summarize the final verdict while explicitly "
+        "noting that execution used the saved-plan fallback because browser control was unavailable."
+    )
 
 
 def render_browser_playbook_markdown(playbook: dict) -> str:
@@ -507,16 +723,64 @@ def render_browser_playbook_markdown(playbook: dict) -> str:
 - Action: `{playbook['chosen_action']['id']}`
 - Button label: `{playbook['chosen_action']['label']}`
 - Button selector: `{playbook['chosen_action']['selector']}`
+- Manual fallback selector: `{playbook['chosen_action']['fallback_selector']}`
 
 ## URLs
 
 - Dashboard: `{playbook['urls']['dashboard']}`
+- OpenClaw execution: `{playbook['urls']['openclaw_execution']}`
+- OpenClaw verdict: `{playbook['urls']['openclaw_verdict']}`
 - Feature flags: `{playbook['urls']['feature_flags']}`
 - State API: `{playbook['urls']['state_api']}`
 
 ## Steps
 
 {steps}
+"""
+
+
+def render_openclaw_demo_markdown(demo_mode: dict) -> str:
+    browser_steps = "\n".join(
+        f"- Step {step['step']}: `{step['kind']}` "
+        + f"`{step.get('target', step.get('command', ''))}`"
+        + (f" ({step['purpose']})" if step.get("purpose") else "")
+        for step in demo_mode["browser_sequence"]
+    )
+    summary_requirements = "\n".join(
+        f"- {item}" for item in demo_mode["summary_contract"]["must_include"]
+    )
+    return f"""# OpenClaw Demo Mode
+
+## Goal
+
+{demo_mode['goal']}
+
+## Starter Prompt
+
+```text
+{demo_mode['starter_prompt']}
+```
+
+## Demo Contract
+
+- Run first: `{demo_mode['demo_contract']['run_first_command']}`
+- Verify after browser action: `{demo_mode['demo_contract']['verify_command']}`
+- Fallback if browser control fails: `{demo_mode['demo_contract']['fallback_command']}`
+- Console buttons are fallback only: `{demo_mode['demo_contract']['manual_console_buttons_are_fallback_only']}`
+
+## Browser Sequence
+
+{browser_steps}
+
+## Fallback Contract
+
+- Trigger: {demo_mode['fallback_contract']['trigger']}
+- Command: `{demo_mode['fallback_contract']['command']}`
+- Final summary note: {demo_mode['fallback_contract']['must_say']}
+
+## Final Summary Must Include
+
+{summary_requirements}
 """
 
 
@@ -527,6 +791,15 @@ def write_browser_playbook(plan: dict, scenario_id: str) -> None:
     out.write_text(json.dumps(playbook, indent=2))
     md_out = Path("outputs") / f"{scenario_id}_browser_playbook.md"
     md_out.write_text(render_browser_playbook_markdown(playbook))
+
+
+def write_openclaw_demo_mode(plan: dict, scenario_id: str) -> None:
+    demo_mode = build_openclaw_demo_mode(plan)
+    out = Path("outputs") / f"{scenario_id}_openclaw_demo.json"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(json.dumps(demo_mode, indent=2))
+    md_out = Path("outputs") / f"{scenario_id}_openclaw_demo.md"
+    md_out.write_text(render_openclaw_demo_markdown(demo_mode))
 
 
 def wait_for_updated_evidence(

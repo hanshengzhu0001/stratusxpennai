@@ -1,21 +1,23 @@
 # OpenClaw Demo Prompt
 
-Use this in the OpenClaw dashboard chat for the Week 2 demo:
+Primary Week 2 / final-demo prompt for the OpenClaw dashboard chat:
 
 ```text
-Use the incident_guardrail skill on the latest alert. Work from the Guardrail Console flow exactly: read the plan, follow outputs/alert_latest_browser_playbook.json, open the dashboard, inspect the incident, open feature flags, apply the chosen remediation, refresh the dashboard, then run verify and summarize the final verdict.
+Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode. Run `.venv/bin/python run.py alerts/latest.json --phase demo`, read `outputs/alert_latest_openclaw_demo.json` and `outputs/alert_latest_browser_playbook.json`, then use the browser to open `/openclaw-execution`, inspect the before-action incident card, click the single execution button for the chosen remediation, run verify, open `/openclaw-execution?stage=verdict`, and summarize the final verdict with the dangerous reflex that was avoided. If the browser tool fails or times out, do not stop and do not replan. Instead run `.venv/bin/python run.py alerts/latest.json --phase fallback`, read `outputs/alert_latest_report.json`, and summarize the final verdict while explicitly noting that execution used the saved-plan fallback because browser control was unavailable.
 ```
 
-## More Explicit Rehearsal Prompt
+## Shorter Rehearsal Prompt
 
 ```text
-Use the incident_guardrail skill on the latest alert. Follow outputs/alert_latest_browser_playbook.json exactly. Start from the Guardrail Console, inspect the active scenario, open the feature-flag execution surface, click the chosen remediation button, return to the console, run verify, and summarize the predicted-vs-actual result plus what dangerous action was avoided.
+Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode. Follow outputs/alert_latest_openclaw_demo.json and outputs/alert_latest_browser_playbook.json exactly, open `/openclaw-execution`, click the single execution button for the chosen remediation, run verify, and summarize why the dangerous reflex was rejected. If browser control fails, run `.venv/bin/python run.py alerts/latest.json --phase fallback` instead of stopping.
 ```
 
 ## Operator Notes
 
 - If the browser bridge is healthy, OpenClaw should follow the playbook end to end.
-- If the browser bridge is down, use the same flow manually in the console and still run verify.
+- If the browser bridge is down, OpenClaw should run `.venv/bin/python run.py alerts/latest.json --phase fallback` and still finish the report.
+- `/openclaw-execution` is the primary browser surface for the final demo.
+- `Auto Run Full Workflow` in the console is a local fallback, not the primary final-demo launch path.
 - Always keep the explanation focused on:
   - dangerous local reflex rejected
   - safer action chosen before action

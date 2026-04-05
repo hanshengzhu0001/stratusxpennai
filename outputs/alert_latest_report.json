@@ -1,11 +1,13 @@
 {
+  "plan_id": "alert_latest-89accadd",
+  "generated_at_utc": "2026-04-05T20:28:43.289910+00:00",
   "workflow": {
     "orchestrator": "openclaw",
     "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase verify",
     "workspace_skill": "incident_guardrail",
     "level": "level_3_browser_k8s_scaffold",
     "phase": "verify",
-    "mode": "console_autorun"
+    "mode": "openclaw_browser_fallback"
   },
   "source_type": "alertmanager_webhook",
   "input_path": "alerts/latest.json",
@@ -43,16 +45,14 @@
       "payment_degradation"
     ],
     "prometheus": {
-      "source": "live",
+      "source": "direct_fallback",
       "queries": {
-        "checkout_latency_p95_ms": 1780.0,
+        "checkout_latency_p95_ms": 1780,
         "checkout_error_rate": 0.13,
         "checkout_retry_rate": 0.11
       },
-      "active_alerts": [
-        "CheckoutLatencyHigh",
-        "CheckoutRetryStorm"
-      ]
+      "active_alerts": [],
+      "note": "Prometheus query failed; using direct control-plane metrics: URLError"
     },
     "browser_targets": {
       "dashboard": "http://127.0.0.1:8010/",
@@ -213,37 +213,37 @@
       "id": "enable_payment_circuit_breaker",
       "rank": 1,
       "confidence": 0.94,
-      "rationale": "Breaks retry amplification at source by failing fast on degraded payment dependency"
+      "rationale": "Fail-fast pattern directly breaks retry amplification loop at degraded dependency boundary"
     },
     {
       "id": "increase_retry_backoff",
       "rank": 2,
-      "confidence": 0.89,
-      "rationale": "Reduces retry storm pressure while maintaining eventual consistency for transient failures"
+      "confidence": 0.88,
+      "rationale": "Reduces retry pressure by spacing attempts, less aggressive than circuit breaker"
     },
     {
       "id": "rate_limit_retries",
       "rank": 3,
-      "confidence": 0.85,
-      "rationale": "Controls retry rate but may cause legitimate request failures during recovery"
-    },
-    {
-      "id": "shift_traffic",
-      "rank": 4,
-      "confidence": 0.72,
-      "rationale": "Reduces load but requires secondary region capacity and introduces routing complexity"
+      "confidence": 0.82,
+      "rationale": "Caps retry volume but doesn't address root cause of hammering degraded payment"
     },
     {
       "id": "restart_payment",
+      "rank": 4,
+      "confidence": 0.65,
+      "rationale": "May help payment recovery but risky during active retry storm amplification"
+    },
+    {
+      "id": "shift_traffic",
       "rank": 5,
-      "confidence": 0.68,
-      "rationale": "May clear state but risks worsening errors during restart without addressing retry amplification"
+      "confidence": 0.58,
+      "rationale": "Spreads load but doesn't solve retry amplification pattern at checkout-payment boundary"
     },
     {
       "id": "disable_flag",
       "rank": 6,
       "confidence": 0.45,
-      "rationale": "Nuclear option that stops payment entirely; only use if other mitigations fail"
+      "rationale": "Nuclear option with high business impact, premature given targeted alternatives available"
     }
   ],
   "best_action": {
@@ -254,17 +254,30 @@
     "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
     "execution_surface": "browser"
   },
-  "overall_confidence": 0.91,
+  "executed_action": {
+    "id": "enable_payment_circuit_breaker",
+    "type": "circuit_breaker",
+    "target": "payment",
+    "category": "retry_overload_control",
+    "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
+    "execution_surface": "browser"
+  },
+  "action_alignment": {
+    "planned_action_id": "enable_payment_circuit_breaker",
+    "executed_action_id": "enable_payment_circuit_breaker",
+    "matches_plan": true
+  },
+  "overall_confidence": 0.94,
   "predicted_effects_by_action": {
     "rate_limit_retries": {
       "latency_direction": "down",
       "error_direction": "mixed",
       "blast_radius": "medium",
-      "retry_storm_risk": "low"
+      "retry_storm_risk": "medium"
     },
     "enable_payment_circuit_breaker": {
       "latency_direction": "down",
-      "error_direction": "mixed",
+      "error_direction": "down",
       "blast_radius": "low",
       "retry_storm_risk": "low"
     },
@@ -282,8 +295,8 @@
     },
     "shift_traffic": {
       "latency_direction": "mixed",
-      "error_direction": "down",
-      "blast_radius": "high",
+      "error_direction": "mixed",
+      "blast_radius": "medium",
       "retry_storm_risk": "medium"
     },
     "disable_flag": {
@@ -296,17 +309,23 @@
   "browser_workflow": {
     "dashboard_url": "http://127.0.0.1:8010/",
     "feature_flags_url": "http://127.0.0.1:8010/feature-flags",
+    "openclaw_execution_url": "http://127.0.0.1:8010/openclaw-execution",
+    "openclaw_verdict_url": "http://127.0.0.1:8010/openclaw-execution?stage=verdict",
     "state_api_url": "http://127.0.0.1:8010/api/state",
     "button_label": "Enable Payment Circuit Breaker",
-    "button_selector": "#action-enable_payment_circuit_breaker",
+    "button_selector": "#openclaw-demo-run",
+    "fallback_button_selector": "#action-enable_payment_circuit_breaker",
     "steps": [
-      "Open the dashboard.",
-      "Inspect the incident metrics and active flags.",
-      "Open the feature-flag page.",
-      "Click 'Enable Payment Circuit Breaker'.",
-      "Refresh the dashboard.",
-      "Summarize before/after state and then run verify phase."
+      "Open the dedicated OpenClaw execution page.",
+      "Inspect the before-action incident card and chosen remediation.",
+      "Click the single OpenClaw execution button to apply the chosen remediation.",
+      "Run verify and inspect the dedicated verdict page."
     ]
+  },
+  "artifacts": {
+    "browser_playbook": "outputs/alert_latest_browser_playbook.json",
+    "openclaw_demo_mode": "outputs/alert_latest_openclaw_demo.json",
+    "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify"
   },
   "kubernetes_plan": {
     "cluster_stack": {
@@ -320,10 +339,10 @@
     "recommended_remediation_manifest": "k8s/remediations/enable-payment-circuit-breaker-configmap.yaml"
   },
   "execution": {
-    "executor": "visual_control_plane",
-    "mode": "visual_state_applied",
+    "executor": "openclaw_saved_plan_fallback",
+    "mode": "saved_plan_fallback",
     "action_id": "enable_payment_circuit_breaker",
-    "notes": "Applied enable_payment_circuit_breaker to the shared control-plane state. OpenClaw browser can capture before/after evidence from the local UI.",
+    "notes": "Browser control was unavailable, so OpenClaw executed the saved plan action through the local fallback path and then verified the outcome.",
     "control_plane_urls": {
       "dashboard": "http://127.0.0.1:8010/",
       "feature_flags": "http://127.0.0.1:8010/feature-flags",
@@ -359,7 +378,7 @@
   "predicted_vs_actual": {
     "predicted": {
       "latency_direction": "down",
-      "error_direction": "mixed",
+      "error_direction": "down",
       "blast_radius": "low",
       "retry_storm_risk": "low"
     },
@@ -380,7 +399,7 @@
     },
     "normalized_predicted": {
       "latency_direction": "down",
-      "error_direction": "mixed",
+      "error_direction": "down",
       "retry_storm_risk": "low",
       "risk_level": "low"
     },
@@ -394,7 +413,7 @@
       "action_id": "enable_payment_circuit_breaker",
       "normalized_predicted": {
         "latency_direction": "down",
-        "error_direction": "mixed",
+        "error_direction": "down",
         "retry_storm_risk": "low",
         "risk_level": "low"
       },
@@ -406,17 +425,17 @@
       },
       "matches": {
         "latency_direction": true,
-        "error_direction": false,
+        "error_direction": true,
         "retry_storm_risk": true,
         "risk_level": true
       },
       "field_scores": {
         "latency_direction": 1.0,
-        "error_direction": 0.5,
+        "error_direction": 1.0,
         "retry_storm_risk": 1.0,
         "risk_level": 1.0
       },
-      "score": 0.95
+      "score": 1.0
     }
   },
   "evidence_summary": {
@@ -438,16 +457,14 @@
       "retry fan-out visible across checkout service"
     ],
     "prometheus": {
-      "source": "live",
+      "source": "direct_fallback",
       "queries": {
-        "checkout_latency_p95_ms": 1780.0,
+        "checkout_latency_p95_ms": 1780,
         "checkout_error_rate": 0.13,
         "checkout_retry_rate": 0.11
       },
-      "active_alerts": [
-        "CheckoutLatencyHigh",
-        "CheckoutRetryStorm"
-      ]
+      "active_alerts": [],
+      "note": "Prometheus query failed; using direct control-plane metrics: URLError"
     }
   },
   "notes": [

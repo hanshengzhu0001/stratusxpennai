@@ -17,6 +17,7 @@ from run import (
     load_saved_plan,
     wait_for_updated_evidence,
     write_browser_playbook,
+    write_openclaw_demo_mode,
     write_outputs,
 )
 from tools.execute_action import execute_action
@@ -46,6 +47,7 @@ DEFAULT_ALERT_PATH = Path("alerts/latest.json")
 ARTIFACT_PATHS = {
     "plan": Path("outputs/alert_latest_plan.json"),
     "playbook": Path("outputs/alert_latest_browser_playbook.json"),
+    "demo": Path("outputs/alert_latest_openclaw_demo.json"),
     "report": Path("outputs/alert_latest_report.json"),
 }
 
@@ -63,11 +65,12 @@ def dashboard(view: str = Query("incident")) -> str:
     scenarios = scenario_catalog()
     plan = _load_artifact("plan")
     playbook = _load_artifact("playbook")
+    demo_mode = _load_artifact("demo")
     report = _load_artifact("report")
 
     if active_view == "incident":
         body = _render_incident_view(
-            state, technical_metrics, business_metrics, active_scenario, scenarios
+            state, technical_metrics, business_metrics, active_scenario, scenarios, demo_mode
         )
     elif active_view == "decision":
         body = _render_decision_view(plan, active_scenario)
@@ -164,6 +167,23 @@ def feature_flags() -> str:
 </html>"""
 
 
+@app.get("/openclaw-execution", response_class=HTMLResponse)
+def openclaw_execution(stage: str = Query("before")) -> str:
+    state = load_state()
+    technical_metrics = derive_metrics(state)
+    business_metrics = derive_business_metrics(state, technical_metrics)
+    plan = _load_artifact("plan")
+    report = _load_artifact("report")
+    return _render_openclaw_execution_surface(
+        plan=plan,
+        report=report,
+        state=state,
+        technical_metrics=technical_metrics,
+        business_metrics=business_metrics,
+        stage=stage,
+    )
+
+
 @app.get("/api/state")
 def state_api() -> dict:
     state = load_state()
@@ -205,6 +225,7 @@ def api_plan(
     plan = build_plan_report(payload, scenario_id, source_type, resolved_path, state, evidence)
     write_outputs(plan, scenario_id, "plan")
     write_browser_playbook(plan, scenario_id)
+    write_openclaw_demo_mode(plan, scenario_id)
     _clear_report_artifacts()
     return RedirectResponse(_return_path(return_to), status_code=303)
 
@@ -264,6 +285,7 @@ def api_autorun(
     plan = build_plan_report(payload, scenario_id, source_type, resolved_path, state, evidence)
     write_outputs(plan, scenario_id, "plan")
     write_browser_playbook(plan, scenario_id)
+    write_openclaw_demo_mode(plan, scenario_id)
     execution = execute_action(plan["best_action"])
     current_evidence = wait_for_updated_evidence(
         payload,
@@ -537,6 +559,7 @@ def _render_incident_view(
     business_metrics: dict,
     active_scenario: dict,
     scenarios: list[dict],
+    demo_mode: dict | None,
 ) -> str:
     technical = _metric_cards(
         [
@@ -567,6 +590,15 @@ def _render_incident_view(
             f"retry_backoff_enabled={str(state['retry_backoff_enabled']).lower()}",
         ]
     )
+    demo_prompt = escape(
+        (demo_mode or {}).get("starter_prompt")
+        or "Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode."
+    )
+    demo_status = (
+        "Demo artifact is ready for OpenClaw to consume."
+        if demo_mode
+        else "Generate a plan or run demo mode once to produce the OpenClaw handoff artifact."
+    )
     return f"""
     <div class="grid two">
       <div class="card">
@@ -589,10 +621,24 @@ def _render_incident_view(
         <form class="inline" method="post" action="/api/autorun" style="margin-top:12px;" data-loading-label="Running the full workflow..." data-loading-phase="autorun">
           <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
           <input type="hidden" name="return_to" value="verdict">
-          <button>Auto Run Full Workflow</button>
+          <button>Local Fallback: Auto Run</button>
         </form>
+        <p class="muted" style="margin-top:10px;">Use Auto Run only as a local fallback. The primary demo path should start from OpenClaw chat.</p>
         <div style="margin-top:16px;">{flags}</div>
       </div>
+      <div class="card">
+        <h2 style="margin-bottom:8px;">OpenClaw Demo Mode</h2>
+        <p class="muted">{escape(demo_status)}</p>
+        <p class="callout"><strong>Start from OpenClaw chat</strong><br>No manual console clicks are required in the intended final demo path.</p>
+        <pre style="white-space:pre-wrap; background:#f8f0e1; border:1px solid var(--line); border-radius:14px; padding:14px;">{demo_prompt}</pre>
+        <ul class="list" style="margin-top:14px;">
+          <li>Primary artifact: <code>outputs/alert_latest_openclaw_demo.json</code></li>
+          <li>Browser handoff: <code>outputs/alert_latest_browser_playbook.json</code></li>
+          <li>Verification stays in the local repo workflow.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="grid two" style="margin-top:18px;">
       <div class="card">
         <h2 style="margin-bottom:8px;">Sentinel Focus</h2>
         <p class="muted">These are the cues the sentinel agents should prioritize for this scenario.</p>
@@ -740,7 +786,7 @@ def _render_execution_view(
             <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
             <input type="hidden" name="return_to" value="execution">
             <button class="primary">Plan from Latest Alert</button>
-            <a class="button" href="{urls['feature_flags']}">Open Execution Surface</a>
+            <a class="button" href="/openclaw-execution">Open Dedicated Execution Surface</a>
           </form>
         </div>
         <div style="margin-top:14px;">
@@ -760,7 +806,7 @@ def _render_execution_view(
           <form class="inline" method="post" action="/api/autorun" data-loading-label="Running the full workflow..." data-loading-phase="autorun">
             <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
             <input type="hidden" name="return_to" value="verdict">
-            <button>Auto Run Whole Flow</button>
+            <button>Local Fallback: Auto Run</button>
           </form>
         </div>
       </div>
@@ -787,6 +833,7 @@ def _render_execution_view(
         <ul class="list">
           <li>Chosen action: <code>{escape(str(chosen or 'n/a'))}</code>{f" ({escape(chosen_label)})" if chosen_label else ""}</li>
           <li>Plan from the console or by command line.</li>
+          <li>OpenClaw execution: <a href="/openclaw-execution">/openclaw-execution</a></li>
           <li>Feature flags: <a href="{urls['feature_flags']}">{urls['feature_flags']}</a></li>
           <li>Verify waits one scrape interval before writing the verdict.</li>
           <li>Current scenario: <strong>{escape(active_scenario['label'])}</strong></li>
@@ -822,9 +869,18 @@ def _render_verdict_view(
     predicted = report.get("predicted_vs_actual", {}).get("predicted", {})
     drift = report.get("predicted_vs_actual", {}).get("drift", {"score": 0.0})
     notes = "".join(f"<li>{escape(note)}</li>" for note in report.get("notes", []))
-    chosen_action = report.get("best_action", {}).get("id", "n/a")
-    rejected_action = _dangerous_reflex_from_plan(plan, chosen_action)
+    planned_action = report.get("best_action", {}).get("id", "n/a")
+    executed_action = report.get("executed_action", {}).get("id", planned_action)
+    action_alignment = report.get("action_alignment", {})
+    rejected_action = _dangerous_reflex_from_plan(plan, planned_action)
     chosen_rationale = _chosen_rationale(report)
+    alignment_note = ""
+    if action_alignment and not action_alignment.get("matches_plan", True):
+        alignment_note = (
+            f'<p class="callout"><strong>Execution mismatch</strong><br>'
+            f'The browser executed <code>{escape(executed_action)}</code> while the saved plan chose '
+            f'<code>{escape(planned_action)}</code>. The verdict below is anchored to the executed action.</p>'
+        )
     verdict_cards = _metric_cards(
         [
             ("Drift Score", f"{drift['score']:.2f}"),
@@ -841,8 +897,10 @@ def _render_verdict_view(
       <div class="card">
         <h2>Verdict View</h2>
         <p class="muted">This view turns Stratus output and post-action evidence into the judge-facing story.</p>
+        {alignment_note}
         <ul class="list">
-          <li>Chosen action: <code>{escape(str(chosen_action))}</code></li>
+          <li>Guardrail choice: <code>{escape(str(planned_action))}</code></li>
+          <li>Executed action: <code>{escape(str(executed_action))}</code></li>
           <li>Rejected dangerous reflex: <code>{escape(rejected_action)}</code></li>
           <li>Why the safer action won: {escape(chosen_rationale)}</li>
           <li>Before latency: <code>{escape(str(before_metrics.get('latency_p95_ms', 'n/a')))}</code></li>
@@ -909,13 +967,169 @@ def _dangerous_reflex_from_plan(plan: dict | None, chosen_action: str) -> str:
 
 
 def _chosen_rationale(report: dict) -> str:
-    chosen_action = report.get("best_action", {}).get("id")
+    chosen_action = report.get("executed_action", {}).get("id") or report.get("best_action", {}).get("id")
     for item in report.get("stratus_ranking", []):
         if item.get("id") == chosen_action:
-            rationale = str(item.get("rationale") or "").strip()
+            rationale = str(item.get("rationale") or item.get("reasoning") or "").strip()
             if rationale:
                 return rationale
     return "Stratus selected the action with the safest forecasted recovery path."
+
+
+def _render_openclaw_execution_surface(
+    plan: dict | None,
+    report: dict | None,
+    state: dict,
+    technical_metrics: dict,
+    business_metrics: dict,
+    stage: str,
+) -> str:
+    active_scenario = get_scenario(state.get("active_scenario"))
+    if not plan:
+        return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OpenClaw Execution Surface</title>
+  <style>
+    body {{ font-family: Georgia, serif; background:#faf4ea; color:#16212b; margin:0; }}
+    .wrap {{ max-width: 980px; margin:0 auto; padding:32px; }}
+    .card {{ background:white; border:1px solid #ddccb0; border-radius:20px; padding:24px; box-shadow:0 18px 44px rgba(22,33,43,0.08); }}
+    a {{ color:#bb5524; }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 style="margin-top:0;">OpenClaw Execution Surface</h1>
+      <p>No plan artifact is available yet. Run <code>.venv/bin/python run.py alerts/latest.json --phase demo</code> first, or generate a plan from the Guardrail Console.</p>
+      <p><a href="/">Return to Guardrail Console</a></p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    chosen_action = plan.get("best_action", {}).get("id", "n/a")
+    chosen_label = plan.get("browser_workflow", {}).get("button_label", chosen_action)
+    chosen_reason = _chosen_rationale(plan)
+    rejected_action = _dangerous_reflex_from_plan(plan, chosen_action)
+    before_metrics = plan.get("observed_condition", {}).get("metrics", {})
+    report_actual = (report or {}).get("actual_outcome", {})
+    notes = "".join(f"<li>{escape(note)}</li>" for note in plan.get("notes", []))
+    stage = stage if stage in {"before", "after-action", "verdict"} else "before"
+    verdict_block = ""
+    if stage == "verdict" and report:
+        verdict_block = f"""
+        <div class="card">
+          <h2 style="margin-top:0;">Final Verdict</h2>
+          <ul>
+            <li>Executed action: <code>{escape(str(report.get('executed_action', {}).get('id', chosen_action)))}</code></li>
+            <li>After latency: <code>{escape(str(report_actual.get('latency_p95_ms', technical_metrics['latency_p95_ms'])))}</code></li>
+            <li>Retry rate: <code>{escape(str(report_actual.get('retry_rate', technical_metrics['retry_rate'])))}</code></li>
+            <li>Risk level: <code>{escape(str(report_actual.get('risk_level', 'n/a')))}</code></li>
+            <li>Blast radius: <code>{escape(str(report_actual.get('blast_radius', 'n/a')))}</code></li>
+          </ul>
+          <p><a href="/">Open the full Guardrail Console</a></p>
+        </div>
+        """
+    elif stage == "verdict":
+        verdict_block = """
+        <div class="card">
+          <h2 style="margin-top:0;">Verdict Pending</h2>
+          <p>The report is not written yet. Run verify, then refresh this page.</p>
+          <p><a href="/">Return to Guardrail Console</a></p>
+        </div>
+        """
+
+    after_block = ""
+    if stage == "after-action":
+        after_block = f"""
+        <div class="card">
+          <h2 style="margin-top:0;">Shared State Updated</h2>
+          <ul>
+            <li>Last action: <code>{escape(str(state.get('last_action') or 'none'))}</code></li>
+            <li>Retry factor now: <code>{business_metrics['retry_amplification_factor']}x</code></li>
+            <li>Payment success now: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
+          </ul>
+          <form method="post" action="/api/verify">
+            <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
+            <input type="hidden" name="return_to" value="/openclaw-execution?stage=verdict">
+            <button style="background:#bb5524; color:white; border:none; border-radius:12px; padding:11px 16px; cursor:pointer;">Run Verify</button>
+          </form>
+        </div>
+        """
+
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OpenClaw Execution Surface</title>
+  <style>
+    :root {{ --bg:#faf4ea; --ink:#16212b; --muted:#6b6256; --line:#ddccb0; --card:#fffaf3; --accent:#bb5524; }}
+    body {{ margin:0; font-family: Iowan Old Style, Georgia, serif; background:linear-gradient(180deg, #fff8ef 0%, var(--bg) 100%); color:var(--ink); }}
+    .wrap {{ max-width: 1040px; margin:0 auto; padding:28px; }}
+    .hero {{ display:flex; justify-content:space-between; gap:20px; align-items:flex-start; margin-bottom:18px; }}
+    .eyebrow {{ letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); font-size:0.82rem; }}
+    .grid {{ display:grid; grid-template-columns: 1.05fr 0.95fr; gap:18px; }}
+    .card {{ background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px; box-shadow:0 18px 44px rgba(22,33,43,0.08); }}
+    .metric-grid {{ display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:14px; }}
+    .metric {{ border:1px solid var(--line); border-radius:16px; padding:14px; background:rgba(255,255,255,0.5); }}
+    .metric .label {{ color:var(--muted); }}
+    .metric .value {{ font-size:1.55rem; margin-top:6px; }}
+    .callout {{ border-left:4px solid var(--accent); padding-left:12px; }}
+    button {{ background:#bb5524; color:white; border:none; border-radius:14px; padding:13px 18px; cursor:pointer; font:inherit; }}
+    a {{ color:var(--accent); }}
+    ul {{ line-height:1.6; }}
+    @media (max-width: 920px) {{ .grid, .metric-grid {{ grid-template-columns: 1fr; }} .hero {{ display:grid; }} }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <div class="eyebrow">OpenClaw Browser Path</div>
+        <h1 style="margin:10px 0 6px;">Dedicated Execution Surface</h1>
+        <p style="margin:0; color:var(--muted); max-width:760px;">This page is optimized for the managed browser. Open here, inspect the before-state, click one stable button, then run verify and reopen this page for the verdict.</p>
+      </div>
+      <div><a href="/">Return to Guardrail Console</a></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2 style="margin-top:0;">Before-Action Incident Card</h2>
+        <p class="callout"><strong>{escape(active_scenario['label'])}</strong><br>{escape(active_scenario['headline'])}</p>
+        <ul>
+          <li>Guardrail choice: <code>{escape(chosen_action)}</code></li>
+          <li>Execution label: <code>{escape(chosen_label)}</code></li>
+          <li>Dangerous reflex: <code>{escape(rejected_action)}</code></li>
+          <li>Why this action won: {escape(chosen_reason)}</li>
+        </ul>
+        <div class="metric-grid">
+          <div class="metric"><div class="label">Latency P95</div><div class="value">{escape(str(before_metrics.get('latency_p95_ms', 'n/a')))}</div></div>
+          <div class="metric"><div class="label">Error rate</div><div class="value">{escape(str(before_metrics.get('error_rate', 'n/a')))}</div></div>
+          <div class="metric"><div class="label">Retry rate</div><div class="value">{escape(str(before_metrics.get('retry_rate', 'n/a')))}</div></div>
+        </div>
+        <form method="post" action="/api/execute-planned" style="margin-top:18px;">
+          <input type="hidden" name="return_to" value="/openclaw-execution?stage=after-action">
+          <button id="openclaw-demo-run">Execute Planned Action: {escape(chosen_label)}</button>
+        </form>
+        <p style="margin-top:12px; color:var(--muted);">Manual fallback surface: <a href="/feature-flags">/feature-flags</a></p>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0;">Current Shared State</h2>
+        <ul>
+          <li>Last action: <code>{escape(str(state.get('last_action') or 'none'))}</code></li>
+          <li>Retry factor: <code>{business_metrics['retry_amplification_factor']}x</code></li>
+          <li>Payment success: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
+          <li>Queue abandonment: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
+        </ul>
+        <strong>Guardrail notes</strong>
+        <ul>{notes or '<li>No notes recorded yet.</li>'}</ul>
+      </div>
+    </div>
+    <div style="margin-top:18px;">{after_block}{verdict_block}</div>
+  </div>
+</body>
+</html>"""
 
 
 def _workflow_statuses(
@@ -1003,6 +1217,8 @@ def _clear_console_artifacts() -> None:
         Path("outputs/alert_latest_plan.md"),
         Path("outputs/alert_latest_browser_playbook.json"),
         Path("outputs/alert_latest_browser_playbook.md"),
+        Path("outputs/alert_latest_openclaw_demo.json"),
+        Path("outputs/alert_latest_openclaw_demo.md"),
         Path("outputs/alert_latest_report.json"),
         Path("outputs/alert_latest_report.md"),
     ]
@@ -1041,6 +1257,8 @@ def _toggle_form(flag_name: str, enabled: bool) -> str:
 
 
 def _return_path(return_to: str) -> str:
+    if return_to.startswith("/"):
+        return return_to
     if return_to == "feature-flags":
         return "/feature-flags"
     if return_to in VIEW_ORDER:

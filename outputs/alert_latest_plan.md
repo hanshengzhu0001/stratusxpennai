@@ -8,7 +8,7 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 - Level: `level_3_browser_k8s_scaffold`
 - Phase: `plan`
-- Entrypoint: `.venv/bin/python run.py alerts/latest.json --phase plan`
+- Entrypoint: `.venv/bin/python run.py alerts/latest.json --phase demo`
 
 ## Incident
 
@@ -49,30 +49,31 @@ Given a payment-related latency incident with retry amplification, which of thes
 ## Stratus Ranking
 
 - Rank 1: `enable_payment_circuit_breaker` (0.94)
-- Rank 2: `increase_retry_backoff` (0.89)
-- Rank 3: `rate_limit_retries` (0.85)
-- Rank 4: `shift_traffic` (0.72)
-- Rank 5: `restart_payment` (0.68)
+- Rank 2: `increase_retry_backoff` (0.88)
+- Rank 3: `rate_limit_retries` (0.82)
+- Rank 4: `restart_payment` (0.65)
+- Rank 5: `shift_traffic` (0.58)
 - Rank 6: `disable_flag` (0.45)
 
 ## Browser Workflow
 
-- Open the dashboard.
-- Inspect the incident metrics and active flags.
-- Open the feature-flag page.
-- Click 'Enable Payment Circuit Breaker'.
-- Refresh the dashboard.
-- Summarize before/after state and then run verify phase.
+- Open the dedicated OpenClaw execution page.
+- Inspect the before-action incident card and chosen remediation.
+- Click the single OpenClaw execution button to apply the chosen remediation.
+- Run verify and inspect the dedicated verdict page.
 
 ## Automation Handoff
 
+- OpenClaw demo mode: `outputs/alert_latest_openclaw_demo.json`
 - Browser playbook: `outputs/alert_latest_browser_playbook.json`
 - Verify command: `.venv/bin/python run.py alerts/latest.json --phase verify`
 
 ## Decision
 
-- Chosen action: `enable_payment_circuit_breaker`
-- Confidence: `0.91`
+- Guardrail choice: `enable_payment_circuit_breaker`
+- Executed action: `enable_payment_circuit_breaker`
+- Plan/execution match: `True`
+- Confidence: `0.94`
 - Dashboard: `http://127.0.0.1:8010/`
 - Feature flags: `http://127.0.0.1:8010/feature-flags`
 

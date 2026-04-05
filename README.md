@@ -12,8 +12,17 @@ The current demo supports:
 - live Prometheus-backed evidence collection
 - a broader retail remediation library with scenario-specific shortlist selection
 - Stratus ranking and predicted downstream effects
+- a dedicated OpenClaw execution surface at `/openclaw-execution`
 - a browser playbook for OpenClaw to execute
 - post-action verification and predicted-vs-actual comparison
+
+## Recommended Demo Path
+
+1. Start the local services and OpenClaw gateway.
+2. Post `alerts/latest.json` to the local webhook.
+3. In OpenClaw chat, paste the prompt from `docs/openclaw_demo_prompt.md`.
+4. OpenClaw runs `run.py --phase demo`, reads the generated artifacts, opens `/openclaw-execution`, clicks the single remediation button, runs verify, then opens `/openclaw-execution?stage=verdict`.
+5. If browser control fails, OpenClaw runs `run.py --phase fallback` and still finishes the report.
 
 ## Architecture
 
@@ -21,13 +30,13 @@ Core workflow:
 
 1. Alertmanager posts an incident payload to `tools/alert_receiver.py`.
 2. `run.py --phase plan` loads evidence, has the Planner Agent select a shortlist from the retail action library, and calls Stratus to rank only that shortlist.
-3. The plan writes a browser handoff artifact at `outputs/alert_latest_browser_playbook.json`.
-4. OpenClaw browser follows that artifact:
-   - open dashboard
-   - inspect incident
-   - open feature flags
-   - click the chosen remediation
-   - refresh dashboard
+3. `run.py --phase demo` writes both a dedicated OpenClaw demo-mode artifact and the browser handoff artifact.
+4. OpenClaw browser follows those artifacts:
+   - open `/openclaw-execution`
+   - inspect the before-action incident card
+   - click one stable execution button
+   - run verify
+   - open `/openclaw-execution?stage=verdict`
 5. `run.py --phase verify` re-queries Prometheus and compares predicted vs actual.
 6. Final outputs are written into `outputs/`.
 
@@ -41,7 +50,7 @@ Core workflow:
 - `tools/prometheus_client.py`: evidence collection from Prometheus
 - `tools/alert_receiver.py`: local Alertmanager webhook receiver
 - `tools/metrics_target.py`: synthetic Prometheus scrape target
-- `tools/visual_control_plane.py`: Guardrail Console shell, execution view, and feature-flag UI
+- `tools/visual_control_plane.py`: Guardrail Console shell, dedicated OpenClaw execution surface, and feature-flag fallback UI
 - `tools/runtime_state.py`: shared state across UI and metrics
 - `tools/scenario_catalog.py`: concert ticket scenario metadata and business-metric overlays
 - `outputs/`: generated plan, browser playbook, and report artifacts
@@ -99,12 +108,18 @@ Terminal 4:
 docker compose up -d
 ```
 
-### 4. Optional: OpenClaw workspace usage
+### 4. Start OpenClaw
 
-Use this repo as an OpenClaw workspace and invoke:
+In a separate terminal:
+
+```bash
+openclaw gateway
+```
+
+Then open the dashboard at `http://127.0.0.1:18789/` and invoke:
 
 ```text
-Use the incident_guardrail skill on the latest alert.
+Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode.
 ```
 
 The skill is defined in `skills/incident_guardrail/SKILL.md`.
@@ -125,32 +140,54 @@ curl -X POST http://127.0.0.1:8000/alerts \
   --data @alerts/latest.json
 ```
 
-### Generate the Stratus-backed plan
+### Generate the OpenClaw demo-mode handoff
 
 ```bash
-.venv/bin/python run.py alerts/latest.json --phase plan
+.venv/bin/python run.py alerts/latest.json --phase demo
 ```
 
 This writes:
 
 - `outputs/alert_latest_plan.json`
 - `outputs/alert_latest_plan.md`
+- `outputs/alert_latest_openclaw_demo.json`
+- `outputs/alert_latest_openclaw_demo.md`
 - `outputs/alert_latest_browser_playbook.json`
 - `outputs/alert_latest_browser_playbook.md`
 
 ### Execute through the browser
 
-Either:
+Primary path:
 
-- let OpenClaw browser follow `outputs/alert_latest_browser_playbook.json`
+- let OpenClaw browser follow:
+  - `outputs/alert_latest_openclaw_demo.json`
+  - `outputs/alert_latest_browser_playbook.json`
+- OpenClaw should use:
+  - `http://127.0.0.1:8010/openclaw-execution`
+  - `#openclaw-demo-run`
+  - `http://127.0.0.1:8010/openclaw-execution?stage=verdict`
 
-or manually:
+Fallback path:
+
+1. if browser control fails, do not replan
+2. run:
+
+```bash
+.venv/bin/python run.py alerts/latest.json --phase fallback
+```
+
+3. read:
+   - `outputs/alert_latest_report.json`
+   - `outputs/alert_latest_report.md`
+4. summarize that execution used the saved-plan fallback because browser control was unavailable
+
+Manual console fallback:
 
 1. open `http://127.0.0.1:8010/`
 2. use the Guardrail Console to inspect the incident, shortlist, and execution flow
-3. open `http://127.0.0.1:8010/feature-flags`
-4. click the chosen remediation button from the playbook
-5. return to the console and refresh the verdict
+3. open `http://127.0.0.1:8010/openclaw-execution`
+4. click the chosen remediation button there
+5. run verify or refresh the verdict page
 
 ### Verify after execution
 
@@ -183,11 +220,19 @@ The final report includes:
 
 The browser playbook includes:
 
-- dashboard URL
-- feature-flag URL
+- dedicated OpenClaw execution URL
+- dedicated verdict URL
 - exact remediation selector
 - execution steps
 - verify command
+
+The OpenClaw demo-mode artifact includes:
+
+- starter OpenClaw prompt
+- OpenClaw-first execution contract
+- browser sequence for the managed browser session
+- fallback command for browser outages
+- final summary requirements
 
 ## Current Demo Status
 
@@ -210,6 +255,12 @@ Planning:
 
 ```bash
 .venv/bin/python run.py alerts/latest.json --phase plan
+```
+
+OpenClaw demo-mode handoff:
+
+```bash
+.venv/bin/python run.py alerts/latest.json --phase demo
 ```
 
 Verification:
