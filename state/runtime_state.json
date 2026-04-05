@@ -1,8 +1,8 @@
 {
-  "payment_service_unreachable": true,
+  "payment_service_unreachable": false,
   "loadgenerator_flood_homepage": true,
-  "retry_rate_limit_enabled": true,
+  "retry_rate_limit_enabled": false,
   "traffic_shift_enabled": false,
   "payment_feature_disabled": false,
-  "last_action": "rate_limit_retries"
+  "last_action": null
 }
