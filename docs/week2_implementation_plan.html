@@ -210,6 +210,58 @@ action.</p>
 </blockquote>
 <p>This should feel like a <strong>world-model safety layer for
 operational agents</strong>, not a generic incident copilot.</p>
+<h2 id="final-product-snapshot">0.1 Final Product Snapshot</h2>
+<p>By demo day, the product should look like one coherent
+healthcare-access operations system with five visible pieces:</p>
+<ol type="1">
+<li><strong>Telehealth Scheduling Stability Board</strong>
+<ul>
+<li>a business-facing operations page at <code>/operations</code></li>
+<li>shows portal demand, eligibility health, slot pressure, abandonment,
+and booking completion</li>
+<li>makes the incident feel like a real patient-access problem, not a
+toy metrics page</li>
+</ul></li>
+<li><strong>Guardrail Console</strong>
+<ul>
+<li>the operator-facing control shell at <code>/</code></li>
+<li>contains Incident, Decision, Execution, and Verdict views</li>
+<li>shows the shortlist, Stratus ranking, browser handoff, and final
+verdict</li>
+</ul></li>
+<li><strong>OpenClaw Execution Surface</strong>
+<ul>
+<li>the dedicated browser page at <code>/openclaw-execution</code></li>
+<li>gives OpenClaw one stable place to inspect, click, and verify</li>
+</ul></li>
+<li><strong>Case-Aware Decision Loop</strong>
+<ul>
+<li>parallel sentinel agents observe the situation</li>
+<li>a shortlist is built from the broader remediation library</li>
+<li>Stratus ranks only the shortlist and rejects the dangerous
+reflex</li>
+</ul></li>
+<li><strong>Final Verdict Artifact</strong>
+<ul>
+<li>one judge-facing report that states:
+<ul>
+<li>incident summary</li>
+<li>dangerous reflex rejected</li>
+<li>safer action chosen</li>
+<li>predicted vs actual</li>
+<li>blast radius</li>
+<li>case writeback status</li>
+</ul></li>
+</ul></li>
+</ol>
+<p>If the final product is working correctly, the audience should feel
+that they are looking at:</p>
+<ul>
+<li>a real telehealth scheduling operations board</li>
+<li>a real operator decision console</li>
+<li>a real OpenClaw execution step</li>
+<li>a real closed loop from prediction to verification</li>
+</ul>
 <h2 id="week-1-base-we-already-have">1. Week 1 Base We Already Have</h2>
 <p>We are not starting from zero. The current base already includes:</p>
 <ul>
@@ -648,24 +700,39 @@ Scheduling</strong></li>
 fallback</li>
 </ul>
 <h2 id="frontend-product-surface">9. Frontend Product Surface</h2>
-<p>The frontend should remain one polished shell:</p>
+<p>The frontend should now be explicitly split into two surfaces plus
+one execution page:</p>
 <ul>
-<li><strong>Guardrail Console</strong></li>
+<li><strong>Telehealth Scheduling Stability Board</strong> at
+<code>/operations</code></li>
+<li><strong>Guardrail Console</strong> at <code>/</code></li>
+<li><strong>OpenClaw Execution Surface</strong> at
+<code>/openclaw-execution</code></li>
 </ul>
-<p>Required views:</p>
+<p>Required product feel:</p>
+<ul>
+<li>the operations board should look like a real digital-access
+monitoring system</li>
+<li>the Guardrail Console should look like a real operator decision
+product</li>
+<li>the execution surface should look simple, stable, and
+browser-friendly for OpenClaw</li>
+</ul>
+<p>Required views in the Guardrail Console:</p>
 <ul>
 <li><code>Incident View</code></li>
 <li><code>Decision View</code></li>
 <li><code>Execution View</code></li>
 <li><code>Verdict View</code></li>
 </ul>
-<p>What changes in Week 2:</p>
+<p>What must be true by the end of Week 2:</p>
 <ul>
-<li>all copy, labels, and business metrics should speak healthcare
-access language</li>
-<li>scenario switching should move across the healthcare incident
+<li>all copy, labels, and business metrics speak healthcare-access
+language</li>
+<li>scenario switching works across the healthcare incident
 portfolio</li>
-<li>verdicts should read like operational decisions, not debug logs</li>
+<li>the operations board and control console feel visually distinct</li>
+<li>verdicts read like operational decisions, not debug logs</li>
 </ul>
 <p>Judge-facing outcome:</p>
 <ul>
@@ -757,6 +824,12 @@ product flow</li>
 <ul>
 <li>Guardrail Console shell + Execution View</li>
 </ul>
+<p>End-of-week deliverable:</p>
+<ul>
+<li>a polished, demo-ready <code>Guardrail Console</code> and
+<code>OpenClaw Execution Surface</code> that can carry the final live
+run without explanation from another teammate</li>
+</ul>
 <h3 id="tony">Tony</h3>
 <p>Primary ownership:</p>
 <ul>
@@ -794,6 +867,11 @@ product flow</li>
 <p>Frontend touchpoint:</p>
 <ul>
 <li>Decision View ranking cards and shortlist explanation</li>
+</ul>
+<p>End-of-week deliverable:</p>
+<ul>
+<li>a stable shortlist + Stratus decision layer whose outputs are clear
+enough to be shown directly on the <code>Decision View</code></li>
 </ul>
 <h3 id="charlie">Charlie</h3>
 <p>Primary ownership:</p>
@@ -834,6 +912,11 @@ explanation</li>
 <p>Frontend touchpoint:</p>
 <ul>
 <li>Incident View copy and scenario framing</li>
+</ul>
+<p>End-of-week deliverable:</p>
+<ul>
+<li>a believable healthcare incident portfolio and Incident View
+narrative that make the product feel grounded from the first screen</li>
 </ul>
 <h3 id="eason">Eason</h3>
 <p>Primary ownership:</p>
@@ -879,6 +962,11 @@ shortlist</li>
 <p>Frontend touchpoint:</p>
 <ul>
 <li>Verdict View comparison and writeback messaging</li>
+</ul>
+<p>End-of-week deliverable:</p>
+<ul>
+<li>a verdict/comparison layer that clearly shows why the guardrail beat
+the baseline and what was written back into the case library</li>
 </ul>
 <h2 id="demo-prep">12. Demo Prep</h2>
 <p>To stand out in the hackathon, the demo should emphasize:</p>

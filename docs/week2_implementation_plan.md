@@ -28,6 +28,41 @@ Product claim:
 
 This should feel like a **world-model safety layer for operational agents**, not a generic incident copilot.
 
+## 0.1 Final Product Snapshot
+
+By demo day, the product should look like one coherent healthcare-access operations system with five visible pieces:
+
+1. **Telehealth Scheduling Stability Board**
+   - a business-facing operations page at `/operations`
+   - shows portal demand, eligibility health, slot pressure, abandonment, and booking completion
+   - makes the incident feel like a real patient-access problem, not a toy metrics page
+2. **Guardrail Console**
+   - the operator-facing control shell at `/`
+   - contains Incident, Decision, Execution, and Verdict views
+   - shows the shortlist, Stratus ranking, browser handoff, and final verdict
+3. **OpenClaw Execution Surface**
+   - the dedicated browser page at `/openclaw-execution`
+   - gives OpenClaw one stable place to inspect, click, and verify
+4. **Case-Aware Decision Loop**
+   - parallel sentinel agents observe the situation
+   - a shortlist is built from the broader remediation library
+   - Stratus ranks only the shortlist and rejects the dangerous reflex
+5. **Final Verdict Artifact**
+   - one judge-facing report that states:
+     - incident summary
+     - dangerous reflex rejected
+     - safer action chosen
+     - predicted vs actual
+     - blast radius
+     - case writeback status
+
+If the final product is working correctly, the audience should feel that they are looking at:
+
+- a real telehealth scheduling operations board
+- a real operator decision console
+- a real OpenClaw execution step
+- a real closed loop from prediction to verification
+
 ## 1. Week 1 Base We Already Have
 
 We are not starting from zero. The current base already includes:
@@ -397,22 +432,31 @@ Operational meaning:
 
 ## 9. Frontend Product Surface
 
-The frontend should remain one polished shell:
+The frontend should now be explicitly split into two surfaces plus one execution page:
 
-- **Guardrail Console**
+- **Telehealth Scheduling Stability Board** at `/operations`
+- **Guardrail Console** at `/`
+- **OpenClaw Execution Surface** at `/openclaw-execution`
 
-Required views:
+Required product feel:
+
+- the operations board should look like a real digital-access monitoring system
+- the Guardrail Console should look like a real operator decision product
+- the execution surface should look simple, stable, and browser-friendly for OpenClaw
+
+Required views in the Guardrail Console:
 
 - `Incident View`
 - `Decision View`
 - `Execution View`
 - `Verdict View`
 
-What changes in Week 2:
+What must be true by the end of Week 2:
 
-- all copy, labels, and business metrics should speak healthcare access language
-- scenario switching should move across the healthcare incident portfolio
-- verdicts should read like operational decisions, not debug logs
+- all copy, labels, and business metrics speak healthcare-access language
+- scenario switching works across the healthcare incident portfolio
+- the operations board and control console feel visually distinct
+- verdicts read like operational decisions, not debug logs
 
 Judge-facing outcome:
 
@@ -499,6 +543,10 @@ Frontend touchpoint:
 
 - Guardrail Console shell + Execution View
 
+End-of-week deliverable:
+
+- a polished, demo-ready `Guardrail Console` and `OpenClaw Execution Surface` that can carry the final live run without explanation from another teammate
+
 ### Tony
 Primary ownership:
 
@@ -536,6 +584,10 @@ Stratus touchpoint:
 Frontend touchpoint:
 
 - Decision View ranking cards and shortlist explanation
+
+End-of-week deliverable:
+
+- a stable shortlist + Stratus decision layer whose outputs are clear enough to be shown directly on the `Decision View`
 
 ### Charlie
 Primary ownership:
@@ -575,6 +627,10 @@ Stratus touchpoint:
 Frontend touchpoint:
 
 - Incident View copy and scenario framing
+
+End-of-week deliverable:
+
+- a believable healthcare incident portfolio and Incident View narrative that make the product feel grounded from the first screen
 
 ### Eason
 Primary ownership:
@@ -617,6 +673,10 @@ Stratus touchpoint:
 Frontend touchpoint:
 
 - Verdict View comparison and writeback messaging
+
+End-of-week deliverable:
+
+- a verdict/comparison layer that clearly shows why the guardrail beat the baseline and what was written back into the case library
 
 ## 12. Demo Prep
 
