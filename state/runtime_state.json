@@ -1,8 +1,11 @@
 {
-  "payment_service_unreachable": false,
+  "active_scenario": "retry_death_spiral",
+  "payment_service_unreachable": true,
   "loadgenerator_flood_homepage": true,
   "retry_rate_limit_enabled": false,
+  "payment_circuit_breaker_enabled": true,
+  "retry_backoff_enabled": false,
   "traffic_shift_enabled": false,
   "payment_feature_disabled": false,
-  "last_action": null
+  "last_action": "enable_payment_circuit_breaker"
 }

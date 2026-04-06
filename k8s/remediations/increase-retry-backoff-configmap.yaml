@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkout-retry-backoff
+  namespace: otel-demo
+data:
+  retry_backoff_enabled: "true"
+  retry_backoff_ms: "1500"

@@ -90,12 +90,33 @@ def compare_prediction_to_actual(action_id: str, predicted: dict, actual: dict) 
         == normalized_actual["retry_storm_risk"],
         "risk_level": normalized_predicted["risk_level"] == normalized_actual["risk_level"],
     }
-    score = round(sum(1 for value in matches.values() if value) / len(matches), 2)
+    field_scores = {
+        "latency_direction": _direction_score(
+            normalized_predicted["latency_direction"], normalized_actual["latency_direction"]
+        ),
+        "error_direction": _direction_score(
+            normalized_predicted["error_direction"], normalized_actual["error_direction"]
+        ),
+        "retry_storm_risk": _ordinal_score(
+            normalized_predicted["retry_storm_risk"], normalized_actual["retry_storm_risk"]
+        ),
+        "risk_level": _ordinal_score(
+            normalized_predicted["risk_level"], normalized_actual["risk_level"]
+        ),
+    }
+    weights = {
+        "latency_direction": 0.35,
+        "error_direction": 0.10,
+        "retry_storm_risk": 0.35,
+        "risk_level": 0.20,
+    }
+    score = round(sum(field_scores[key] * weights[key] for key in weights), 2)
     return {
         "action_id": action_id,
         "normalized_predicted": normalized_predicted,
         "normalized_actual": normalized_actual,
         "matches": matches,
+        "field_scores": field_scores,
         "score": score,
     }
 
@@ -161,3 +182,24 @@ def _canonical_risk(risk_level: str) -> str:
         "critical": "high",
     }
     return aliases.get(normalized, normalized)
+
+
+def _direction_score(predicted: str, actual: str) -> float:
+    if predicted == actual:
+        return 1.0
+    if "mixed" in {predicted, actual}:
+        return 0.5
+    return 0.0
+
+
+def _ordinal_score(predicted: str, actual: str) -> float:
+    order = {"low": 0, "medium": 1, "high": 2}
+    if predicted == actual:
+        return 1.0
+    predicted_rank = order.get(predicted)
+    actual_rank = order.get(actual)
+    if predicted_rank is None or actual_rank is None:
+        return 0.0
+    if abs(predicted_rank - actual_rank) == 1:
+        return 0.5
+    return 0.0

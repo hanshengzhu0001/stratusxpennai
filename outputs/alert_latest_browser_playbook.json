@@ -1,57 +1,56 @@
 {
+  "plan_id": "alert_latest-89accadd",
   "workflow": {
     "orchestrator": "openclaw",
     "level": "level_3_browser_k8s_scaffold",
     "phase": "browser_playbook"
   },
   "scenario_id": "alert_latest",
-  "goal": "Open the dashboard, apply the selected remediation in the feature-flag UI, refresh the dashboard, and then run verify automatically.",
+  "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the verdict page.",
   "chosen_action": {
-    "id": "rate_limit_retries",
-    "label": "Apply Retry Rate Limit",
-    "selector": "#action-rate_limit_retries"
+    "id": "enable_payment_circuit_breaker",
+    "label": "Enable Payment Circuit Breaker",
+    "selector": "#openclaw-demo-run",
+    "fallback_selector": "#action-enable_payment_circuit_breaker"
   },
   "urls": {
     "dashboard": "http://127.0.0.1:8010/",
+    "openclaw_execution": "http://127.0.0.1:8010/openclaw-execution",
+    "openclaw_verdict": "http://127.0.0.1:8010/openclaw-execution?stage=verdict",
     "feature_flags": "http://127.0.0.1:8010/feature-flags",
     "state_api": "http://127.0.0.1:8010/api/state"
   },
   "steps": [
     {
       "kind": "open",
-      "target": "http://127.0.0.1:8010/",
-      "purpose": "capture_before_dashboard"
+      "target": "http://127.0.0.1:8010/openclaw-execution",
+      "purpose": "open_dedicated_execution_surface"
     },
     {
       "kind": "inspect",
-      "target": "http://127.0.0.1:8010/",
-      "purpose": "read_before_metrics_and_flags"
-    },
-    {
-      "kind": "open",
-      "target": "http://127.0.0.1:8010/feature-flags",
-      "purpose": "open_execution_surface"
+      "target": "http://127.0.0.1:8010/openclaw-execution",
+      "purpose": "read_before_metrics_and_chosen_action"
     },
     {
       "kind": "click",
-      "target": "#action-rate_limit_retries",
-      "label": "Apply Retry Rate Limit",
+      "target": "#openclaw-demo-run",
+      "label": "Execute Planned Action: Enable Payment Circuit Breaker",
       "purpose": "apply_chosen_remediation"
-    },
-    {
-      "kind": "open",
-      "target": "http://127.0.0.1:8010/",
-      "purpose": "capture_after_dashboard"
-    },
-    {
-      "kind": "inspect",
-      "target": "http://127.0.0.1:8010/api/state",
-      "purpose": "confirm_state_after_action"
     },
     {
       "kind": "exec",
       "command": ".venv/bin/python run.py alerts\\latest.json --phase verify",
       "purpose": "run_post_action_verification"
+    },
+    {
+      "kind": "open",
+      "target": "http://127.0.0.1:8010/openclaw-execution?stage=verdict",
+      "purpose": "open_dedicated_verdict_surface"
+    },
+    {
+      "kind": "inspect",
+      "target": "http://127.0.0.1:8010/api/state",
+      "purpose": "confirm_state_after_action"
     },
     {
       "kind": "read",
@@ -66,7 +65,7 @@
   },
   "predicted_after": {
     "latency_direction": "down",
-    "error_direction": "mixed",
+    "error_direction": "down",
     "blast_radius": "low",
     "retry_storm_risk": "low"
   }

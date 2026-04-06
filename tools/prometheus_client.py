@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from tools.runtime_state import derive_metrics, load_state
 
 
 DEFAULT_EVIDENCE = {
@@ -41,8 +44,11 @@ def collect_evidence(alert_payload: dict) -> dict:
     evidence = json.loads(json.dumps(DEFAULT_EVIDENCE))
     prom_base = os.environ.get("PROMETHEUS_BASE_URL")
     if not prom_base:
-        evidence["prometheus"]["note"] = "PROMETHEUS_BASE_URL not set; using mock evidence."
-        return evidence
+        return _direct_evidence_fallback(
+            evidence,
+            alert_payload,
+            "PROMETHEUS_BASE_URL not set; using direct control-plane metrics.",
+        )
 
     query_results = {}
     active_alerts = []
@@ -61,16 +67,30 @@ def collect_evidence(alert_payload: dict) -> dict:
         evidence["logs"] = _alert_summaries(alert_payload)
         return evidence
     except Exception as exc:
-        evidence["prometheus"]["note"] = (
-            f"Prometheus query failed; using mock evidence: {exc.__class__.__name__}"
+        return _direct_evidence_fallback(
+            evidence,
+            alert_payload,
+            f"Prometheus query failed; using direct control-plane metrics: {exc.__class__.__name__}",
         )
-        return evidence
 
 
 def save_alert_payload(payload: dict, path: str | Path = "alerts/latest.json") -> Path:
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2))
+    serialized = json.dumps(payload, indent=2)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=out_path.parent,
+        prefix=f".{out_path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        handle.write(serialized)
+        handle.flush()
+        os.fsync(handle.fileno())
+        tmp_path = Path(handle.name)
+    tmp_path.replace(out_path)
     return out_path
 
 
@@ -108,6 +128,35 @@ def _alert_summaries(alert_payload: dict) -> list[str]:
         if summary:
             summaries.append(summary)
     return summaries or list(DEFAULT_EVIDENCE["logs"])
+
+
+def _direct_evidence_fallback(evidence: dict, alert_payload: dict, note: str) -> dict:
+    state = load_state()
+    metrics = derive_metrics(state)
+    evidence["metrics"]["latency_p95_ms"] = int(metrics["latency_p95_ms"])
+    evidence["metrics"]["error_rate"] = round(float(metrics["error_rate"]), 4)
+    evidence["metrics"]["retry_rate"] = round(float(metrics["retry_rate"]), 4)
+    evidence["prometheus"] = {
+        "source": "direct_fallback",
+        "queries": {
+            "checkout_latency_p95_ms": evidence["metrics"]["latency_p95_ms"],
+            "checkout_error_rate": evidence["metrics"]["error_rate"],
+            "checkout_retry_rate": evidence["metrics"]["retry_rate"],
+        },
+        "active_alerts": _active_alerts_from_metrics(evidence["metrics"]),
+        "note": note,
+    }
+    evidence["logs"] = _alert_summaries(alert_payload)
+    return evidence
+
+
+def _active_alerts_from_metrics(metrics: dict) -> list[str]:
+    alerts: list[str] = []
+    if float(metrics.get("latency_p95_ms", 0)) > 2000:
+        alerts.append("CheckoutLatencyHigh")
+    if float(metrics.get("retry_rate", 0.0)) > 0.25:
+        alerts.append("CheckoutRetryStorm")
+    return alerts
 
 
 def _prom_queries() -> dict[str, str]:

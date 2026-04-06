@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>week2_implementation_plan</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+    :root {
+      --page: #efe7dc;
+      --paper: #fffaf4;
+      --ink: #182431;
+      --muted: #5f6a73;
+      --title: #0f2033;
+      --accent: #b55b33;
+      --accent-soft: #f1ddcb;
+      --accent-2: #14656b;
+      --line: #deccb6;
+      --shadow: 0 24px 48px rgba(24, 36, 49, 0.08);
+    }
+
+    html {
+      background:
+        radial-gradient(circle at top left, #fff7ef 0%, transparent 28%),
+        linear-gradient(180deg, #f7f1e8 0%, var(--page) 100%);
+      color: var(--ink);
+    }
+
+    body {
+      max-width: 72rem;
+      padding: 46px 56px 72px;
+      color: var(--ink);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    p, li, td, th {
+      color: var(--ink);
+    }
+
+    h1, h2, h3, h4 {
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      color: var(--title);
+      font-size: 3rem;
+      line-height: 0.98;
+      margin: 0.2rem 0 0.3rem;
+    }
+
+    h2 {
+      color: var(--accent);
+      font-size: 1.58rem;
+      margin-top: 2.6rem;
+      padding-top: 1.15rem;
+      border-top: 1px solid var(--line);
+    }
+
+    h1 + h2 {
+      border-top: none;
+      padding-top: 0;
+      margin-top: 0.2rem;
+      color: var(--accent-2);
+      font-size: 1.62rem;
+    }
+
+    h3 {
+      color: var(--accent-2);
+      font-size: 1.08rem;
+      margin-top: 1.5rem;
+    }
+
+    blockquote {
+      margin: 1.3rem 0;
+      padding: 1rem 1.1rem 1rem 1.25rem;
+      border-left: 4px solid var(--accent);
+      background: rgba(241, 221, 203, 0.45);
+      border-radius: 0 16px 16px 0;
+      color: var(--ink);
+    }
+
+    code {
+      background: rgba(20, 101, 107, 0.08);
+      padding: 0.08rem 0.38rem;
+      border-radius: 0.45rem;
+      color: #174955;
+    }
+
+    table {
+      display: table;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--line);
+    }
+
+    tbody {
+      border-top: none;
+      border-bottom: none;
+    }
+
+    th {
+      background: rgba(181, 91, 51, 0.08);
+      border-top: none;
+      color: var(--muted);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    td {
+      border-bottom: 1px solid rgba(222, 204, 182, 0.65);
+    }
+
+    ul, ol {
+      padding-left: 1.35rem;
+    }
+
+    li + li {
+      margin-top: 0.24rem;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 0.7rem;
+      padding: 0.38rem 0.72rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.74rem;
+      font-weight: 700;
+    }
+
+    .hero-note {
+      max-width: 56rem;
+      font-size: 1.06rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+
+    .executive-grid,
+    .section-split,
+    .scenario-matrix,
+    .agent-flow {
+      display: grid;
+      gap: 18px;
+      margin: 1.4rem 0 1.8rem;
+    }
+
+    .executive-grid,
+    .section-split {
+      grid-template-columns: 1.02fr 1.18fr;
+      align-items: stretch;
+    }
+
+    .scenario-matrix {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .agent-flow {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      align-items: center;
+    }
+
+    .spotlight-card,
+    .graph-card,
+    .text-card,
+    .scenario-card,
+    .agent-node {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .spotlight-card h3,
+    .graph-card h3,
+    .text-card h3,
+    .scenario-card h3,
+    .agent-node h3 {
+      margin-top: 0;
+      margin-bottom: 0.6rem;
+      font-size: 1.18rem;
+    }
+
+    .spotlight-card p,
+    .graph-card p,
+    .text-card p,
+    .scenario-card p,
+    .agent-node p {
+      margin-top: 0.4rem;
+      color: var(--muted);
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 12px;
+      align-items: center;
+      margin: 0.72rem 0;
+      font-size: 0.94rem;
+    }
+
+    .metric-row strong {
+      font-weight: 700;
+    }
+
+    .metric-track {
+      height: 6px;
+      border-radius: 999px;
+      background: #e9e0d3;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .metric-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-2) 0%, var(--accent) 100%);
+    }
+
+    .metric-value {
+      color: var(--muted);
+      font-size: 0.83rem;
+      text-align: right;
+    }
+
+    .scenario-card h4 {
+      margin: 0 0 0.4rem;
+      color: var(--title);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 0.88rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .tagline {
+      display: inline-block;
+      margin-bottom: 0.55rem;
+      color: var(--accent-2);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+    }
+
+    .agent-node {
+      text-align: center;
+      padding: 16px 12px;
+      position: relative;
+    }
+
+    .agent-node::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -14px;
+      transform: translateY(-50%);
+      color: var(--accent);
+      font-size: 1.1rem;
+      font-family: "Avenir Next", sans-serif;
+    }
+
+    .agent-node:last-child::after {
+      display: none;
+    }
+
+    .agent-node.parallel {
+      background: linear-gradient(180deg, #fffaf4 0%, #f7f4ef 100%);
+    }
+
+    .section-summary {
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding: 24px 20px 48px;
+      }
+      .executive-grid,
+      .section-split,
+      .scenario-matrix,
+      .agent-flow {
+        grid-template-columns: 1fr;
+      }
+      .agent-node::after {
+        display: none;
+      }
+    }
+
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body {
+        max-width: none;
+        padding: 22px 26px 34px;
+        background: white;
+        font-size: 11.6pt;
+      }
+      .spotlight-card,
+      .graph-card,
+      .text-card,
+      .scenario-card,
+      .agent-node,
+      table,
+      blockquote {
+        break-inside: avoid;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="eyebrow">Stratus X1 Hackathon · Multi-Agent Systems</div>
+<h1 id="week-2-implementation-plan">Week 2 Implementation Plan</h1>
+<h2
+id="openclaw-stratus-counterfactual-guardrail-for-concert-ticket-drops">OpenClaw
++ Stratus: Counterfactual Guardrail for Concert Ticket Drops</h2>
+<h3 id="track">Track</h3>
+<p>Stratus X1 Hackathon<br />
+Track: <code>Multi-Agent Systems</code></p>
+<p class="hero-note"><strong>Design brief:</strong> turn the current workflow into a judge-ready product narrative where a high-stakes ticket drop incident is observed, constrained, simulated, executed, and verified inside one polished Guardrail Console.</p>
+<section class="executive-grid">
+  <div class="spotlight-card">
+    <span class="tagline">Week 2 Target</span>
+    <h3>Ship a 90% Final Product</h3>
+    <p>This week is about proving one memorable claim: the guardrail rejects the dangerous reflex, OpenClaw executes the safer action, and the verdict shows why that mattered.</p>
+    <div class="metric-row">
+      <strong>Real incident realism</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:92%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Guardrail necessity</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:88%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Operator-visible execution</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:90%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Final demo polish</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:84%"></div></div>
+    </div>
+  </div>
+  <div class="text-card">
+    <span class="tagline">Judge Story</span>
+    <h3>What the demo should make obvious</h3>
+    <ul>
+      <li><strong>Baseline vs guardrail:</strong> the obvious human reflex is visible and wrong.</li>
+      <li><strong>World-model value:</strong> Stratus is not decorative; it changes the action taken.</li>
+      <li><strong>OpenClaw value:</strong> the system visibly acts in the UI and then verifies the outcome.</li>
+      <li><strong>Business value:</strong> the product protects fairness, conversion, and seat availability, not just system uptime.</li>
+    </ul>
+    <blockquote>
+      <p>We are building a counterfactual remediation guardrail for high-stakes digital drops: a world-model safety layer that tells an operational agent when the “obvious” fix is the dangerous one.</p>
+    </blockquote>
+  </div>
+</section>
+<h2 id="objective">0. Objective</h2>
+<p>Week 2 should deliver a <strong>90% final product</strong>, not
+another prototype.</p>
+<p>By the end of this week, the demo should prove:</p>
+<ol type="1">
+<li><strong>Real incident</strong>
+<ul>
+<li>a concert ticket drop incident happens in a live environment</li>
+<li>the issue is observed through real dashboards, alerts, and
+browser-visible state</li>
+</ul></li>
+<li><strong>Counterfactual guardrail</strong>
+<ul>
+<li>a naive baseline picks the obvious but dangerous action</li>
+<li>Stratus chooses a safer action after reasoning over a shortlist</li>
+</ul></li>
+<li><strong>True multi-agent workflow</strong>
+<ul>
+<li>observation is parallelized across four specialist agents</li>
+<li>OpenClaw executes the chosen action</li>
+<li>post-action evaluation writes a new case back into the case
+library</li>
+</ul></li>
+</ol>
+<p>Product claim:</p>
+<blockquote>
+<p>We are building a Counterfactual Remediation Guardrail for
+high-stakes digital drops: a system that predicts whether a remediation
+is safe before acting, then verifies whether the prediction held after
+action.</p>
+</blockquote>
+<p>This should feel like a <strong>world-model safety layer for
+operational agents</strong>, not a generic incident copilot.</p>
+<h2 id="week-1-base-we-already-have">1. Week 1 Base We Already Have</h2>
+<p>We are not starting from zero. The current base already includes:</p>
+<ul>
+<li>an end-to-end OpenClaw + Stratus flow on <code>workflow</code></li>
+<li>live Stratus ranking at the guarded decision step</li>
+<li>local browser execution and Prometheus-backed verification</li>
+<li>plan, browser playbook, and report artifacts</li>
+<li>a retail action library plus scenario shortlist design</li>
+<li>a baseline direction and simulator/comparison shape</li>
+</ul>
+<p>Week 2 is about turning that backbone into a polished final product
+story.</p>
+<h2 id="scenario-a-concert-ticket-drop-death-spiral">2. Scenario A:
+Concert Ticket Drop Death Spiral</h2>
+<section class="section-split">
+  <div class="graph-card">
+    <span class="tagline">Drop-Day Stress Signature</span>
+    <h3>Observed pressure profile</h3>
+    <div class="metric-row">
+      <strong>Payment latency</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:78%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Retry amplification</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:86%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Queue abandonment</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:62%"></div></div>
+    </div>
+    <div class="metric-row">
+      <strong>Seat hold stress</strong>
+      <div class="metric-track"><div class="metric-fill" style="width:71%"></div></div>
+    </div>
+    <p class="section-summary">Use thin bars and business-facing metrics so the document feels like an operator memo, not raw markdown exported from notes.</p>
+  </div>
+  <div class="text-card">
+    <span class="tagline">Operator Reality</span>
+    <h3>The first five minutes of a concert drop</h3>
+    <p>At 10:00 AM, the queue opens, checkout begins to surge, and payment gets slow but does not fully fail. Retry logic, user resubmits, and seat holds interact to create a system that looks “up” but behaves unfairly and unpredictably.</p>
+    <ul>
+      <li><strong>Local intuition:</strong> restart payment and hope the pods come back clean.</li>
+      <li><strong>System reality:</strong> the retry backlog can crush the new capacity immediately.</li>
+      <li><strong>Business constraint:</strong> ticketing must preserve fairness and seat access while keeping conversion alive.</li>
+    </ul>
+  </div>
+</section>
+<p>It is 10:00 AM and a major concert ticket drop opens.</p>
+<p>Traffic surges instantly. Users move through queue, seat hold,
+checkout, and payment. The <code>payment</code> path is not fully down,
+but it becomes slow and flaky under pressure. The system is designed to
+be resilient, so <code>checkout</code> retries aggressively. Users also
+manually resubmit payment. The result is a retry storm across the
+critical path.</p>
+<p>What the operator sees:</p>
+<ul>
+<li>payment latency rises sharply</li>
+<li>checkout error rate climbs</li>
+<li>queue abandonment begins to increase</li>
+<li>retry factor jumps above baseline</li>
+<li>seats are being held but not converted efficiently</li>
+<li>dashboards turn red even though services still look “up”</li>
+</ul>
+<p>What makes the scenario dangerous:</p>
+<ul>
+<li>the obvious human reflex is to restart payment</li>
+<li>that reflex is locally sensible</li>
+<li>but under retry amplification it can make recovery worse</li>
+<li>in ticketing, the system must protect <strong>fairness</strong> and
+<strong>seat availability</strong>, not just uptime</li>
+</ul>
+<p>So the real question is:</p>
+<blockquote>
+<p>Which action is safe to take first, given the whole system state and
+the business need to preserve fair access?</p>
+</blockquote>
+<h3 id="what-winning-looks-like">What Winning Looks Like</h3>
+<p>The demo should clearly show:</p>
+<ul>
+<li>the baseline mode recommends <code>restart_payment</code></li>
+<li>the guardrail flow rejects that reflex</li>
+<li>Stratus picks a safer action such as
+<code>rate_limit_retries</code></li>
+<li>OpenClaw executes that action in the UI</li>
+<li>retry pressure and latency improve</li>
+<li>the final verdict explains what dangerous action was avoided</li>
+<li>the case library stores the full situation, action, and result for
+future reuse</li>
+</ul>
+<h2 id="incident-portfolio-and-realistic-simulation">3. Incident
+Portfolio And Realistic Simulation</h2>
+<p>Week 2 should not rely on only one incident.</p>
+<p>We should prepare a small <strong>incident portfolio</strong> with
+realistic metrics so the demo can show different actions being chosen
+under different failure patterns.</p>
+<div class="scenario-matrix">
+  <div class="scenario-card">
+    <h4>Scenario A</h4>
+    <h3>Retry Death Spiral</h3>
+    <p>Payment degrades, checkout retries amplify, and the obvious restart reflex becomes the trap.</p>
+  </div>
+  <div class="scenario-card">
+    <h4>Scenario B</h4>
+    <h3>Payment Gateway Flap</h3>
+    <p>Partial payment instability calls for fail-fast containment rather than broad infrastructure movement.</p>
+  </div>
+  <div class="scenario-card">
+    <h4>Scenario C</h4>
+    <h3>Seat Hold Clog</h3>
+    <p>Inventory is technically “available” but operationally locked, creating fairness and conversion failure.</p>
+  </div>
+  <div class="scenario-card">
+    <h4>Scenario D</h4>
+    <h3>Regional Spillover Risk</h3>
+    <p>Failover is tempting, but secondary-region headroom is too thin for a full move.</p>
+  </div>
+</div>
+<h3 id="recommended-incident-portfolio">Recommended Incident
+Portfolio</h3>
+<ol type="1">
+<li><strong>Scenario A: Retry Death Spiral</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>payment degradation + retry amplification</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>payment latency</li>
+<li>checkout error rate</li>
+<li>retry factor</li>
+<li>queue abandonment</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li><code>rate_limit_retries</code></li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario B: Payment Gateway Flap</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>payment is unstable but not fully down</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>payment timeout rate</li>
+<li>payment success rate</li>
+<li>checkout latency</li>
+<li>retry factor</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li><code>enable_payment_circuit_breaker</code></li>
+<li>or <code>increase_retry_backoff</code></li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario C: Seat Hold Clog</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>too many seats are locked but not converting</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>seat hold utilization</li>
+<li>seat hold expiration rate</li>
+<li>payment success rate</li>
+<li>queue abandonment</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li>shorten hold pressure</li>
+<li>release stale holds</li>
+<li>or other inventory-preserving action from the library</li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario D: Regional Saturation / Spillover Risk</strong>
+<ul>
+<li>dominant issue:
+<ul>
+<li>primary region is stressed and failover looks tempting</li>
+</ul></li>
+<li>key metrics:
+<ul>
+<li>region saturation</li>
+<li>checkout latency by region</li>
+<li>failover risk</li>
+<li>blast-radius risk</li>
+</ul></li>
+<li>expected safe action:
+<ul>
+<li>cautious traffic shift</li>
+<li>or capacity-preserving workload shaping</li>
+</ul></li>
+</ul></li>
+</ol>
+<h3 id="reference-incident-snapshots">Reference Incident Snapshots</h3>
+<p>These are the target profiles for simulation and demo copy.</p>
+<ol type="1">
+<li><strong>Scenario A: Retry Death Spiral</strong>
+<ul>
+<li>payment latency p95:
+<ul>
+<li><code>1400-2200 ms</code></li>
+</ul></li>
+<li>checkout error rate:
+<ul>
+<li><code>12%-20%</code></li>
+</ul></li>
+<li>retry amplification factor:
+<ul>
+<li><code>3.0x-5.0x</code></li>
+</ul></li>
+<li>queue abandonment rate:
+<ul>
+<li><code>18%-30%</code></li>
+</ul></li>
+<li>seat hold utilization:
+<ul>
+<li><code>70%-85%</code></li>
+</ul></li>
+<li>expected first action:
+<ul>
+<li><code>rate_limit_retries</code></li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario B: Payment Gateway Flap</strong>
+<ul>
+<li>payment success rate:
+<ul>
+<li><code>72%-88%</code></li>
+</ul></li>
+<li>payment timeout rate:
+<ul>
+<li><code>8%-15%</code></li>
+</ul></li>
+<li>checkout latency p95:
+<ul>
+<li><code>1200-1800 ms</code></li>
+</ul></li>
+<li>retry amplification factor:
+<ul>
+<li><code>1.8x-2.8x</code></li>
+</ul></li>
+<li>queue abandonment rate:
+<ul>
+<li><code>10%-18%</code></li>
+</ul></li>
+<li>expected first action:
+<ul>
+<li><code>enable_payment_circuit_breaker</code></li>
+<li>or <code>increase_retry_backoff</code></li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario C: Seat Hold Clog</strong>
+<ul>
+<li>seat hold utilization:
+<ul>
+<li><code>88%-97%</code></li>
+</ul></li>
+<li>seat hold expiration rate:
+<ul>
+<li><code>25%-40%</code></li>
+</ul></li>
+<li>payment success rate:
+<ul>
+<li><code>55%-72%</code></li>
+</ul></li>
+<li>queue abandonment rate:
+<ul>
+<li><code>20%-35%</code></li>
+</ul></li>
+<li>fairness skew:
+<ul>
+<li>elevated versus baseline</li>
+</ul></li>
+<li>expected first action:
+<ul>
+<li>inventory-preserving mitigation</li>
+</ul></li>
+</ul></li>
+<li><strong>Scenario D: Regional Saturation / Spillover Risk</strong>
+<ul>
+<li>primary region saturation:
+<ul>
+<li><code>80%-92%</code></li>
+</ul></li>
+<li>secondary region headroom:
+<ul>
+<li>only <code>10%-20%</code></li>
+</ul></li>
+<li>checkout latency p95:
+<ul>
+<li><code>1000-1700 ms</code></li>
+</ul></li>
+<li>retry amplification factor:
+<ul>
+<li><code>1.5x-2.2x</code></li>
+</ul></li>
+<li>expected first action:
+<ul>
+<li>cautious partial shift, not full failover</li>
+</ul></li>
+</ul></li>
+</ol>
+<h3 id="realistic-simulation-approach">Realistic Simulation
+Approach</h3>
+<p>The simulation should feel like a ticketing system, not a generic
+metrics toy.</p>
+<p>Recommended Week 2 design:</p>
+<ul>
+<li>use <strong>OTel Demo on Kubernetes</strong> as the system base</li>
+<li>use OTel feature flags and load generation for core service
+disruption</li>
+<li>layer a <strong>ticket-drop metrics adapter</strong> on top for
+business-specific signals</li>
+</ul>
+<p>The ticket-drop metrics adapter should emit:</p>
+<ul>
+<li><code>queue_abandonment_rate</code></li>
+<li><code>retry_amplification_factor</code></li>
+<li><code>fairness_skew</code></li>
+<li><code>seat_hold_utilization</code></li>
+<li><code>seat_hold_expiration_rate</code></li>
+<li><code>payment_success_rate</code></li>
+</ul>
+<p>These can be generated from:</p>
+<ul>
+<li>OTel Demo service health</li>
+<li>current runtime state</li>
+<li>scenario-specific synthetic overlays</li>
+</ul>
+<p>Simulation rules:</p>
+<ul>
+<li>each scenario should have a deterministic base profile</li>
+<li>runtime state changes should move metrics within believable
+ranges</li>
+<li>the same action should not produce identical business outcomes
+across every scenario</li>
+<li>metric relationships should stay plausible:
+<ul>
+<li>high retry factor should usually worsen payment latency and queue
+abandonment</li>
+<li>high seat hold utilization should usually increase fairness and
+conversion stress</li>
+<li>aggressive kill-switch actions should reduce technical pressure
+while hurting business outcomes</li>
+</ul></li>
+</ul>
+<p>This gives us a realistic hybrid:</p>
+<ul>
+<li>real microservice topology and observability</li>
+<li>ticketing-specific business metrics on top</li>
+</ul>
+<h3 id="ownership-of-the-incident-portfolio">Ownership Of The Incident
+Portfolio</h3>
+<ul>
+<li>Charlie owns the incident catalog, scenario truth, and metric
+definitions</li>
+<li>Eason owns the simulation profiles and fixture realism for those
+incidents</li>
+<li>Tony makes sure shortlist and Stratus behavior differ appropriately
+across incidents</li>
+<li>Hansen makes the scenario switch visible and understandable in the
+console</li>
+</ul>
+<h2 id="core-design-choices">4. Core Design Choices</h2>
+<h3 id="live-demo-base">Live Demo Base</h3>
+<ul>
+<li><strong>OTel Demo on Kubernetes</strong>
+<ul>
+<li>gives us a realistic microservice system and browser-visible
+surfaces</li>
+</ul></li>
+<li><strong>Feature-flag trigger path</strong>
+<ul>
+<li>use the OTel Demo feature UI to create the incident</li>
+</ul></li>
+<li><strong>Prometheus + Alertmanager</strong>
+<ul>
+<li>provide the live alerting and verification loop</li>
+</ul></li>
+<li><strong>OpenClaw browser</strong>
+<ul>
+<li>performs the visible execution step</li>
+</ul></li>
+<li><strong>Stratus X1</strong>
+<ul>
+<li>ranks the shortlisted actions and predicts consequences before
+action</li>
+</ul></li>
+</ul>
+<h3 id="frontend-choice">Frontend Choice</h3>
+<p>We will not do a full frontend rewrite.</p>
+<p>Week 2 frontend choice:</p>
+<ul>
+<li>extend the current FastAPI-based visual surface into one polished
+<strong>Guardrail Console</strong></li>
+<li>use current APIs, generated plan/report artifacts, and
+browser-visible state as the data backbone</li>
+<li>optimize for demo clarity and reliability over framework
+complexity</li>
+</ul>
+<h3 id="case-library-choice">Case Library Choice</h3>
+<p>The product needs a memory layer.</p>
+<p>Week 2 case library choice:</p>
+<ul>
+<li>start with a structured local store, not a heavy external
+system</li>
+<li>recommended v1:
+<ul>
+<li><code>SQLite</code> or structured <code>JSONL</code></li>
+</ul></li>
+<li>each record should store:
+<ul>
+<li>incident fingerprint</li>
+<li>shortlist</li>
+<li>chosen action</li>
+<li>Stratus prediction</li>
+<li>actual result</li>
+<li>verdict notes</li>
+<li>tags for retrieval</li>
+</ul></li>
+</ul>
+<p>This is enough for retrieval, comparison, and demo replay.</p>
+<h2 id="multi-agent-workflow">5. Multi-Agent Workflow</h2>
+<div class="agent-flow">
+  <div class="agent-node parallel">
+    <h3>Payment Sentinel</h3>
+    <p>latency, timeouts, dependency health</p>
+  </div>
+  <div class="agent-node parallel">
+    <h3>Queue &amp; Fairness</h3>
+    <p>abandonment, retry factor, fairness skew</p>
+  </div>
+  <div class="agent-node parallel">
+    <h3>Inventory Sentinel</h3>
+    <p>seat holds, expirations, lock pressure</p>
+  </div>
+  <div class="agent-node parallel">
+    <h3>Browser Sentinel</h3>
+    <p>dashboard state, flags, screenshots</p>
+  </div>
+  <div class="agent-node">
+    <h3>Guardrail Decision</h3>
+    <p>shortlist + Stratus ranking</p>
+  </div>
+  <div class="agent-node">
+    <h3>Operator + Evaluation</h3>
+    <p>execute, verify, case writeback</p>
+  </div>
+</div>
+<h3 id="observation-layer-parallel-sentinel-agents">5.1 Observation
+Layer: Parallel Sentinel Agents</h3>
+<p>Observation is the main parallelization moment in the system.</p>
+<p>Run these four agents in parallel:</p>
+<ul>
+<li><strong>Payment Sentinel Agent</strong>
+<ul>
+<li>reads payment latency, error, timeout, and dependency health
+signals</li>
+</ul></li>
+<li><strong>Queue &amp; Fairness Sentinel Agent</strong>
+<ul>
+<li>reads queue abandonment, retry factor, fairness skew, and conversion
+stress</li>
+</ul></li>
+<li><strong>Inventory Sentinel Agent</strong>
+<ul>
+<li>reads seat hold utilization, hold expiration, and inventory lock
+pressure</li>
+</ul></li>
+<li><strong>Browser Sentinel Agent</strong>
+<ul>
+<li>opens the dashboard and feature UI, captures visible state and
+screenshots</li>
+</ul></li>
+</ul>
+<p>Each sentinel should output:</p>
+<ul>
+<li>normalized evidence for its category</li>
+<li>key anomaly tags</li>
+<li>retrieved similar cases from the case library</li>
+<li>one short operator-facing summary</li>
+</ul>
+<h3 id="incident-fingerprint">5.2 Incident Fingerprint</h3>
+<p>After the four sentinel agents finish, merge their outputs into one
+<strong>incident fingerprint</strong>.</p>
+<p>This fingerprint should include:</p>
+<ul>
+<li>service and dependency tags</li>
+<li>business-state tags</li>
+<li>anomaly tags</li>
+<li>hard constraints:
+<ul>
+<li>preserve fairness</li>
+<li>avoid oversell / seat-lock collapse</li>
+<li>avoid high blast-radius actions as a first move</li>
+</ul></li>
+</ul>
+<p>This fingerprint is the shared input to planning and evaluation.</p>
+<h3 id="shortlist-mechanism">5.3 Shortlist Mechanism</h3>
+<p>The shortlist step is a core Week 2 design problem.</p>
+<p>We want:</p>
+<ul>
+<li>action library size: <code>12-20</code></li>
+<li>decision shortlist size: <code>4-6</code></li>
+</ul>
+<h4 id="recommended-shortlist-design-hybrid">Recommended Shortlist
+Design: Hybrid</h4>
+<p>Use a hybrid mechanism, not pure prompting.</p>
+<ol type="1">
+<li><strong>Tagged Action Library</strong>
+<ul>
+<li>each action has metadata:
+<ul>
+<li>failure modes</li>
+<li>affected services</li>
+<li>business impact</li>
+<li>blast-radius class</li>
+<li>execution surface</li>
+</ul></li>
+</ul></li>
+<li><strong>Deterministic Filter</strong>
+<ul>
+<li>remove actions that do not match the current incident services or
+failure tags</li>
+<li>remove actions that cannot be executed in the current
+environment</li>
+</ul></li>
+<li><strong>Case Retrieval Boost</strong>
+<ul>
+<li>use case-library similarity to raise actions that worked in similar
+incidents</li>
+<li>use case-library warnings to keep dangerous local reflexes in view
+when needed</li>
+</ul></li>
+<li><strong>Diversity Rule</strong>
+<ul>
+<li>shortlist must include a spread of action types:
+<ul>
+<li>one stabilizer</li>
+<li>one tempting reflex</li>
+<li>one traffic/degradation option</li>
+<li>one backup / kill-switch option if relevant</li>
+</ul></li>
+</ul></li>
+<li><strong>Shortlist Builder Agent</strong>
+<ul>
+<li>converts the filtered set into the final <code>4-6</code>
+actions</li>
+<li>writes a rationale explaining why each action made the
+shortlist</li>
+</ul></li>
+</ol>
+<p>This design keeps the shortlist explainable and stable, while still
+looking intelligent.</p>
+<h3 id="guardrail-decision">5.4 Guardrail Decision</h3>
+<p>The <strong>Guardrail Decision Agent</strong> takes:</p>
+<ul>
+<li>incident fingerprint</li>
+<li><code>4-6</code> shortlisted actions</li>
+<li>relevant prior cases</li>
+<li>hard constraints</li>
+</ul>
+<p>Then it uses Stratus to produce:</p>
+<ul>
+<li>ranked actions</li>
+<li>confidence</li>
+<li>predicted blast radius</li>
+<li>predicted latency / retry impact</li>
+<li>rollback trigger or stop condition</li>
+<li>final recommended action</li>
+</ul>
+<h3 id="three-action-sequence-planning-extension">5.5 Three-Action
+Sequence Planning Extension</h3>
+<p>This is an <strong>optional extension</strong>. The primary Week 2
+goal is still to finish the <strong>one-action workflow
+first</strong>.</p>
+<p>Only after the one-action flow is stable should the system move from
+single-action choice to <strong>three-action sequence
+planning</strong>.</p>
+<p>The sequence should be designed in three stages:</p>
+<ol type="1">
+<li><strong>stabilize</strong>
+<ul>
+<li>first action reduces immediate pressure</li>
+</ul></li>
+<li><strong>contain / clean up</strong>
+<ul>
+<li>second action prevents recurrence or clears residual risk</li>
+</ul></li>
+<li><strong>restore / normalize</strong>
+<ul>
+<li>third action returns the system toward normal operating mode</li>
+</ul></li>
+</ol>
+<p>The Guardrail Decision Agent should output:</p>
+<ul>
+<li><code>action_sequence</code>
+<ul>
+<li>up to three ordered actions</li>
+</ul></li>
+<li><code>stop_conditions</code>
+<ul>
+<li>what success looks like after each action</li>
+</ul></li>
+<li><code>replan_conditions</code>
+<ul>
+<li>when to ask Stratus to replan</li>
+</ul></li>
+</ul>
+<h3 id="replan-policy">Replan Policy</h3>
+<p>Default Week 2 policy:</p>
+<ul>
+<li>do <strong>not</strong> replan after every action</li>
+<li>only replan when evaluation shows:
+<ul>
+<li><strong>partial failure</strong></li>
+<li>or <strong>severe failure</strong></li>
+</ul></li>
+</ul>
+<p>Priority rule:</p>
+<ul>
+<li>ship one-action planning, execution, and verification first</li>
+<li>add three-action planning only if the one-action loop is already
+demo-stable</li>
+</ul>
+<p>Suggested evaluation classes:</p>
+<ul>
+<li><strong>strong recovery</strong>
+<ul>
+<li>continue planned sequence or stop early</li>
+</ul></li>
+<li><strong>partial failure</strong>
+<ul>
+<li>some improvement, but key constraints still violated</li>
+<li>ask Stratus to replan</li>
+</ul></li>
+<li><strong>severe failure</strong>
+<ul>
+<li>blast radius grows, fairness worsens, or primary metrics
+collapse</li>
+<li>immediately ask Stratus to replan</li>
+</ul></li>
+</ul>
+<p>This keeps the demo more autonomous without making it look random or
+over-reactive.</p>
+<h3 id="baseline-mode">5.6 Baseline Mode</h3>
+<p>Baseline is no longer a permanent agent in the main product
+story.</p>
+<p>Instead, Week 2 should support a <strong>baseline demo
+toggle</strong>:</p>
+<ul>
+<li>same incident</li>
+<li>same shortlist</li>
+<li>replace Stratus ranking with a naive baseline chooser</li>
+</ul>
+<p>The purpose is to show:</p>
+<ul>
+<li>baseline picks the obvious reflex</li>
+<li>guardrail path picks the safer action</li>
+</ul>
+<h3 id="execution">5.7 Execution</h3>
+<p>The <strong>Operator Agent</strong> uses OpenClaw browser to:</p>
+<ul>
+<li>open the console and source dashboards</li>
+<li>inspect the chosen action</li>
+<li>execute the remediation</li>
+<li>refresh and capture post-action evidence</li>
+</ul>
+<h3 id="evaluation-and-learning">5.8 Evaluation And Learning</h3>
+<p>The <strong>Evaluation Agent</strong> measures:</p>
+<ul>
+<li>system metrics after action</li>
+<li>browser-visible state after action</li>
+<li>business-relevant signals after action</li>
+<li>predicted vs actual drift</li>
+</ul>
+<p>Then it writes a new case into the case library with:</p>
+<ul>
+<li>situation</li>
+<li>shortlisted actions</li>
+<li>chosen action</li>
+<li>predicted result</li>
+<li>actual result</li>
+<li>narrative verdict</li>
+</ul>
+<p>This is critical: we are saving full outcomes, not only
+success/failure.</p>
+<h2 id="optional-extension-abnormality-localization">6. Optional
+Extension: Abnormality Localization</h2>
+<p>If we have time, we should extend the system beyond overall
+guardrailing and let it pinpoint specific abnormalities such as bot
+attacks.</p>
+<h3 id="recommended-design">Recommended Design</h3>
+<p>Add one post-observation component:</p>
+<ul>
+<li><strong>Abnormality Attribution Agent</strong></li>
+</ul>
+<p>It consumes the four sentinel outputs and classifies the dominant
+abnormality, for example:</p>
+<ul>
+<li>payment degradation</li>
+<li>retry storm</li>
+<li>queue fairness distortion</li>
+<li>seat hold clogging</li>
+<li>suspected bot pressure</li>
+</ul>
+<h3 id="suggested-mechanism">Suggested Mechanism</h3>
+<p>Use a hybrid mechanism again:</p>
+<ul>
+<li>rules for obvious signals
+<ul>
+<li>spike in retry factor</li>
+<li>fairness skew jump</li>
+<li>large homepage flood with weak payment conversion</li>
+<li>abnormal seat hold churn</li>
+</ul></li>
+<li>agent synthesis for mixed cases
+<ul>
+<li>when multiple abnormalities overlap</li>
+</ul></li>
+</ul>
+<h3 id="why-it-matters">Why It Matters</h3>
+<p>This gives us a cleaner story than “metrics are bad.”</p>
+<p>It lets us say:</p>
+<blockquote>
+<p>The system did not only choose a safer action. It identified what
+kind of abnormality was happening and responded accordingly.</p>
+</blockquote>
+<h2 id="frontend-product-surface">7. Frontend Product Surface</h2>
+<p>Week 2 needs a real frontend, not just dashboards and JSON
+artifacts.</p>
+<p>The target frontend is one operator-facing surface:</p>
+<blockquote>
+<p><strong>Guardrail Console</strong></p>
+</blockquote>
+<h3 id="required-views">Required Views</h3>
+<ol type="1">
+<li><strong>Incident View</strong>
+<ul>
+<li>incident summary</li>
+<li>scenario selector</li>
+<li>payment / queue / inventory / browser evidence</li>
+<li>active alerts</li>
+<li>recent similar cases</li>
+</ul></li>
+<li><strong>Decision View</strong>
+<ul>
+<li>full action library summary</li>
+<li>chosen shortlist</li>
+<li>baseline result vs guardrail result</li>
+<li>Stratus rationale and predicted blast radius</li>
+<li>optional 3-step planned sequence</li>
+</ul></li>
+<li><strong>Execution View</strong>
+<ul>
+<li>OpenClaw execution log</li>
+<li>chosen remediation target</li>
+<li>step-by-step sequence status</li>
+<li>before / after browser evidence</li>
+</ul></li>
+<li><strong>Verdict View</strong>
+<ul>
+<li>predicted vs actual</li>
+<li>dangerous reflex rejected</li>
+<li>blast radius avoided</li>
+<li>case saved to library</li>
+</ul></li>
+</ol>
+<h3 id="frontend-rule">Frontend Rule</h3>
+<ul>
+<li>one polished console</li>
+<li>no disconnected mini-pages</li>
+<li>one owner per view</li>
+</ul>
+<h2 id="responsibilities">8. Responsibilities</h2>
+<p>Everyone must touch both <strong>OpenClaw</strong> and
+<strong>Stratus</strong>, but with non-overlapping primary
+ownership.</p>
+<h3 id="hansen">Hansen</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>Operator Agent</li>
+<li>Execution flow</li>
+<li>Guardrail Console shell</li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>own the OpenClaw execution handoff and browser playbook
+integration</li>
+<li>own the <code>Execution View</code></li>
+<li>own overall console shell and navigation</li>
+<li>own scenario selection and sequence-progress presentation in the
+console</li>
+<li>connect plan -&gt; execute -&gt; verify -&gt; verdict into one clean
+product flow</li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>rehearse end-to-end browser runs</li>
+<li>test fallback path reliability</li>
+<li>test console flow across all four views</li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>final demo script</li>
+<li>final OpenClaw prompt</li>
+<li>final shell polish</li>
+<li>final scenario-switch UX and sequence-timeline UX</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>deepest owner of browser execution</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>renders guardrail output into execution and verdict surfaces</li>
+</ul>
+<p>Frontend touchpoint:</p>
+<ul>
+<li>Guardrail Console shell + <code>Execution View</code></li>
+</ul>
+<h3 id="tony">Tony</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>Shortlist Builder Agent</li>
+<li>Guardrail Decision Agent</li>
+<li>Stratus schema / prompt / ranking logic</li>
+<li>optional three-action sequence planning policy</li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>own the <code>12-20 -&gt; 4-6</code> shortlist mechanism</li>
+<li>define action metadata schema for shortlist selection</li>
+<li>implement the Stratus input/output contract</li>
+<li>own the decision rationale, veto reasoning, and rollback
+criteria</li>
+<li>design the three-action sequence output format as a stretch
+extension</li>
+<li>define which conditions should trigger Stratus replanning after
+partial or severe failure</li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>compare shortlist stability across repeated runs</li>
+<li>compare Stratus prompt variants</li>
+<li>maintain <code>实验记录 TBD</code></li>
+<li>test one-action guardrail stability first</li>
+<li>test whether three-action plans stay coherent across multiple
+scenarios if extension time remains</li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>final shortlist policy</li>
+<li>final Stratus schema</li>
+<li>final reasoning copy for why the dangerous reflex is rejected</li>
+<li>final sequence-planning and replan policy for the optional
+extension</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>ensure decision output is directly usable by the Operator Agent</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>deepest Stratus integration owner</li>
+</ul>
+<p>Frontend touchpoint:</p>
+<ul>
+<li><code>Decision View</code></li>
+</ul>
+<h3 id="charlie">Charlie</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>concert-ticket scenario truth</li>
+<li>sentinel schemas</li>
+<li>abnormality attribution extension</li>
+<li>incident portfolio design</li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>write the canonical concert ticket incident spec</li>
+<li>define the list of demo incidents and their expected safe
+actions</li>
+<li>define realistic metric ranges and reference snapshots for each
+incident</li>
+<li>define the four sentinel outputs and anomaly tags</li>
+<li>define case-library taxonomy and retrieval tags</li>
+<li>define what fairness, seat hold stress, and operator-visible success
+mean</li>
+<li>design the abnormality-localization extension</li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>validate that the live demo still feels like a real ticket-drop
+incident</li>
+<li>validate that browser-visible evidence matches the intended
+story</li>
+<li>validate that the anomaly labels make business sense</li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>scenario spec</li>
+<li>incident catalog</li>
+<li>UI labels and annotations for incident evidence</li>
+<li>concise product narrative</li>
+<li>abnormality-extension proposal</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>defines what the Browser Sentinel Agent and Operator Agent should
+inspect</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>defines the constraints and truths the guardrail should optimize
+for</li>
+</ul>
+<p>Frontend touchpoint:</p>
+<ul>
+<li><code>Incident View</code></li>
+</ul>
+<h3 id="eason">Eason</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>Evaluation Agent</li>
+<li>baseline demo toggle</li>
+<li>case-library writeback and replay</li>
+<li>realistic incident simulation profiles</li>
+</ul>
+<p>Develop:</p>
+<ul>
+<li>implement baseline mode on the same shortlist used by Stratus</li>
+<li>own post-action evaluation and verdict generation</li>
+<li>implement case-library persistence format and replay-friendly
+outputs</li>
+<li>implement realistic simulation profiles for each incident in the
+portfolio</li>
+<li>define how ticket-drop metrics are generated from runtime state plus
+scenario overlays</li>
+<li>own comparison between:
+<ul>
+<li>baseline result</li>
+<li>guardrail result</li>
+<li>predicted vs actual</li>
+</ul></li>
+</ul>
+<p>Test:</p>
+<ul>
+<li>confirm baseline picks the naive action in Scenario A</li>
+<li>confirm evaluation catches when predicted and actual diverge</li>
+<li>confirm case-library records are understandable and reusable</li>
+<li>validate that incident metrics look realistic and differ
+meaningfully across scenarios</li>
+</ul>
+<p>Furnish:</p>
+<ul>
+<li>final verdict schema</li>
+<li>baseline-vs-guardrail comparison artifact</li>
+<li>final copy for “what happened after action”</li>
+<li>simulation profile spec for the incident portfolio</li>
+</ul>
+<p>OpenClaw touchpoint:</p>
+<ul>
+<li>owns what is shown after execution and verification</li>
+</ul>
+<p>Stratus touchpoint:</p>
+<ul>
+<li>compares baseline and Stratus outcomes on the same shortlist</li>
+</ul>
+<p>Frontend touchpoint:</p>
+<ul>
+<li><code>Verdict View</code></li>
+</ul>
+<h2 id="frontend-ownership-split">9. Frontend Ownership Split</h2>
+<p>To avoid overlap, frontend work is split by surface:</p>
+<ul>
+<li><strong>Hansen</strong>
+<ul>
+<li>shell</li>
+<li>navigation</li>
+<li><code>Execution View</code></li>
+</ul></li>
+<li><strong>Tony</strong>
+<ul>
+<li><code>Decision View</code></li>
+</ul></li>
+<li><strong>Charlie</strong>
+<ul>
+<li><code>Incident View</code></li>
+</ul></li>
+<li><strong>Eason</strong>
+<ul>
+<li><code>Verdict View</code></li>
+</ul></li>
+</ul>
+<p>If time permits, the team can review style together, but ownership
+remains by view.</p>
+<h2 id="repo-and-workstreams">10. Repo And Workstreams</h2>
+<p>Repo:</p>
+<ul>
+<li><code>https://github.com/hanshengzhu0001/stratusxpennai</code></li>
+</ul>
+<p>Branches:</p>
+<ul>
+<li><code>workflow</code>
+<ul>
+<li>integration</li>
+<li>OpenClaw execution flow</li>
+<li>console shell</li>
+</ul></li>
+<li><code>ranking+rollback</code>
+<ul>
+<li>shortlist logic</li>
+<li>Stratus schema and decision logic</li>
+<li>sequence planning</li>
+</ul></li>
+<li><code>baseline</code>
+<ul>
+<li>baseline mode</li>
+<li>evaluation</li>
+<li>case-library writeback / replay</li>
+</ul></li>
+<li><code>scenario+eval</code>
+<ul>
+<li>scenario truth</li>
+<li>incident portfolio</li>
+<li>sentinel schema</li>
+<li>anomaly extension</li>
+<li>UI labels</li>
+</ul></li>
+</ul>
+<p>Recommended base setup:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone <span class="at">-b</span> workflow https://github.com/hanshengzhu0001/stratusxpennai.git</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> stratusxpennai</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> <span class="at">-m</span> venv .venv</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">source</span> .venv/bin/activate</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> fetch origin</span></code></pre></div>
+<p>Independent starting points:</p>
+<ul>
+<li>Tony can start immediately on shortlist and Stratus logic</li>
+<li>Charlie can start immediately on scenario, incident catalog,
+sentinel schema, and anomaly design</li>
+<li>Eason can start immediately on baseline mode, simulation profiles,
+and verdict/case-library schema</li>
+<li>Hansen can start immediately on OpenClaw execution flow and console
+shell</li>
+</ul>
+<h2 id="demo-prep-how-we-differentiate-and-impress">11. Demo Prep: How
+We Differentiate And Impress</h2>
+<p>This section matters as much as the code.</p>
+<h3 id="what-makes-the-project-different">What Makes The Project
+Different</h3>
+<p>We are not just “using Stratus to pick an action.”</p>
+<p>We are showing:</p>
+<ul>
+<li>a dangerous local reflex is rejected</li>
+<li>the product protects fairness and seat access, not just uptime</li>
+<li>OpenClaw visibly acts in the browser</li>
+<li>the system learns by saving the full case after action</li>
+</ul>
+<h3 id="demo-structure">Demo Structure</h3>
+<p>The cleanest live demo should be:</p>
+<ol type="1">
+<li>Trigger one concert ticket incident live</li>
+<li>Show all four sentinel panels update</li>
+<li>Show similar prior cases retrieved from the case library</li>
+<li>Turn on baseline mode and show it picks
+<code>restart_payment</code></li>
+<li>Switch to guardrail mode and show Stratus picks the safer
+action</li>
+<li>Let OpenClaw execute the first action</li>
+<li>Show the verdict and save the case</li>
+<li>If time permits, show the optional 3-step plan as a stretch
+preview</li>
+</ol>
+<h3 id="scenario-demonstration-plan">Scenario Demonstration Plan</h3>
+<p>To stand out, we should prepare:</p>
+<ul>
+<li>one flagship live scenario
+<ul>
+<li><code>Retry Death Spiral</code></li>
+</ul></li>
+<li>one secondary scenario ready for quick replay
+<ul>
+<li><code>Payment Gateway Flap</code></li>
+</ul></li>
+<li>one stretch replay scenario if time allows
+<ul>
+<li><code>Seat Hold Clog</code> or <code>Regional Saturation</code></li>
+</ul></li>
+</ul>
+<p>This makes the project feel like a platform, not a one-off
+script.</p>
+<h3 id="priority-order">Priority Order</h3>
+<ol type="1">
+<li>one flagship scenario with one-action guardrail flow</li>
+<li>one additional replay scenario with a different chosen action</li>
+<li>optional three-action sequence extension</li>
+</ol>
+<h3 id="what-judges-should-remember">What Judges Should Remember</h3>
+<ul>
+<li>“The obvious fix was wrong.”</li>
+<li>“The system knew why it was wrong before acting.”</li>
+<li>“The agent acted in the UI and then verified the result.”</li>
+<li>“It protects fairness, not just latency.”</li>
+</ul>
+<h3 id="rehearsal-checklist">Rehearsal Checklist</h3>
+<ul>
+<li>one polished Guardrail Console</li>
+<li>one scenario selector with realistic incident profiles</li>
+<li>one clean baseline-vs-guardrail toggle</li>
+<li>one incident portfolio with believable metrics</li>
+<li>one visible OpenClaw execution moment</li>
+<li>one visible sequence plan, even if only step 1 is executed in the
+live demo</li>
+<li>one before / after verdict slide inside the app</li>
+<li>one backup local-control-plane run recorded in case the K8s demo is
+flaky</li>
+</ul>
+<h2 id="grounding-sources">12. Grounding / Sources</h2>
+<p>Official references supporting the live demo path:</p>
+<ul>
+<li>OpenTelemetry Demo scenarios and feature-flag path
+<ul>
+<li>https://opentelemetry.io/docs/demo/scenarios/</li>
+</ul></li>
+<li>OpenTelemetry Demo repository
+<ul>
+<li>https://github.com/open-telemetry/opentelemetry-demo</li>
+</ul></li>
+<li>Prometheus Alertmanager documentation
+<ul>
+<li>https://prometheus.io/docs/alerting/latest/alertmanager/</li>
+</ul></li>
+<li>Kubernetes Horizontal Pod Autoscaler documentation
+<ul>
+<li>https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/</li>
+</ul></li>
+<li>OpenFeature overview
+<ul>
+<li>https://openfeature.dev/docs/reference/intro/</li>
+</ul></li>
+</ul>
+</body>
+</html>

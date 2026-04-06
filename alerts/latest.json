@@ -1,9 +1,9 @@
 {
   "receiver": "openclaw-webhook",
-  "status": "resolved",
+  "status": "firing",
   "alerts": [
     {
-      "status": "resolved",
+      "status": "firing",
       "labels": {
         "alertname": "CheckoutRetryStorm",
         "dependency": "payment",
@@ -15,8 +15,8 @@
       "annotations": {
         "summary": "Retry pressure above baseline"
       },
-      "startsAt": "2026-03-28T22:03:44.82Z",
-      "endsAt": "2026-03-29T00:16:24.82Z",
+      "startsAt": "2026-04-05T16:35:14.82Z",
+      "endsAt": "0001-01-01T00:00:00Z",
       "generatorURL": "http://ebac79c85684:9090/graph?g0.expr=checkout_retry_rate+%3E+0.25&g0.tab=1",
       "fingerprint": "01aa77fc2b8c87fd"
     }
