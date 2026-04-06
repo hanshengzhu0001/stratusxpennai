@@ -325,7 +325,7 @@ def render_markdown(report: dict) -> str:
 
 ## Guardrail Question
 
-Given a payment-related latency incident with retry amplification, which of these fixes is safest globally?
+Given a healthcare scheduling latency incident with retry amplification, which of these fixes is safest globally?
 
 ## Workflow
 
@@ -473,12 +473,12 @@ def retry_risk(retry_rate: float) -> str:
 
 def browser_workflow(chosen: dict) -> dict:
     button_map = {
-        "rate_limit_retries": "Apply Retry Rate Limit",
-        "enable_payment_circuit_breaker": "Enable Payment Circuit Breaker",
-        "increase_retry_backoff": "Increase Retry Backoff",
-        "restart_payment": "Restart Payment",
-        "shift_traffic": "Shift Traffic",
-        "disable_flag": "Disable Payment Flag",
+        "rate_limit_retries": "Throttle Booking Retries",
+        "enable_payment_circuit_breaker": "Enable Eligibility Circuit Breaker",
+        "increase_retry_backoff": "Increase Booking Retry Backoff",
+        "restart_payment": "Restart Eligibility Service",
+        "shift_traffic": "Shift Scheduling Traffic",
+        "disable_flag": "Disable Online Scheduling",
     }
     selector_map = {
         "rate_limit_retries": "#action-rate_limit_retries",

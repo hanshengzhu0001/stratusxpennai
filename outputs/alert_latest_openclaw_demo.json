@@ -1,5 +1,5 @@
 {
-  "plan_id": "alert_latest-89accadd",
+  "plan_id": "alert_latest-a993c03d",
   "workflow": {
     "orchestrator": "openclaw",
     "phase": "demo_mode",
@@ -38,7 +38,7 @@
       "step": 3,
       "kind": "click",
       "target": "#openclaw-demo-run",
-      "label": "Execute Planned Action: Enable Payment Circuit Breaker",
+      "label": "Execute Planned Action: Enable Eligibility Circuit Breaker",
       "purpose": "apply_guardrail_choice"
     },
     {

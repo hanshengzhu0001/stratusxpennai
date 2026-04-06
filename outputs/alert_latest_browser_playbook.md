@@ -7,7 +7,7 @@ Open the dedicated OpenClaw execution page, apply the selected remediation with 
 ## Chosen Action
 
 - Action: `enable_payment_circuit_breaker`
-- Button label: `Enable Payment Circuit Breaker`
+- Button label: `Enable Eligibility Circuit Breaker`
 - Button selector: `#openclaw-demo-run`
 - Manual fallback selector: `#action-enable_payment_circuit_breaker`
 

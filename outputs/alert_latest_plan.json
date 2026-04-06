@@ -1,6 +1,6 @@
 {
-  "plan_id": "alert_latest-89accadd",
-  "generated_at_utc": "2026-04-05T20:28:20.110531+00:00",
+  "plan_id": "alert_latest-a993c03d",
+  "generated_at_utc": "2026-04-06T23:11:24.024131+00:00",
   "workflow": {
     "orchestrator": "openclaw",
     "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase demo",
@@ -14,19 +14,19 @@
   "incident_summary": "Retry pressure above baseline",
   "planner": {
     "agent": "Planner Agent",
-    "selection_strategy": "broader_retail_action_library -> scenario_shortlist -> stratus_ranking",
+    "selection_strategy": "broader_healthcare_access_action_library -> scenario_shortlist -> stratus_ranking",
     "action_library_size": 12,
     "shortlist_size": 6,
     "selection_rationale": [
-      "Planner Agent prioritized overload-control actions because retry amplification and elevated checkout latency are present.",
+      "Planner Agent prioritized access-stabilizing actions because retry amplification and elevated scheduling latency are present.",
       "Planner Agent kept one tempting local reflex, one traffic option, and one kill switch so Guardrail can compare safe versus dangerous futures."
     ]
   },
   "observed_condition": {
     "services": [
-      "frontend",
-      "checkout",
-      "payment"
+      "portal",
+      "scheduling",
+      "eligibility"
     ],
     "metrics": {
       "latency_p95_ms": 2300,
@@ -37,8 +37,8 @@
       "Retry pressure above baseline"
     ],
     "traces": [
-      "checkout -> payment span dominates p95",
-      "retry fan-out visible across checkout service"
+      "scheduling -> eligibility span dominates p95",
+      "retry fan-out visible across scheduling service"
     ],
     "pattern_matches": [
       "retry_amplification",
@@ -46,17 +46,16 @@
       "high_checkout_latency"
     ],
     "prometheus": {
-      "source": "direct_fallback",
+      "source": "live",
       "queries": {
-        "checkout_latency_p95_ms": 2300,
+        "checkout_latency_p95_ms": 2300.0,
         "checkout_error_rate": 0.16,
         "checkout_retry_rate": 0.31
       },
       "active_alerts": [
         "CheckoutLatencyHigh",
         "CheckoutRetryStorm"
-      ],
-      "note": "Prometheus query failed; using direct control-plane metrics: URLError"
+      ]
     },
     "browser_targets": {
       "dashboard": "http://127.0.0.1:8010/",
@@ -70,7 +69,7 @@
       "type": "throttle",
       "target": "checkout",
       "category": "retry_overload_control",
-      "description": "Rate-limit checkout retries to break retry amplification.",
+      "description": "Throttle appointment-booking retries to break retry amplification.",
       "execution_surface": "browser"
     },
     {
@@ -78,7 +77,7 @@
       "type": "circuit_breaker",
       "target": "payment",
       "category": "retry_overload_control",
-      "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
+      "description": "Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.",
       "execution_surface": "browser"
     },
     {
@@ -86,7 +85,7 @@
       "type": "config",
       "target": "checkout",
       "category": "retry_overload_control",
-      "description": "Increase retry backoff so checkout stops hammering payment during partial degradation.",
+      "description": "Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.",
       "execution_surface": "browser"
     },
     {
@@ -94,7 +93,7 @@
       "type": "restart",
       "target": "payment",
       "category": "service_recovery",
-      "description": "Restart payment pods to clear local state after backlog is reduced.",
+      "description": "Restart eligibility workers after backlog pressure is reduced.",
       "execution_surface": "browser"
     },
     {
@@ -102,7 +101,7 @@
       "type": "traffic_shift",
       "target": "secondary_region",
       "category": "traffic_management",
-      "description": "Shift a slice of checkout traffic to the secondary region.",
+      "description": "Shift a slice of patient-portal scheduling traffic to the secondary region.",
       "execution_surface": "browser"
     },
     {
@@ -110,7 +109,7 @@
       "type": "flag",
       "target": "payment_feature",
       "category": "graceful_degradation",
-      "description": "Disable the payment feature flag as a last-resort kill switch.",
+      "description": "Disable online self-scheduling as a last-resort kill switch and route patients to staffed fallback.",
       "execution_surface": "browser"
     },
     {
@@ -118,7 +117,7 @@
       "type": "rollback",
       "target": "payment",
       "category": "deployment_recovery",
-      "description": "Rollback the most recent payment deployment.",
+      "description": "Rollback the most recent eligibility-service deployment.",
       "execution_surface": "k8s"
     },
     {
@@ -126,7 +125,7 @@
       "type": "rollback",
       "target": "checkout",
       "category": "deployment_recovery",
-      "description": "Rollback the most recent checkout deployment.",
+      "description": "Rollback the most recent scheduling-service deployment.",
       "execution_surface": "k8s"
     },
     {
@@ -134,7 +133,7 @@
       "type": "degrade",
       "target": "checkout",
       "category": "graceful_degradation",
-      "description": "Disable nonessential checkout features and keep the transaction path alive.",
+      "description": "Disable nonessential patient-portal features and keep the scheduling path alive.",
       "execution_surface": "future"
     },
     {
@@ -142,7 +141,7 @@
       "type": "cache",
       "target": "catalog",
       "category": "graceful_degradation",
-      "description": "Serve stale catalog data to preserve capacity for checkout and payment.",
+      "description": "Serve stale provider-directory and slot-search data to preserve scheduling capacity.",
       "execution_surface": "future"
     },
     {
@@ -150,7 +149,7 @@
       "type": "failover",
       "target": "region",
       "category": "traffic_management",
-      "description": "Fail over fully to the secondary region when the primary region is no longer safe.",
+      "description": "Fail over fully to the secondary scheduling region when the primary region is no longer safe.",
       "execution_surface": "k8s"
     },
     {
@@ -158,7 +157,7 @@
       "type": "workload_shaping",
       "target": "background_workers",
       "category": "capacity_management",
-      "description": "Pause noncritical background jobs to free capacity for checkout and payment.",
+      "description": "Pause noncritical batch work to free capacity for patient access and eligibility checks.",
       "execution_surface": "k8s"
     }
   ],
@@ -168,7 +167,7 @@
       "type": "throttle",
       "target": "checkout",
       "category": "retry_overload_control",
-      "description": "Rate-limit checkout retries to break retry amplification.",
+      "description": "Throttle appointment-booking retries to break retry amplification.",
       "execution_surface": "browser"
     },
     {
@@ -176,7 +175,7 @@
       "type": "circuit_breaker",
       "target": "payment",
       "category": "retry_overload_control",
-      "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
+      "description": "Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.",
       "execution_surface": "browser"
     },
     {
@@ -184,7 +183,7 @@
       "type": "config",
       "target": "checkout",
       "category": "retry_overload_control",
-      "description": "Increase retry backoff so checkout stops hammering payment during partial degradation.",
+      "description": "Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.",
       "execution_surface": "browser"
     },
     {
@@ -192,7 +191,7 @@
       "type": "restart",
       "target": "payment",
       "category": "service_recovery",
-      "description": "Restart payment pods to clear local state after backlog is reduced.",
+      "description": "Restart eligibility workers after backlog pressure is reduced.",
       "execution_surface": "browser"
     },
     {
@@ -200,7 +199,7 @@
       "type": "traffic_shift",
       "target": "secondary_region",
       "category": "traffic_management",
-      "description": "Shift a slice of checkout traffic to the secondary region.",
+      "description": "Shift a slice of patient-portal scheduling traffic to the secondary region.",
       "execution_surface": "browser"
     },
     {
@@ -208,7 +207,7 @@
       "type": "flag",
       "target": "payment_feature",
       "category": "graceful_degradation",
-      "description": "Disable the payment feature flag as a last-resort kill switch.",
+      "description": "Disable online self-scheduling as a last-resort kill switch and route patients to staffed fallback.",
       "execution_surface": "browser"
     }
   ],
@@ -216,38 +215,38 @@
     {
       "id": "enable_payment_circuit_breaker",
       "rank": 1,
-      "confidence": 0.94,
-      "rationale": "Fail-fast pattern directly breaks retry amplification loop at degraded dependency boundary"
-    },
-    {
-      "id": "increase_retry_backoff",
-      "rank": 2,
       "confidence": 0.88,
-      "rationale": "Reduces retry pressure by spacing attempts, less aggressive than circuit breaker"
+      "rationale": "Breaks retry amplification at source by failing fast on degraded payment dependency."
     },
     {
       "id": "rate_limit_retries",
-      "rank": 3,
+      "rank": 2,
       "confidence": 0.82,
-      "rationale": "Caps retry volume but doesn't address root cause of hammering degraded payment"
+      "rationale": "Directly throttles retry storm but doesn't address root dependency degradation issue."
     },
     {
-      "id": "restart_payment",
-      "rank": 4,
-      "confidence": 0.65,
-      "rationale": "May help payment recovery but risky during active retry storm amplification"
+      "id": "increase_retry_backoff",
+      "rank": 3,
+      "confidence": 0.79,
+      "rationale": "Reduces retry pressure gradually without hard limits or circuit breaking benefits."
     },
     {
       "id": "shift_traffic",
+      "rank": 4,
+      "confidence": 0.65,
+      "rationale": "May help if regional issue but doesn't fix retry amplification pattern."
+    },
+    {
+      "id": "restart_payment",
       "rank": 5,
       "confidence": 0.58,
-      "rationale": "Spreads load but doesn't solve retry amplification pattern at checkout-payment boundary"
+      "rationale": "Risky without first controlling retry storm; could worsen transient payment failures."
     },
     {
       "id": "disable_flag",
       "rank": 6,
       "confidence": 0.45,
-      "rationale": "Nuclear option with high business impact, premature given targeted alternatives available"
+      "rationale": "Nuclear option with high user impact; reserve for complete system failure."
     }
   ],
   "best_action": {
@@ -255,16 +254,16 @@
     "type": "circuit_breaker",
     "target": "payment",
     "category": "retry_overload_control",
-    "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
+    "description": "Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.",
     "execution_surface": "browser"
   },
-  "overall_confidence": 0.94,
+  "overall_confidence": 0.88,
   "predicted_effects_by_action": {
     "rate_limit_retries": {
       "latency_direction": "down",
       "error_direction": "mixed",
       "blast_radius": "medium",
-      "retry_storm_risk": "medium"
+      "retry_storm_risk": "low"
     },
     "enable_payment_circuit_breaker": {
       "latency_direction": "down",
@@ -276,11 +275,11 @@
       "latency_direction": "down",
       "error_direction": "down",
       "blast_radius": "low",
-      "retry_storm_risk": "low"
+      "retry_storm_risk": "medium"
     },
     "restart_payment": {
       "latency_direction": "mixed",
-      "error_direction": "up",
+      "error_direction": "mixed",
       "blast_radius": "high",
       "retry_storm_risk": "high"
     },
@@ -292,7 +291,7 @@
     },
     "disable_flag": {
       "latency_direction": "down",
-      "error_direction": "up",
+      "error_direction": "down",
       "blast_radius": "high",
       "retry_storm_risk": "low"
     }
@@ -303,7 +302,7 @@
     "openclaw_execution_url": "http://127.0.0.1:8010/openclaw-execution",
     "openclaw_verdict_url": "http://127.0.0.1:8010/openclaw-execution?stage=verdict",
     "state_api_url": "http://127.0.0.1:8010/api/state",
-    "button_label": "Enable Payment Circuit Breaker",
+    "button_label": "Enable Eligibility Circuit Breaker",
     "button_selector": "#openclaw-demo-run",
     "fallback_button_selector": "#action-enable_payment_circuit_breaker",
     "steps": [

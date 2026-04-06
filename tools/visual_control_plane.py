@@ -50,6 +50,39 @@ ARTIFACT_PATHS = {
     "demo": Path("outputs/alert_latest_openclaw_demo.json"),
     "report": Path("outputs/alert_latest_report.json"),
 }
+ACTION_LABELS = {
+    "rate_limit_retries": "Throttle Booking Retries",
+    "enable_payment_circuit_breaker": "Enable Eligibility Circuit Breaker",
+    "increase_retry_backoff": "Increase Booking Retry Backoff",
+    "restart_payment": "Restart Eligibility Service",
+    "shift_traffic": "Shift Scheduling Traffic",
+    "disable_flag": "Disable Online Scheduling",
+}
+ACTION_SUMMARIES = {
+    "rate_limit_retries": "Caps booking retry fan-out from the portal and scheduling workers.",
+    "enable_payment_circuit_breaker": "Fails fast on degraded eligibility verification to protect the scheduling path.",
+    "increase_retry_backoff": "Spaces repeated booking attempts to reduce pressure on downstream verification.",
+    "restart_payment": "Restarts eligibility workers after pressure has already been contained.",
+    "shift_traffic": "Moves a controlled share of scheduling load to a secondary region.",
+    "disable_flag": "Temporarily disables online self-scheduling and routes patients to staffed fallback.",
+}
+ACTION_HELP = {
+    "rate_limit_retries": "Reduce booking retry fan-out so access can stabilize before more slots are locked.",
+    "enable_payment_circuit_breaker": "Fail fast on degraded eligibility checks to protect the scheduling path and preserve capacity.",
+    "increase_retry_backoff": "Space out repeated booking attempts so the dependency can recover without additional surge pressure.",
+    "restart_payment": "Restart eligibility workers only if retry pressure is already controlled and cold-start risk is acceptable.",
+    "shift_traffic": "Shift a controlled portion of scheduling traffic to spare regional capacity when saturation is localized.",
+    "disable_flag": "Pause online self-scheduling and route patients to staffed call-center or callback fallback.",
+}
+FLAG_LABELS = {
+    "payment_service_unreachable": "eligibility_service_degraded",
+    "loadgenerator_flood_homepage": "patient_portal_surge",
+    "retry_rate_limit_enabled": "booking_retry_throttle_enabled",
+    "payment_circuit_breaker_enabled": "eligibility_circuit_breaker_enabled",
+    "retry_backoff_enabled": "booking_retry_backoff_enabled",
+    "traffic_shift_enabled": "regional_traffic_shift_enabled",
+    "payment_feature_disabled": "online_scheduling_disabled",
+}
 
 load_local_env()
 
@@ -89,17 +122,37 @@ def dashboard(view: str = Query("incident")) -> str:
     )
 
 
+@app.get("/operations", response_class=HTMLResponse)
+def operations_dashboard() -> str:
+    state = load_state()
+    technical_metrics = derive_metrics(state)
+    business_metrics = derive_business_metrics(state, technical_metrics)
+    active_scenario = get_scenario(state.get("active_scenario"))
+    scenarios = scenario_catalog()
+    plan = _load_artifact("plan")
+    report = _load_artifact("report")
+    return _render_operations_dashboard(
+        state=state,
+        technical_metrics=technical_metrics,
+        business_metrics=business_metrics,
+        active_scenario=active_scenario,
+        scenarios=scenarios,
+        plan=plan,
+        report=report,
+    )
+
+
 @app.get("/feature-flags", response_class=HTMLResponse)
 def feature_flags() -> str:
     state = load_state()
     active_scenario = get_scenario(state.get("active_scenario"))
     action_buttons = [
-        ("rate_limit_retries", "Apply Retry Rate Limit"),
-        ("enable_payment_circuit_breaker", "Enable Payment Circuit Breaker"),
-        ("increase_retry_backoff", "Increase Retry Backoff"),
-        ("restart_payment", "Restart Payment"),
-        ("shift_traffic", "Shift Traffic"),
-        ("disable_flag", "Disable Payment Flag"),
+        ("rate_limit_retries", ACTION_LABELS["rate_limit_retries"]),
+        ("enable_payment_circuit_breaker", ACTION_LABELS["enable_payment_circuit_breaker"]),
+        ("increase_retry_backoff", ACTION_LABELS["increase_retry_backoff"]),
+        ("restart_payment", ACTION_LABELS["restart_payment"]),
+        ("shift_traffic", ACTION_LABELS["shift_traffic"]),
+        ("disable_flag", ACTION_LABELS["disable_flag"]),
     ]
     buttons = "".join(_action_form(action_id, label) for action_id, label in action_buttons)
     toggles = "".join(
@@ -118,7 +171,7 @@ def feature_flags() -> str:
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Guardrail Console - Execution Surface</title>
+  <title>Guardrail Console - Manual Ops Controls</title>
   <style>
     :root {{ --bg:#f4efe7; --ink:#15202b; --accent:#b84f1f; --card:#fffaf3; --line:#deceb6; --muted:#6c665d; }}
     body {{ font-family: Iowan Old Style, Georgia, serif; background: linear-gradient(180deg, #fff8ef 0%, var(--bg) 100%); color: var(--ink); margin:0; }}
@@ -131,6 +184,9 @@ def feature_flags() -> str:
     .danger button {{ background:#a53d2a; }}
     .muted {{ color:var(--muted); }}
     a {{ color:inherit; }}
+    .action-card {{ border:1px solid var(--line); border-radius:16px; padding:14px; background:rgba(255,255,255,0.42); margin-bottom:10px; }}
+    .action-card strong {{ display:block; margin-bottom:6px; }}
+    .action-meta {{ color:var(--muted); font-size:0.94rem; line-height:1.5; margin-bottom:10px; }}
   </style>
 </head>
 <body>
@@ -138,9 +194,9 @@ def feature_flags() -> str:
     <div class="top">
       <div>
         <div class="badge">Scenario: {escape(active_scenario['label'])}</div>
-        <div class="badge">Expected first action: {escape(active_scenario['expected_first_action'])}</div>
-        <h1 style="margin:14px 0 6px;">Execution Surface</h1>
-        <p class="muted" style="max-width:720px;">OpenClaw uses this page to perform the visible remediation step and capture before / after evidence.</p>
+        <div class="badge">Expected first action: {escape(_action_label(active_scenario['expected_first_action']))}</div>
+        <h1 style="margin:14px 0 6px;">Manual Ops Controls</h1>
+        <p class="muted" style="max-width:720px;">This is the staffed fallback surface for healthcare access operations. Use it only if the primary OpenClaw browser flow is unavailable.</p>
       </div>
       <div>
         <a href="/">Return to Guardrail Console</a>
@@ -148,8 +204,8 @@ def feature_flags() -> str:
     </div>
     <div class="grid">
       <div class="card">
-        <h2 style="margin-top:0;">Execute Remediation</h2>
-        <p class="muted">Use the chosen action from the browser playbook. Dangerous kill switches stay visible but visually distinct.</p>
+        <h2 style="margin-top:0;">Apply Remediation</h2>
+        <p class="muted">Use the chosen action from the browser playbook. The online-scheduling shutdown stays visible but visually distinct because it routes patients to staffed fallback.</p>
         {buttons}
         <form method="post" action="/api/reset" style="margin-top:12px;">
           <input type="hidden" name="return_to" value="feature-flags">
@@ -157,8 +213,8 @@ def feature_flags() -> str:
         </form>
       </div>
       <div class="card">
-        <h2 style="margin-top:0;">Condition Toggles</h2>
-        <p class="muted">These are the rehearsal controls behind the scenario selector.</p>
+        <h2 style="margin-top:0;">Scenario Controls</h2>
+        <p class="muted">These rehearsal controls sit behind the healthcare-access scenario selector.</p>
         {toggles}
       </div>
     </div>
@@ -354,6 +410,7 @@ def _render_shell(
     business_metrics: dict,
     active_scenario: dict,
 ) -> str:
+    last_action = _action_label(state["last_action"])
     nav = "".join(
         f'<a class="tab{" active" if view == active_view else ""}" href="/?view={view}">{view.title()}</a>'
         for view in VIEW_ORDER
@@ -362,9 +419,9 @@ def _render_shell(
         f'<span class="pill">{escape(label)}</span>'
         for label in [
             f"Scenario: {active_scenario['label']}",
-            f"Last action: {state['last_action'] or 'none'}",
+            f"Last action: {last_action}",
             f"Retry factor: {business_metrics['retry_amplification_factor']}x",
-            f"Payment success: {business_metrics['payment_success_rate']:.2f}",
+            f"Booking completion: {business_metrics['payment_success_rate']:.2f}",
         ]
     )
     return f"""<!doctype html>
@@ -402,6 +459,7 @@ def _render_shell(
     .hero p {{ max-width:760px; margin:10px 0 0; color:var(--muted); font-size:1.02rem; }}
     .pill {{ display:inline-block; margin-right:8px; margin-bottom:8px; padding:7px 12px; border-radius:999px; background:var(--accent-soft); }}
     .nav {{ display:flex; gap:10px; flex-wrap:wrap; }}
+    .secondary-nav {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }}
     .tab {{
       text-decoration:none;
       color:var(--ink);
@@ -411,6 +469,15 @@ def _render_shell(
       background:rgba(255,255,255,0.55);
     }}
     .tab.active {{ background:var(--accent); color:white; border-color:var(--accent); }}
+    .link-chip {{
+      text-decoration:none;
+      color:var(--ink);
+      padding:8px 12px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:rgba(255,255,255,0.45);
+      font-size:0.92rem;
+    }}
     .grid {{ display:grid; gap:18px; }}
     .grid.two {{ grid-template-columns: 1.08fr 0.92fr; }}
     .grid.three {{ grid-template-columns: repeat(3, 1fr); }}
@@ -485,7 +552,12 @@ def _render_shell(
       <div class="hero">
         <div>
           <h1>Guardrail Console</h1>
-          <p>One operator-facing shell for incident context, decisioning, browser execution, and final verdict. This is Hansen's execution surface for the Week 2 demo.</p>
+          <p>One operator-facing shell for healthcare access incidents, decisioning, browser execution, and final verdict. This is Hansen's operator surface for the Week 2 demo.</p>
+          <div class="secondary-nav">
+            <a class="link-chip" href="/operations">Open Telehealth Ops Board</a>
+            <a class="link-chip" href="/openclaw-execution">OpenClaw Execution Surface</a>
+            <a class="link-chip" href="/feature-flags">Manual Ops Controls</a>
+          </div>
         </div>
         <div class="nav">{nav}</div>
       </div>
@@ -563,16 +635,16 @@ def _render_incident_view(
 ) -> str:
     technical = _metric_cards(
         [
-            ("Latency P95", f"{technical_metrics['latency_p95_ms']} ms"),
-            ("Error Rate", f"{technical_metrics['error_rate']:.2f}"),
-            ("Retry Rate", f"{technical_metrics['retry_rate']:.2f}"),
+            ("Scheduling Latency P95", f"{technical_metrics['latency_p95_ms']} ms"),
+            ("Scheduling Error Rate", f"{technical_metrics['error_rate']:.2f}"),
+            ("Booking Retry Rate", f"{technical_metrics['retry_rate']:.2f}"),
         ]
     )
     business = _metric_cards(
         [
-            ("Queue Abandonment", f"{business_metrics['queue_abandonment_rate']:.2f}"),
-            ("Payment Success", f"{business_metrics['payment_success_rate']:.2f}"),
-            ("Seat Hold Utilization", f"{business_metrics['seat_hold_utilization']:.2f}"),
+            ("Scheduling Abandonment", f"{business_metrics['queue_abandonment_rate']:.2f}"),
+            ("Booking Completion", f"{business_metrics['payment_success_rate']:.2f}"),
+            ("Slot Hold Utilization", f"{business_metrics['seat_hold_utilization']:.2f}"),
         ]
     )
     scenario_options = "".join(
@@ -583,11 +655,11 @@ def _render_incident_view(
     flags = "".join(
         f'<span class="pill">{escape(label)}</span>'
         for label in [
-            f"payment_service_unreachable={str(state['payment_service_unreachable']).lower()}",
-            f"loadgenerator_flood_homepage={str(state['loadgenerator_flood_homepage']).lower()}",
-            f"retry_rate_limit_enabled={str(state['retry_rate_limit_enabled']).lower()}",
-            f"payment_circuit_breaker_enabled={str(state['payment_circuit_breaker_enabled']).lower()}",
-            f"retry_backoff_enabled={str(state['retry_backoff_enabled']).lower()}",
+            f"{_flag_label('payment_service_unreachable')}={str(state['payment_service_unreachable']).lower()}",
+            f"{_flag_label('loadgenerator_flood_homepage')}={str(state['loadgenerator_flood_homepage']).lower()}",
+            f"{_flag_label('retry_rate_limit_enabled')}={str(state['retry_rate_limit_enabled']).lower()}",
+            f"{_flag_label('payment_circuit_breaker_enabled')}={str(state['payment_circuit_breaker_enabled']).lower()}",
+            f"{_flag_label('retry_backoff_enabled')}={str(state['retry_backoff_enabled']).lower()}",
         ]
     )
     demo_prompt = escape(
@@ -621,9 +693,9 @@ def _render_incident_view(
         <form class="inline" method="post" action="/api/autorun" style="margin-top:12px;" data-loading-label="Running the full workflow..." data-loading-phase="autorun">
           <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
           <input type="hidden" name="return_to" value="verdict">
-          <button>Local Fallback: Auto Run</button>
+          <button>Console Rehearsal: Run Full Flow</button>
         </form>
-        <p class="muted" style="margin-top:10px;">Use Auto Run only as a local fallback. The primary demo path should start from OpenClaw chat.</p>
+        <p class="muted" style="margin-top:10px;">Use console rehearsal only as a local backup. The primary demo path should start from OpenClaw chat.</p>
         <div style="margin-top:16px;">{flags}</div>
       </div>
       <div class="card">
@@ -671,11 +743,11 @@ def _render_decision_view(plan: dict | None, active_scenario: dict) -> str:
         """
 
     shortlist = "".join(
-        f"<tr><td><code>{escape(action['id'])}</code></td><td>{escape(action['category'])}</td><td>{escape(action['description'])}</td></tr>"
+        f"<tr><td><strong>{escape(_action_label(action['id']))}</strong></td><td><code>{escape(action['id'])}</code></td><td>{escape(action['category'])}</td><td>{escape(action['description'])}</td></tr>"
         for action in plan.get("candidate_actions", [])
     )
     rankings = "".join(
-        f"<tr><td>{item['rank']}</td><td><code>{escape(item['id'])}</code></td><td>{item['confidence']:.2f}</td><td>{escape(item.get('reasoning') or item.get('rationale') or '')}</td></tr>"
+        f"<tr><td>{item['rank']}</td><td><strong>{escape(_action_label(item['id']))}</strong></td><td><code>{escape(item['id'])}</code></td><td>{item['confidence']:.2f}</td><td>{escape(item.get('reasoning') or item.get('rationale') or '')}</td></tr>"
         for item in plan.get("stratus_ranking", [])
     )
     rationale = "".join(
@@ -689,13 +761,13 @@ def _render_decision_view(plan: dict | None, active_scenario: dict) -> str:
         <h2>Decision View</h2>
         <p class="muted">Scenario-aware shortlist generation followed by Stratus guardrail ranking.</p>
         <div class="action-grid" style="margin-top:16px;">
-          <div class="mini">
-            <div class="muted">Expected first action</div>
-            <div class="kpi" style="font-size:1.4rem;">{escape(active_scenario['expected_first_action'])}</div>
+            <div class="mini">
+              <div class="muted">Expected first action</div>
+            <div class="kpi" style="font-size:1.4rem;">{escape(_action_label(active_scenario['expected_first_action']))}</div>
           </div>
           <div class="mini">
             <div class="muted">Guardrail choice</div>
-            <div class="kpi" style="font-size:1.4rem;">{escape(chosen)}</div>
+            <div class="kpi" style="font-size:1.4rem;">{escape(_action_label(chosen))}</div>
           </div>
         </div>
         <div style="margin-top:18px;">
@@ -711,7 +783,7 @@ def _render_decision_view(plan: dict | None, active_scenario: dict) -> str:
       </div>
       <div class="card">
         <h2>Guardrail Notes</h2>
-        <p class="muted">This is the Stratus touchpoint surfaced into the operator-facing product.</p>
+        <p class="muted">This is the Stratus touchpoint rendered into the operator-facing product.</p>
         <ul class="list">{notes or '<li>No guardrail notes were recorded.</li>'}</ul>
       </div>
     </div>
@@ -719,14 +791,14 @@ def _render_decision_view(plan: dict | None, active_scenario: dict) -> str:
       <div class="card">
         <h3>Scenario Shortlist</h3>
         <table class="table">
-          <thead><tr><th>Action</th><th>Category</th><th>Description</th></tr></thead>
+          <thead><tr><th>Action</th><th>ID</th><th>Category</th><th>Description</th></tr></thead>
           <tbody>{shortlist}</tbody>
         </table>
       </div>
       <div class="card">
         <h3>Stratus Ranking</h3>
         <table class="table">
-          <thead><tr><th>Rank</th><th>Action</th><th>Conf.</th><th>Why</th></tr></thead>
+          <thead><tr><th>Rank</th><th>Action</th><th>ID</th><th>Conf.</th><th>Why</th></tr></thead>
           <tbody>{rankings}</tbody>
         </table>
       </div>
@@ -779,40 +851,40 @@ def _render_execution_view(
     <div class="grid two">
       <div class="card">
         <h2>Execution View</h2>
-        <p class="muted">This is Hansen's shell for connecting plan, browser execution, verify, and verdict.</p>
+        <p class="muted">This is Hansen's shell for connecting planning, browser execution, verification, and final verdict.</p>
         <div class="timeline">{timeline}</div>
         <div style="margin-top:18px;">
           <form class="inline" method="post" action="/api/plan" data-loading-label="Planning with Stratus..." data-loading-phase="plan">
             <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
             <input type="hidden" name="return_to" value="execution">
-            <button class="primary">Plan from Latest Alert</button>
-            <a class="button" href="/openclaw-execution">Open Dedicated Execution Surface</a>
+            <button class="primary">Refresh Plan from Latest Alert</button>
+            <a class="button" href="/openclaw-execution">Open OpenClaw Execution Surface</a>
           </form>
         </div>
         <div style="margin-top:14px;">
           <form class="inline" method="post" action="/api/execute-planned" data-loading-label="Applying planned remediation..." data-loading-phase="execute">
             <input type="hidden" name="return_to" value="execution">
-            <button class="primary">Apply Planned Action Here</button>
+            <button class="primary">Apply Planned Remediation Here</button>
           </form>
         </div>
         <div style="margin-top:10px;">
           <form class="inline" method="post" action="/api/verify" data-loading-label="Verifying outcome..." data-loading-phase="verify">
             <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
             <input type="hidden" name="return_to" value="verdict">
-            <button>Run Verify After Soak</button>
+            <button>Verify After Soak</button>
           </form>
         </div>
         <div style="margin-top:10px;">
           <form class="inline" method="post" action="/api/autorun" data-loading-label="Running the full workflow..." data-loading-phase="autorun">
             <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
             <input type="hidden" name="return_to" value="verdict">
-            <button>Local Fallback: Auto Run</button>
+            <button>Console Rehearsal: Run Full Flow</button>
           </form>
         </div>
       </div>
       <div class="card">
         <h2>Sequence Preview</h2>
-        <p class="muted">Present the one-action workflow cleanly now; accept future multi-step sequences without redesigning the shell.</p>
+        <p class="muted">Present the one-action workflow cleanly now while leaving room for optional multi-step sequencing later.</p>
         <table class="table">
           <thead><tr><th>Step</th><th>Planned sequence</th></tr></thead>
           <tbody>{sequence_preview}</tbody>
@@ -831,10 +903,10 @@ def _render_execution_view(
       <div class="card">
         <h3>Operator Actions</h3>
         <ul class="list">
-          <li>Chosen action: <code>{escape(str(chosen or 'n/a'))}</code>{f" ({escape(chosen_label)})" if chosen_label else ""}</li>
+          <li>Chosen remediation: <strong>{escape(_action_label(chosen))}</strong>{f" <code>{escape(str(chosen))}</code>" if chosen else ""}</li>
           <li>Plan from the console or by command line.</li>
           <li>OpenClaw execution: <a href="/openclaw-execution">/openclaw-execution</a></li>
-          <li>Feature flags: <a href="{urls['feature_flags']}">{urls['feature_flags']}</a></li>
+          <li>Manual ops controls: <a href="{urls['feature_flags']}">{urls['feature_flags']}</a></li>
           <li>Verify waits one scrape interval before writing the verdict.</li>
           <li>Current scenario: <strong>{escape(active_scenario['label'])}</strong></li>
         </ul>
@@ -899,13 +971,13 @@ def _render_verdict_view(
         <p class="muted">This view turns Stratus output and post-action evidence into the judge-facing story.</p>
         {alignment_note}
         <ul class="list">
-          <li>Guardrail choice: <code>{escape(str(planned_action))}</code></li>
-          <li>Executed action: <code>{escape(str(executed_action))}</code></li>
-          <li>Rejected dangerous reflex: <code>{escape(rejected_action)}</code></li>
+          <li>Guardrail choice: <strong>{escape(_action_label(planned_action))}</strong> <code>{escape(str(planned_action))}</code></li>
+          <li>Executed action: <strong>{escape(_action_label(executed_action))}</strong> <code>{escape(str(executed_action))}</code></li>
+          <li>Rejected dangerous reflex: <strong>{escape(_action_label(rejected_action))}</strong> <code>{escape(rejected_action)}</code></li>
           <li>Why the safer action won: {escape(chosen_rationale)}</li>
           <li>Before latency: <code>{escape(str(before_metrics.get('latency_p95_ms', 'n/a')))}</code></li>
           <li>After latency: <code>{escape(str(actual.get('latency_p95_ms', 'n/a')))}</code></li>
-          <li>Queue abandonment now: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
+          <li>Scheduling abandonment now: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
           <li>Case writeback status: <code>planned for Evaluation Agent</code></li>
         </ul>
         <form class="inline" method="post" action="/api/verify" style="margin-top:18px;" data-loading-label="Refreshing verdict..." data-loading-phase="verify">
@@ -942,6 +1014,365 @@ def _render_verdict_view(
     """
 
 
+def _render_operations_dashboard(
+    state: dict,
+    technical_metrics: dict,
+    business_metrics: dict,
+    active_scenario: dict,
+    scenarios: list[dict],
+    plan: dict | None,
+    report: dict | None,
+) -> str:
+    scenario_options = "".join(
+        f'<option value="{escape(item["id"])}"{" selected" if item["id"] == active_scenario["id"] else ""}>{escape(item["label"])}</option>'
+        for item in scenarios
+    )
+    chosen_action = (plan or {}).get("best_action", {}).get("id")
+    executed_action = (report or {}).get("executed_action", {}).get("id") or state.get("last_action")
+    system_state = _ops_system_state(technical_metrics, business_metrics)
+    demand_index = min(
+        100,
+        int(45 + business_metrics["retry_amplification_factor"] * 10 + business_metrics["queue_abandonment_rate"] * 90),
+    )
+    backlog_index = min(
+        100,
+        int(business_metrics["queue_abandonment_rate"] * 120 + business_metrics["seat_hold_utilization"] * 48),
+    )
+    provider_grid = _render_provider_grid(
+        business_metrics["seat_hold_utilization"],
+        business_metrics["seat_hold_expiration_rate"],
+        state.get("payment_feature_disabled", False),
+    )
+    status_cards = "".join(
+        [
+            _ops_metric_card(
+                "Portal demand",
+                f"{demand_index} / 100",
+                _ops_tone(demand_index / 100, 0.55, 0.78),
+                "Color-coded from surge pressure and retry amplification.",
+            ),
+            _ops_metric_card(
+                "Eligibility health",
+                _eligibility_status(state),
+                "critical" if state["payment_service_unreachable"] and not state["payment_circuit_breaker_enabled"] else "watch" if state["payment_circuit_breaker_enabled"] else "stable",
+                "Shows whether verification is degraded, protected, or recovered.",
+            ),
+            _ops_metric_card(
+                "Booking completion",
+                f"{business_metrics['payment_success_rate']:.0%}",
+                _ops_tone(1 - business_metrics["payment_success_rate"], 0.18, 0.28, inverse=True),
+                "Tracks how many patient booking attempts successfully complete.",
+            ),
+            _ops_metric_card(
+                "Scheduling abandonment",
+                f"{business_metrics['queue_abandonment_rate']:.0%}",
+                _ops_tone(business_metrics["queue_abandonment_rate"], 0.14, 0.24),
+                "Measures patient drop-off during active access pressure.",
+            ),
+            _ops_metric_card(
+                "Slot hold pressure",
+                f"{business_metrics['seat_hold_utilization']:.0%}",
+                _ops_tone(business_metrics["seat_hold_utilization"], 0.70, 0.84),
+                "High values mean inventory is getting trapped in pending holds.",
+            ),
+            _ops_metric_card(
+                "Retry amplification",
+                f"{business_metrics['retry_amplification_factor']}x",
+                _ops_tone((business_metrics["retry_amplification_factor"] - 1.0) / 4.0, 0.35, 0.62),
+                "Shows how strongly the system is self-amplifying load.",
+            ),
+        ]
+    )
+    flow_bars = "".join(
+        [
+            _ops_progress_bar("Patient portal surge", demand_index / 100, _ops_tone(demand_index / 100, 0.55, 0.78)),
+            _ops_progress_bar("Eligibility delay", min(1.0, technical_metrics["latency_p95_ms"] / 2600), _ops_tone(technical_metrics["latency_p95_ms"] / 2600, 0.58, 0.82)),
+            _ops_progress_bar("Backlog pressure", backlog_index / 100, _ops_tone(backlog_index / 100, 0.48, 0.72)),
+            _ops_progress_bar("Booking recovery", business_metrics["payment_success_rate"], _ops_tone(1 - business_metrics["payment_success_rate"], 0.18, 0.28, inverse=True)),
+        ]
+    )
+    incidents = _ops_incident_feed(state, technical_metrics, business_metrics, active_scenario)
+    recommendation = ACTION_SUMMARIES.get(chosen_action or "", "Generate a guardrail plan to surface the recommended remediation.")
+    verdict_summary = (
+        f"Last verified action: {_action_label(executed_action)}"
+        if executed_action
+        else "No remediation has been executed yet."
+    )
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Access Operations Board</title>
+  <style>
+    :root {{
+      --bg:#f3f7f8;
+      --ink:#10222d;
+      --muted:#5f6e75;
+      --line:#d9e5e8;
+      --panel:#ffffff;
+      --mint:#d8f0ea;
+      --mint-ink:#0c6c57;
+      --amber:#f6e3c2;
+      --amber-ink:#9a5a14;
+      --coral:#f7d8d6;
+      --coral-ink:#a23f35;
+      --slate:#e8eff2;
+      --teal:#0f7a78;
+      --blue:#1f5e96;
+      --navy:#13354a;
+      --shadow:0 22px 56px rgba(16,34,45,0.08);
+    }}
+    * {{ box-sizing:border-box; }}
+    body {{
+      margin:0;
+      color:var(--ink);
+      font-family:"Avenir Next","Helvetica Neue",sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(31,94,150,0.08), transparent 28%),
+        linear-gradient(180deg, #fbfdff 0%, var(--bg) 100%);
+    }}
+    .wrap {{ max-width:1340px; margin:0 auto; padding:28px 28px 48px; }}
+    .hero {{
+      background:linear-gradient(135deg, rgba(19,53,74,0.97), rgba(15,122,120,0.94));
+      color:#f5fbfc;
+      border-radius:28px;
+      padding:26px 28px;
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
+    }}
+    .hero:after {{
+      content:"";
+      position:absolute;
+      inset:auto -100px -120px auto;
+      width:280px;
+      height:280px;
+      border-radius:999px;
+      background:radial-gradient(circle, rgba(255,255,255,0.12), transparent 62%);
+    }}
+    .eyebrow {{ letter-spacing:0.14em; text-transform:uppercase; font-size:0.78rem; opacity:0.82; }}
+    .hero h1 {{ margin:8px 0 8px; font-size:2.5rem; line-height:1.02; font-weight:700; }}
+    .hero p {{ margin:0; max-width:840px; color:rgba(245,251,252,0.84); font-size:1.02rem; }}
+    .hero-top {{ display:flex; justify-content:space-between; gap:22px; align-items:flex-start; }}
+    .hero-links {{ display:flex; gap:10px; flex-wrap:wrap; }}
+    .hero-links a {{
+      text-decoration:none; color:#f5fbfc; border:1px solid rgba(255,255,255,0.18);
+      background:rgba(255,255,255,0.08); padding:10px 14px; border-radius:999px;
+    }}
+    .hero-pills {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }}
+    .pill {{
+      display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px;
+      background:rgba(255,255,255,0.10); color:#f6fbfc; font-size:0.94rem;
+    }}
+    .layout {{ display:grid; grid-template-columns:1.48fr 0.92fr; gap:18px; margin-top:18px; }}
+    .stack {{ display:grid; gap:18px; }}
+    .card {{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:22px;
+      box-shadow:var(--shadow);
+    }}
+    .card h2, .card h3 {{ margin-top:0; }}
+    .muted {{ color:var(--muted); }}
+    .kpi-grid {{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }}
+    .kpi {{
+      border:1px solid var(--line); border-radius:20px; padding:16px;
+      background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    }}
+    .kpi .label {{ color:var(--muted); font-size:0.92rem; }}
+    .kpi .value {{ margin-top:8px; font-size:1.8rem; font-weight:700; }}
+    .kpi .note {{ margin-top:8px; color:var(--muted); font-size:0.88rem; line-height:1.45; }}
+    .tone-stable {{ background:linear-gradient(180deg, #ffffff 0%, #f3fbf8 100%); }}
+    .tone-watch {{ background:linear-gradient(180deg, #ffffff 0%, #fff8ef 100%); }}
+    .tone-critical {{ background:linear-gradient(180deg, #ffffff 0%, #fff3f2 100%); }}
+    .badge {{
+      display:inline-flex; align-items:center; gap:8px; border-radius:999px; padding:8px 12px; font-size:0.88rem;
+      font-weight:600;
+    }}
+    .badge.stable {{ background:var(--mint); color:var(--mint-ink); }}
+    .badge.watch {{ background:var(--amber); color:var(--amber-ink); }}
+    .badge.critical {{ background:var(--coral); color:var(--coral-ink); }}
+    .section-head {{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:14px; }}
+    .flow-grid {{ display:grid; gap:12px; }}
+    .flow-row {{ display:grid; grid-template-columns:180px 1fr 70px; gap:12px; align-items:center; }}
+    .track {{ height:12px; border-radius:999px; background:#e8eff2; overflow:hidden; }}
+    .bar {{ height:100%; border-radius:999px; }}
+    .bar.stable {{ background:linear-gradient(90deg, #21a189, #5dc7ac); }}
+    .bar.watch {{ background:linear-gradient(90deg, #d48f30, #f0bf69); }}
+    .bar.critical {{ background:linear-gradient(90deg, #ca5a55, #ef9a8c); }}
+    .ops-grid {{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:16px; }}
+    .schedule-grid {{ display:grid; gap:10px; }}
+    .schedule-header, .schedule-row {{ display:grid; grid-template-columns:190px repeat(5, 1fr); gap:10px; align-items:center; }}
+    .schedule-header div {{ color:var(--muted); font-size:0.9rem; }}
+    .schedule-service {{ font-weight:600; color:var(--navy); }}
+    .slot {{
+      min-height:52px; border-radius:16px; padding:10px 10px; border:1px solid var(--line);
+      display:flex; flex-direction:column; justify-content:center; gap:4px;
+    }}
+    .slot strong {{ font-size:0.9rem; }}
+    .slot span {{ font-size:0.82rem; color:var(--muted); }}
+    .slot.available {{ background:#f1faf8; }}
+    .slot.at-risk {{ background:#fff7ec; }}
+    .slot.held {{ background:#fff2ef; }}
+    .slot.manual {{ background:#eef3f7; }}
+    .feed {{ display:grid; gap:10px; }}
+    .feed-item {{
+      border:1px solid var(--line); border-radius:18px; padding:14px 16px; background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    }}
+    .feed-item strong {{ display:block; margin-bottom:4px; }}
+    .side-stack {{ display:grid; gap:14px; }}
+    .recommend {{
+      background:linear-gradient(180deg, rgba(15,122,120,0.07) 0%, rgba(31,94,150,0.04) 100%);
+      border:1px solid #cfe1e7;
+      border-radius:20px;
+      padding:18px;
+    }}
+    form.inline {{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }}
+    select, button {{
+      font:inherit; border-radius:12px; padding:10px 12px; border:1px solid var(--line); background:white;
+    }}
+    button.primary {{ background:var(--teal); color:white; border-color:var(--teal); cursor:pointer; }}
+    .link-row {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }}
+    .link-row a {{
+      text-decoration:none; color:var(--blue); padding:10px 12px; border-radius:12px; background:#edf5fb; border:1px solid #d7e8f7;
+    }}
+    .summary-list {{ margin:0; padding-left:18px; line-height:1.7; }}
+    @media (max-width: 1080px) {{
+      .layout, .ops-grid, .kpi-grid {{ grid-template-columns:1fr; }}
+      .hero-top {{ display:grid; }}
+      .schedule-header, .schedule-row {{ grid-template-columns:1fr; }}
+      .flow-row {{ grid-template-columns:1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow">Regional Virtual Care Access Operations</div>
+          <h1>Telehealth Scheduling Stability Board</h1>
+          <p>A live operational view of patient-portal demand, scheduling throughput, slot inventory, and eligibility verification health. Use this page to make the incident feel like a real access system under stress; use the Guardrail Console separately for OpenClaw and decision execution.</p>
+        </div>
+        <div class="hero-links">
+          <a href="/">Guardrail Console</a>
+          <a href="/openclaw-execution">OpenClaw Execution</a>
+          <a href="/feature-flags">Manual Ops Controls</a>
+        </div>
+      </div>
+      <div class="hero-pills">
+        <span class="pill">Scenario: {escape(active_scenario['label'])}</span>
+        <span class="pill">System state: {escape(system_state.title())}</span>
+        <span class="pill">Recommended remediation: {escape(_action_label(chosen_action)) if chosen_action else 'Generate guardrail plan'}</span>
+        <span class="pill">Last executed: {escape(_action_label(executed_action))}</span>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div class="stack">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Access Health Overview</h2>
+              <p class="muted">Color-coded operational indicators for demand, scheduling quality, and downstream verification stability.</p>
+            </div>
+            <span class="badge {escape(system_state)}">{escape(system_state.title())} access posture</span>
+          </div>
+          <div class="kpi-grid">
+            {status_cards}
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Flow Pressure</h2>
+              <p class="muted">Live-looking pressure bars to make surge, backlog, and recovery visually obvious during the demo.</p>
+            </div>
+          </div>
+          <div class="flow-grid">
+            {flow_bars}
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Scheduling Board</h2>
+              <p class="muted">A realistic scheduling-grid view of virtual-care inventory. Warm colors indicate rising hold pressure and patient-access risk.</p>
+            </div>
+            <div class="badge {escape(_ops_tone(business_metrics['seat_hold_utilization'], 0.70, 0.84))}">Slot pressure {business_metrics['seat_hold_utilization']:.0%}</div>
+          </div>
+          {provider_grid}
+        </section>
+      </div>
+
+      <div class="side-stack">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Scenario Control</h2>
+              <p class="muted">Switch the active healthcare-access incident without changing the underlying workflow mechanics.</p>
+            </div>
+          </div>
+          <form class="inline" method="post" action="/api/scenario">
+            <input type="hidden" name="return_to" value="operations">
+            <select id="scenario_id" name="scenario_id">{scenario_options}</select>
+            <button class="primary">Apply Scenario</button>
+            <button formaction="/api/reset" name="return_to" value="operations">Reset Scenario</button>
+          </form>
+          <div class="link-row">
+            <a href="/">Open Guardrail Console</a>
+            <a href="/openclaw-execution">Open Execution Surface</a>
+          </div>
+        </section>
+
+        <section class="recommend">
+          <div class="section-head">
+            <div>
+              <h2 style="margin-bottom:6px;">Guardrail Recommendation</h2>
+              <p class="muted" style="margin:0;">This keeps the business board and the OpenClaw control plane tied together.</p>
+            </div>
+            <span class="badge {escape(_ops_tone((technical_metrics['latency_p95_ms'] - 900) / 1400, 0.45, 0.68))}">Stratus-backed</span>
+          </div>
+          <div style="font-size:1.5rem; font-weight:700; color:var(--navy);">{escape(_action_label(chosen_action)) if chosen_action else 'Plan not generated yet'}</div>
+          <p class="muted" style="margin:10px 0 0;">{escape(recommendation)}</p>
+          <ul class="summary-list" style="margin-top:14px;">
+            <li>Dangerous reflex: <strong>{escape(_action_label('restart_payment'))}</strong></li>
+            <li>{escape(verdict_summary)}</li>
+            <li>Primary operator surface remains the Guardrail Console.</li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Incident Feed</h2>
+              <p class="muted">A professional incident narrative for judges and operators.</p>
+            </div>
+          </div>
+          <div class="feed">
+            {incidents}
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+def _action_label(action_id: str | None) -> str:
+    if not action_id:
+        return "none"
+    return ACTION_LABELS.get(action_id, action_id)
+
+
+def _flag_label(flag_name: str) -> str:
+    return FLAG_LABELS.get(flag_name, flag_name)
+
+
 def _metric_cards(items: list[tuple[str, str]]) -> str:
     return "".join(
         f"""
@@ -951,6 +1382,137 @@ def _metric_cards(items: list[tuple[str, str]]) -> str:
         </div>
         """
         for label, value in items
+    )
+
+
+def _ops_tone(value: float, watch: float, critical: float, inverse: bool = False) -> str:
+    score = 1 - value if inverse else value
+    if score >= critical:
+        return "critical"
+    if score >= watch:
+        return "watch"
+    return "stable"
+
+
+def _ops_system_state(technical_metrics: dict, business_metrics: dict) -> str:
+    risk_score = max(
+        (technical_metrics["latency_p95_ms"] - 900) / 1400,
+        business_metrics["queue_abandonment_rate"] / 0.30,
+        (business_metrics["retry_amplification_factor"] - 1.0) / 2.5,
+    )
+    return _ops_tone(risk_score, 0.55, 0.82)
+
+
+def _eligibility_status(state: dict) -> str:
+    if state.get("payment_feature_disabled"):
+        return "Online scheduling disabled"
+    if state.get("payment_service_unreachable") and state.get("payment_circuit_breaker_enabled"):
+        return "Protected by circuit breaker"
+    if state.get("payment_service_unreachable"):
+        return "Degraded"
+    return "Healthy"
+
+
+def _ops_metric_card(label: str, value: str, tone: str, note: str) -> str:
+    return f"""
+    <div class="kpi tone-{tone}">
+      <div class="label">{escape(label)}</div>
+      <div class="value">{escape(value)}</div>
+      <div class="note">{escape(note)}</div>
+    </div>
+    """
+
+
+def _ops_progress_bar(label: str, value: float, tone: str) -> str:
+    pct = max(6, min(100, int(value * 100)))
+    return f"""
+    <div class="flow-row">
+      <div>{escape(label)}</div>
+      <div class="track"><div class="bar {tone}" style="width:{pct}%"></div></div>
+      <div>{pct}%</div>
+    </div>
+    """
+
+
+def _render_provider_grid(slot_hold_utilization: float, slot_hold_expiration: float, online_disabled: bool) -> str:
+    care_lines = [
+        ("Primary Care Virtual", "08:30", "10:00", "11:30", "14:00", "16:00"),
+        ("Behavioral Health", "09:00", "10:30", "13:00", "15:30", "18:00"),
+        ("Cardiology Follow-up", "08:45", "11:15", "12:45", "15:15", "17:30"),
+        ("Urgent Telehealth", "Now", "09:30", "12:00", "14:30", "17:00"),
+    ]
+    pressure = slot_hold_utilization + slot_hold_expiration * 0.35
+    header = """
+    <div class="schedule-header">
+      <div>Care line</div>
+      <div>Window 1</div>
+      <div>Window 2</div>
+      <div>Window 3</div>
+      <div>Window 4</div>
+      <div>Window 5</div>
+    </div>
+    """
+    rows = []
+    for idx, row in enumerate(care_lines):
+        name, *times = row
+        cells = []
+        for t_index, time_label in enumerate(times):
+            phase = (pressure * 10 + idx + t_index) % 5
+            if online_disabled:
+                cls = "manual"
+                title = "Manual fallback"
+                sub = "Routed to staff"
+            elif phase >= 4.1 or pressure > 1.0:
+                cls = "held"
+                title = "At-risk hold"
+                sub = "Awaiting verification"
+            elif phase >= 2.4 or pressure > 0.82:
+                cls = "at-risk"
+                title = "Limited capacity"
+                sub = "Longer confirmation path"
+            else:
+                cls = "available"
+                title = "Bookable"
+                sub = "Normal access window"
+            cells.append(f'<div class="slot {cls}"><strong>{escape(title)}</strong><span>{escape(time_label)} • {escape(sub)}</span></div>')
+        rows.append(
+            '<div class="schedule-row">'
+            f'<div class="schedule-service">{escape(name)}</div>'
+            + "".join(cells)
+            + '</div>'
+        )
+    return f'<div class="schedule-grid">{header}{"".join(rows)}</div>'
+
+
+def _ops_incident_feed(
+    state: dict,
+    technical_metrics: dict,
+    business_metrics: dict,
+    active_scenario: dict,
+) -> str:
+    items = [
+        (
+            active_scenario["headline"],
+            active_scenario["story"],
+        ),
+        (
+            "Portal and scheduling pressure",
+            f"Scheduling latency is {technical_metrics['latency_p95_ms']} ms with retry amplification at {business_metrics['retry_amplification_factor']}x.",
+        ),
+        (
+            "Patient-access impact",
+            f"Booking completion is {business_metrics['payment_success_rate']:.0%} and abandonment is {business_metrics['queue_abandonment_rate']:.0%}.",
+        ),
+        (
+            "Operational posture",
+            "Online scheduling is in staffed fallback mode."
+            if state.get("payment_feature_disabled")
+            else "Digital scheduling remains online while the guardrail contains blast radius.",
+        ),
+    ]
+    return "".join(
+        f'<div class="feed-item"><strong>{escape(title)}</strong><span class="muted">{escape(body)}</span></div>'
+        for title, body in items
     )
 
 
@@ -1023,7 +1585,7 @@ def _render_openclaw_execution_surface(
         <div class="card">
           <h2 style="margin-top:0;">Final Verdict</h2>
           <ul>
-            <li>Executed action: <code>{escape(str(report.get('executed_action', {}).get('id', chosen_action)))}</code></li>
+            <li>Executed remediation: <strong>{escape(_action_label(report.get('executed_action', {}).get('id', chosen_action)))}</strong></li>
             <li>After latency: <code>{escape(str(report_actual.get('latency_p95_ms', technical_metrics['latency_p95_ms'])))}</code></li>
             <li>Retry rate: <code>{escape(str(report_actual.get('retry_rate', technical_metrics['retry_rate'])))}</code></li>
             <li>Risk level: <code>{escape(str(report_actual.get('risk_level', 'n/a')))}</code></li>
@@ -1047,9 +1609,9 @@ def _render_openclaw_execution_surface(
         <div class="card">
           <h2 style="margin-top:0;">Shared State Updated</h2>
           <ul>
-            <li>Last action: <code>{escape(str(state.get('last_action') or 'none'))}</code></li>
+            <li>Last action: <strong>{escape(_action_label(state.get('last_action')))}</strong> <code>{escape(str(state.get('last_action') or 'none'))}</code></li>
             <li>Retry factor now: <code>{business_metrics['retry_amplification_factor']}x</code></li>
-            <li>Payment success now: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
+            <li>Booking completion now: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
           </ul>
           <form method="post" action="/api/verify">
             <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
@@ -1089,7 +1651,7 @@ def _render_openclaw_execution_surface(
       <div>
         <div class="eyebrow">OpenClaw Browser Path</div>
         <h1 style="margin:10px 0 6px;">Dedicated Execution Surface</h1>
-        <p style="margin:0; color:var(--muted); max-width:760px;">This page is optimized for the managed browser. Open here, inspect the before-state, click one stable button, then run verify and reopen this page for the verdict.</p>
+        <p style="margin:0; color:var(--muted); max-width:760px;">This page is optimized for the managed browser. Open here, inspect the before-state, click one stable remediation button, then run verify and reopen this page for the verdict.</p>
       </div>
       <div><a href="/">Return to Guardrail Console</a></div>
     </div>
@@ -1098,29 +1660,29 @@ def _render_openclaw_execution_surface(
         <h2 style="margin-top:0;">Before-Action Incident Card</h2>
         <p class="callout"><strong>{escape(active_scenario['label'])}</strong><br>{escape(active_scenario['headline'])}</p>
         <ul>
-          <li>Guardrail choice: <code>{escape(chosen_action)}</code></li>
-          <li>Execution label: <code>{escape(chosen_label)}</code></li>
-          <li>Dangerous reflex: <code>{escape(rejected_action)}</code></li>
+          <li>Guardrail choice: <strong>{escape(_action_label(chosen_action))}</strong></li>
+          <li>Operator action label: <code>{escape(chosen_label)}</code></li>
+          <li>Dangerous reflex: <strong>{escape(_action_label(rejected_action))}</strong></li>
           <li>Why this action won: {escape(chosen_reason)}</li>
         </ul>
         <div class="metric-grid">
-          <div class="metric"><div class="label">Latency P95</div><div class="value">{escape(str(before_metrics.get('latency_p95_ms', 'n/a')))}</div></div>
-          <div class="metric"><div class="label">Error rate</div><div class="value">{escape(str(before_metrics.get('error_rate', 'n/a')))}</div></div>
-          <div class="metric"><div class="label">Retry rate</div><div class="value">{escape(str(before_metrics.get('retry_rate', 'n/a')))}</div></div>
+          <div class="metric"><div class="label">Scheduling latency P95</div><div class="value">{escape(str(before_metrics.get('latency_p95_ms', 'n/a')))}</div></div>
+          <div class="metric"><div class="label">Scheduling error rate</div><div class="value">{escape(str(before_metrics.get('error_rate', 'n/a')))}</div></div>
+          <div class="metric"><div class="label">Booking retry rate</div><div class="value">{escape(str(before_metrics.get('retry_rate', 'n/a')))}</div></div>
         </div>
         <form method="post" action="/api/execute-planned" style="margin-top:18px;">
           <input type="hidden" name="return_to" value="/openclaw-execution?stage=after-action">
           <button id="openclaw-demo-run">Execute Planned Action: {escape(chosen_label)}</button>
         </form>
-        <p style="margin-top:12px; color:var(--muted);">Manual fallback surface: <a href="/feature-flags">/feature-flags</a></p>
+        <p style="margin-top:12px; color:var(--muted);">Manual ops controls: <a href="/feature-flags">/feature-flags</a></p>
       </div>
       <div class="card">
         <h2 style="margin-top:0;">Current Shared State</h2>
         <ul>
-          <li>Last action: <code>{escape(str(state.get('last_action') or 'none'))}</code></li>
+          <li>Last action: <strong>{escape(_action_label(state.get('last_action')))}</strong></li>
           <li>Retry factor: <code>{business_metrics['retry_amplification_factor']}x</code></li>
-          <li>Payment success: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
-          <li>Queue abandonment: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
+          <li>Booking completion: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
+          <li>Scheduling abandonment: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
         </ul>
         <strong>Guardrail notes</strong>
         <ul>{notes or '<li>No notes recorded yet.</li>'}</ul>
@@ -1156,7 +1718,7 @@ def _workflow_statuses(
         {
             "step": "3",
             "label": "Execute",
-            "detail": f"Chosen action {chosen_action} has been applied." if chosen_action and last_action == chosen_action else "Apply the chosen remediation in the feature-flag UI.",
+            "detail": f"Chosen action {_action_label(chosen_action)} has been applied." if chosen_action and last_action == chosen_action else "Apply the chosen remediation in the browser execution surface.",
             "status": "done" if chosen_action and last_action == chosen_action else ("active" if playbook else "pending"),
         },
         {
@@ -1238,10 +1800,15 @@ def _clear_report_artifacts() -> None:
 
 def _action_form(action_id: str, label: str) -> str:
     css = ' class="danger"' if action_id == "disable_flag" else ""
-    return f"""<form method="post" action="/api/execute" id="form-{action_id}" data-action-id="{action_id}"{css} style="margin-bottom:10px;">
+    summary = ACTION_SUMMARIES.get(action_id, "")
+    return f"""<form method="post" action="/api/execute" id="form-{action_id}" data-action-id="{action_id}"{css}>
       <input type="hidden" name="action_id" value="{action_id}">
       <input type="hidden" name="return_to" value="feature-flags">
-      <button id="action-{action_id}" data-action-id="{action_id}" data-action-label="{label}">{label}</button>
+      <div class="action-card">
+        <strong>{escape(label)}</strong>
+        <div class="action-meta">{escape(summary)}</div>
+        <button id="action-{action_id}" data-action-id="{action_id}" data-action-label="{label}">Apply Remediation</button>
+      </div>
     </form>"""
 
 
@@ -1252,7 +1819,7 @@ def _toggle_form(flag_name: str, enabled: bool) -> str:
       <input type="hidden" name="flag_name" value="{flag_name}">
       <input type="hidden" name="enabled" value="{next_value}">
       <input type="hidden" name="return_to" value="feature-flags">
-      <button>{label} {flag_name}</button>
+      <button>{label} {_flag_label(flag_name)}</button>
     </form>"""
 
 
@@ -1261,6 +1828,8 @@ def _return_path(return_to: str) -> str:
         return return_to
     if return_to == "feature-flags":
         return "/feature-flags"
+    if return_to == "operations":
+        return "/operations"
     if return_to in VIEW_ORDER:
         return f"/?view={return_to}"
     return "/"

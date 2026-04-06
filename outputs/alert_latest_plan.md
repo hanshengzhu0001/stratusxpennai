@@ -2,7 +2,7 @@
 
 ## Guardrail Question
 
-Given a payment-related latency incident with retry amplification, which of these fixes is safest globally?
+Given a healthcare scheduling latency incident with retry amplification, which of these fixes is safest globally?
 
 ## Workflow
 
@@ -13,12 +13,12 @@ Given a payment-related latency incident with retry amplification, which of thes
 ## Incident
 
 - Summary: Retry pressure above baseline
-- Services: frontend, checkout, payment
+- Services: portal, scheduling, eligibility
 - Pattern matches: retry_amplification, payment_degradation, high_checkout_latency
 
 ## Action Strategy
 
-- Planner strategy: `broader_retail_action_library -> scenario_shortlist -> stratus_ranking`
+- Planner strategy: `broader_healthcare_access_action_library -> scenario_shortlist -> stratus_ranking`
 - Library size: `12`
 - Shortlist size: `6`
 
@@ -39,20 +39,20 @@ Given a payment-related latency incident with retry amplification, which of thes
 
 ## Candidate Actions
 
-- `rate_limit_retries`: Rate-limit checkout retries to break retry amplification.
-- `enable_payment_circuit_breaker`: Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.
-- `increase_retry_backoff`: Increase retry backoff so checkout stops hammering payment during partial degradation.
-- `restart_payment`: Restart payment pods to clear local state after backlog is reduced.
-- `shift_traffic`: Shift a slice of checkout traffic to the secondary region.
-- `disable_flag`: Disable the payment feature flag as a last-resort kill switch.
+- `rate_limit_retries`: Throttle appointment-booking retries to break retry amplification.
+- `enable_payment_circuit_breaker`: Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.
+- `increase_retry_backoff`: Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.
+- `restart_payment`: Restart eligibility workers after backlog pressure is reduced.
+- `shift_traffic`: Shift a slice of patient-portal scheduling traffic to the secondary region.
+- `disable_flag`: Disable online self-scheduling as a last-resort kill switch and route patients to staffed fallback.
 
 ## Stratus Ranking
 
-- Rank 1: `enable_payment_circuit_breaker` (0.94)
-- Rank 2: `increase_retry_backoff` (0.88)
-- Rank 3: `rate_limit_retries` (0.82)
-- Rank 4: `restart_payment` (0.65)
-- Rank 5: `shift_traffic` (0.58)
+- Rank 1: `enable_payment_circuit_breaker` (0.88)
+- Rank 2: `rate_limit_retries` (0.82)
+- Rank 3: `increase_retry_backoff` (0.79)
+- Rank 4: `shift_traffic` (0.65)
+- Rank 5: `restart_payment` (0.58)
 - Rank 6: `disable_flag` (0.45)
 
 ## Browser Workflow
@@ -73,7 +73,7 @@ Given a payment-related latency incident with retry amplification, which of thes
 - Guardrail choice: `enable_payment_circuit_breaker`
 - Executed action: `enable_payment_circuit_breaker`
 - Plan/execution match: `True`
-- Confidence: `0.94`
+- Confidence: `0.88`
 - Dashboard: `http://127.0.0.1:8010/`
 - Feature flags: `http://127.0.0.1:8010/feature-flags`
 

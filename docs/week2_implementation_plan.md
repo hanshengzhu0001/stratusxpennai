@@ -1,5 +1,5 @@
 # Week 2 Implementation Plan
-## OpenClaw + Stratus: Counterfactual Guardrail for Concert Ticket Drops
+## OpenClaw + Stratus: Counterfactual Guardrail for Healthcare Access Scheduling
 
 ### Track
 Stratus X1 Hackathon  
@@ -9,22 +9,22 @@ Track: `Multi-Agent Systems`
 
 Week 2 should deliver a **90% final product**, not another prototype.
 
-By the end of this week, the demo should prove:
+By the end of this week, the demo should prove three things:
 
 1. **Real incident**
-   - a concert ticket drop incident happens in a live environment
-   - the issue is observed through real dashboards, alerts, and browser-visible state
+   - a high-demand telehealth or specialist-slot release creates a live-looking access incident
+   - the issue is observed through dashboards, alerts, browser-visible state, and business metrics
 2. **Counterfactual guardrail**
-   - a naive baseline picks the obvious but dangerous action
+   - the dangerous local reflex is explicitly shown and rejected
    - Stratus chooses a safer action after reasoning over a shortlist
 3. **True multi-agent workflow**
    - observation is parallelized across four specialist agents
    - OpenClaw executes the chosen action
-   - post-action evaluation writes a new case back into the case library
+   - post-action evaluation writes a case back into the case library
 
 Product claim:
 
-> We are building a Counterfactual Remediation Guardrail for high-stakes digital drops: a system that predicts whether a remediation is safe before acting, then verifies whether the prediction held after action.
+> We are building a Counterfactual Remediation Guardrail for healthcare access operations: a system that predicts whether a remediation is safe before acting, then verifies whether the prediction held after action.
 
 This should feel like a **world-model safety layer for operational agents**, not a generic incident copilot.
 
@@ -34,544 +34,450 @@ We are not starting from zero. The current base already includes:
 
 - an end-to-end OpenClaw + Stratus flow on `workflow`
 - live Stratus ranking at the guarded decision step
-- local browser execution and Prometheus-backed verification
-- plan, browser playbook, and report artifacts
-- a retail action library plus scenario shortlist design
+- a dedicated OpenClaw browser execution surface
+- Prometheus-backed verification
+- plan, browser playbook, demo artifact, and final report outputs
+- a broader remediation library with scenario-specific shortlist selection
 - a baseline direction and simulator/comparison shape
+- a Guardrail Console shell with Incident, Decision, Execution, and Verdict views
 
-Week 2 is about turning that backbone into a polished final product story.
-
-## 2. Scenario A: Concert Ticket Drop Death Spiral
-
-It is 10:00 AM and a major concert ticket drop opens.
-
-Traffic surges instantly. Users move through queue, seat hold, checkout, and payment. The `payment` path is not fully down, but it becomes slow and flaky under pressure. The system is designed to be resilient, so `checkout` retries aggressively. Users also manually resubmit payment. The result is a retry storm across the critical path.
-
-What the operator sees:
-
-- payment latency rises sharply
-- checkout error rate climbs
-- queue abandonment begins to increase
-- retry factor jumps above baseline
-- seats are being held but not converted efficiently
-- dashboards turn red even though services still look “up”
-
-What makes the scenario dangerous:
-
-- the obvious human reflex is to restart payment
-- that reflex is locally sensible
-- but under retry amplification it can make recovery worse
-- in ticketing, the system must protect **fairness** and **seat availability**, not just uptime
-
-So the real question is:
-
-> Which action is safe to take first, given the whole system state and the business need to preserve fair access?
-
-### What Winning Looks Like
-
-The demo should clearly show:
-
-- the baseline mode recommends `restart_payment`
-- the guardrail flow rejects that reflex
-- Stratus picks a safer action such as `rate_limit_retries`
-- OpenClaw executes that action in the UI
-- retry pressure and latency improve
-- the final verdict explains what dangerous action was avoided
-- the case library stores the full situation, action, and result for future reuse
-
-## 3. Incident Portfolio And Realistic Simulation
-
-Week 2 should not rely on only one incident.
-
-We should prepare a small **incident portfolio** with realistic metrics so the demo can show different actions being chosen under different failure patterns.
-
-### Recommended Incident Portfolio
-
-1. **Scenario A: Retry Death Spiral**
-   - dominant issue:
-     - payment degradation + retry amplification
-   - key metrics:
-     - payment latency
-     - checkout error rate
-     - retry factor
-     - queue abandonment
-   - expected safe action:
-     - `rate_limit_retries`
-2. **Scenario B: Payment Gateway Flap**
-   - dominant issue:
-     - payment is unstable but not fully down
-   - key metrics:
-     - payment timeout rate
-     - payment success rate
-     - checkout latency
-     - retry factor
-   - expected safe action:
-     - `enable_payment_circuit_breaker`
-     - or `increase_retry_backoff`
-3. **Scenario C: Seat Hold Clog**
-   - dominant issue:
-     - too many seats are locked but not converting
-   - key metrics:
-     - seat hold utilization
-     - seat hold expiration rate
-     - payment success rate
-     - queue abandonment
-   - expected safe action:
-     - shorten hold pressure
-     - release stale holds
-     - or other inventory-preserving action from the library
-4. **Scenario D: Regional Saturation / Spillover Risk**
-   - dominant issue:
-     - primary region is stressed and failover looks tempting
-   - key metrics:
-     - region saturation
-     - checkout latency by region
-     - failover risk
-     - blast-radius risk
-   - expected safe action:
-     - cautious traffic shift
-     - or capacity-preserving workload shaping
-
-### Reference Incident Snapshots
-
-These are the target profiles for simulation and demo copy.
-
-1. **Scenario A: Retry Death Spiral**
-   - payment latency p95:
-     - `1400-2200 ms`
-   - checkout error rate:
-     - `12%-20%`
-   - retry amplification factor:
-     - `3.0x-5.0x`
-   - queue abandonment rate:
-     - `18%-30%`
-   - seat hold utilization:
-     - `70%-85%`
-   - expected first action:
-     - `rate_limit_retries`
-2. **Scenario B: Payment Gateway Flap**
-   - payment success rate:
-     - `72%-88%`
-   - payment timeout rate:
-     - `8%-15%`
-   - checkout latency p95:
-     - `1200-1800 ms`
-   - retry amplification factor:
-     - `1.8x-2.8x`
-   - queue abandonment rate:
-     - `10%-18%`
-   - expected first action:
-     - `enable_payment_circuit_breaker`
-     - or `increase_retry_backoff`
-3. **Scenario C: Seat Hold Clog**
-   - seat hold utilization:
-     - `88%-97%`
-   - seat hold expiration rate:
-     - `25%-40%`
-   - payment success rate:
-     - `55%-72%`
-   - queue abandonment rate:
-     - `20%-35%`
-   - fairness skew:
-     - elevated versus baseline
-   - expected first action:
-     - inventory-preserving mitigation
-4. **Scenario D: Regional Saturation / Spillover Risk**
-   - primary region saturation:
-     - `80%-92%`
-   - secondary region headroom:
-     - only `10%-20%`
-   - checkout latency p95:
-     - `1000-1700 ms`
-   - retry amplification factor:
-     - `1.5x-2.2x`
-   - expected first action:
-     - cautious partial shift, not full failover
-
-### Realistic Simulation Approach
-
-The simulation should feel like a ticketing system, not a generic metrics toy.
-
-Recommended Week 2 design:
-
-- use **OTel Demo on Kubernetes** as the system base
-- use OTel feature flags and load generation for core service disruption
-- layer a **ticket-drop metrics adapter** on top for business-specific signals
-
-The ticket-drop metrics adapter should emit:
-
-- `queue_abandonment_rate`
-- `retry_amplification_factor`
-- `fairness_skew`
-- `seat_hold_utilization`
-- `seat_hold_expiration_rate`
-- `payment_success_rate`
-
-These can be generated from:
-
-- OTel Demo service health
-- current runtime state
-- scenario-specific synthetic overlays
-
-Simulation rules:
-
-- each scenario should have a deterministic base profile
-- runtime state changes should move metrics within believable ranges
-- the same action should not produce identical business outcomes across every scenario
-- metric relationships should stay plausible:
-  - high retry factor should usually worsen payment latency and queue abandonment
-  - high seat hold utilization should usually increase fairness and conversion stress
-  - aggressive kill-switch actions should reduce technical pressure while hurting business outcomes
-
-This gives us a realistic hybrid:
-
-- real microservice topology and observability
-- ticketing-specific business metrics on top
-
-### Ownership Of The Incident Portfolio
-
-- Charlie owns the incident catalog, scenario truth, and metric definitions
-- Eason owns the simulation profiles and fixture realism for those incidents
-- Tony makes sure shortlist and Stratus behavior differ appropriately across incidents
-- Hansen makes the scenario switch visible and understandable in the console
-
-## 4. Core Design Choices
-
-### Live Demo Base
-
-- **OTel Demo on Kubernetes**
-  - gives us a realistic microservice system and browser-visible surfaces
-- **Feature-flag trigger path**
-  - use the OTel Demo feature UI to create the incident
-- **Prometheus + Alertmanager**
-  - provide the live alerting and verification loop
-- **OpenClaw browser**
-  - performs the visible execution step
-- **Stratus X1**
-  - ranks the shortlisted actions and predicts consequences before action
-
-### Frontend Choice
-
-We will not do a full frontend rewrite.
-
-Week 2 frontend choice:
-
-- extend the current FastAPI-based visual surface into one polished **Guardrail Console**
-- use current APIs, generated plan/report artifacts, and browser-visible state as the data backbone
-- optimize for demo clarity and reliability over framework complexity
-
-### Case Library Choice
-
-The product needs a memory layer.
-
-Week 2 case library choice:
-
-- start with a structured local store, not a heavy external system
-- recommended v1:
-  - `SQLite` or structured `JSONL`
-- each record should store:
-  - incident fingerprint
-  - shortlist
-  - chosen action
-  - Stratus prediction
-  - actual result
-  - verdict notes
-  - tags for retrieval
-
-This is enough for retrieval, comparison, and demo replay.
-
-## 5. Multi-Agent Workflow
-
-### 5.1 Observation Layer: Parallel Sentinel Agents
-
-Observation is the main parallelization moment in the system.
-
-Run these four agents in parallel:
-
-- **Payment Sentinel Agent**
-  - reads payment latency, error, timeout, and dependency health signals
-- **Queue & Fairness Sentinel Agent**
-  - reads queue abandonment, retry factor, fairness skew, and conversion stress
-- **Inventory Sentinel Agent**
-  - reads seat hold utilization, hold expiration, and inventory lock pressure
-- **Browser Sentinel Agent**
-  - opens the dashboard and feature UI, captures visible state and screenshots
-
-Each sentinel should output:
-
-- normalized evidence for its category
-- key anomaly tags
-- retrieved similar cases from the case library
-- one short operator-facing summary
-
-### 5.2 Incident Fingerprint
-
-After the four sentinel agents finish, merge their outputs into one **incident fingerprint**.
-
-This fingerprint should include:
-
-- service and dependency tags
-- business-state tags
-- anomaly tags
-- hard constraints:
-  - preserve fairness
-  - avoid oversell / seat-lock collapse
-  - avoid high blast-radius actions as a first move
-
-This fingerprint is the shared input to planning and evaluation.
-
-### 5.3 Shortlist Mechanism
-
-The shortlist step is a core Week 2 design problem.
-
-We want:
-
-- action library size: `12-20`
-- decision shortlist size: `4-6`
-
-#### Recommended Shortlist Design: Hybrid
-
-Use a hybrid mechanism, not pure prompting.
-
-1. **Tagged Action Library**
-   - each action has metadata:
-     - failure modes
-     - affected services
-     - business impact
-     - blast-radius class
-     - execution surface
-2. **Deterministic Filter**
-   - remove actions that do not match the current incident services or failure tags
-   - remove actions that cannot be executed in the current environment
-3. **Case Retrieval Boost**
-   - use case-library similarity to raise actions that worked in similar incidents
-   - use case-library warnings to keep dangerous local reflexes in view when needed
-4. **Diversity Rule**
-   - shortlist must include a spread of action types:
-     - one stabilizer
-     - one tempting reflex
-     - one traffic/degradation option
-     - one backup / kill-switch option if relevant
-5. **Shortlist Builder Agent**
-   - converts the filtered set into the final `4-6` actions
-   - writes a rationale explaining why each action made the shortlist
-
-This design keeps the shortlist explainable and stable, while still looking intelligent.
-
-### 5.4 Guardrail Decision
-
-The **Guardrail Decision Agent** takes:
-
-- incident fingerprint
-- `4-6` shortlisted actions
-- relevant prior cases
-- hard constraints
-
-Then it uses Stratus to produce:
-
-- ranked actions
-- confidence
+Week 2 is about turning that base into a **healthcare-access product story** with stronger realism, clearer multi-agent boundaries, and a more impressive demo.
+
+## 2. Why Healthcare Access Scheduling
+
+This is the lowest-churn way to make the product feel more serious without changing the core mechanics.
+
+We keep the stack:
+
+- OpenClaw for orchestration and browser execution
+- Stratus for counterfactual ranking
+- Prometheus for verification
+- the current shared state, alert flow, browser playbook, and verdict surfaces
+
+We change the story:
+
+- `frontend` becomes the **patient portal**
+- `checkout` becomes the **scheduling service**
+- `payment` becomes **eligibility / benefits verification**
+- “seat holds” become **slot holds**
+- “conversion” becomes **booking completion**
+- “queue abandonment” becomes **scheduling abandonment**
+
+This keeps the demo operational, not clinical. We are not claiming autonomous diagnosis or treatment. We are showing how operational agents can protect **patient access and fairness** during digital access incidents.
+
+## 3. Primary Scenario A
+### High-Demand Telehealth Slot Release: Scheduling Retry Spiral
+
+It is 9:00 AM and a hospital system opens a limited batch of same-week telehealth and specialist appointments.
+
+Traffic spikes immediately. Patients enter the portal, browse limited slots, and attempt to book. The eligibility / benefits verification dependency becomes slow and flaky, but it is not fully down. The scheduling service is built to be resilient, so it retries. Patients also retry manually. Slot holds remain open while eligibility is unresolved.
+
+What starts as a small dependency degradation becomes a self-amplifying access incident:
+
+- scheduling latency spikes
+- retry pressure increases
+- slot holds clog limited availability
+- abandonment rises
+- booking completion drops
+- access fairness degrades because a small number of patients occupy scarce slots while many others cannot complete booking
+
+The dangerous local reflex is obvious:
+
+- restart eligibility verification
+
+That reflex is locally understandable, but globally risky during an active retry spiral. Restarting the dependency too early can:
+
+- reintroduce cold capacity into a retry backlog
+- extend the backlog instead of shrinking it
+- keep slot holds stuck
+- worsen access fairness
+
+The product should prove that it can:
+
+- detect this access incident
+- reject the dangerous reflex
+- choose a safer first remediation
+- execute it through OpenClaw
+- verify the result and record the case
+
+## 4. Realism Strategy
+
+We should keep the current engineering base and make the story more realistic by layering healthcare-access semantics on top.
+
+Primary demo base:
+
+- OTel Demo on Kubernetes
+
+Operator-facing semantic layer:
+
+- patient portal
+- scheduling service
+- eligibility verification dependency
+- slot holds
+- booking completion
+- scheduling abandonment
+
+Optional mirror target:
+
+- if we do not directly integrate a real telehealth stack, we mirror the concepts used by healthcare scheduling systems and FHIR scheduling resources rather than inventing a fake workflow from scratch
+
+That is enough to make the product credible without introducing a new integration risk this late.
+
+## 5. Incident Portfolio
+
+We should prepare several realistic incident snapshots so the same workflow can choose different actions under different conditions.
+
+### Scenario A: Scheduling Retry Spiral
+
+- core problem:
+  - eligibility verification degrades and retries amplify across scheduling
+- expected symptoms:
+  - scheduling latency high
+  - retry rate high
+  - booking completion down
+  - scheduling abandonment up
+- likely safer actions:
+  - `rate_limit_retries`
+  - `enable_payment_circuit_breaker`
+  - `increase_retry_backoff`
+- dangerous reflex:
+  - `restart_payment`
+
+### Scenario B: Eligibility Verification Flap
+
+- core problem:
+  - eligibility verification is unstable but retry amplification is moderate
+- expected symptoms:
+  - elevated error rate
+  - booking completion down
+  - abandonment rising
+- likely safer actions:
+  - `enable_payment_circuit_breaker`
+  - `increase_retry_backoff`
+  - `restart_payment` only if backlog pressure is already low
+
+### Scenario C: Slot Hold Clog
+
+- core problem:
+  - slot holds remain open too long and access is clogged even when core infra is still mostly healthy
+- expected symptoms:
+  - slot hold utilization high
+  - hold expiration high
+  - booking completion poor
+  - fairness / access skew elevated
+- likely safer actions:
+  - `disable_flag` shown as `Disable Online Scheduling`
+  - `rate_limit_retries`
+  - `pause_noncritical_background_jobs`
+
+### Scenario D: Regional Access Saturation
+
+- core problem:
+  - one region or cluster is close to saturation and naive full traffic shift could spread the incident
+- expected symptoms:
+  - regional latency skew
+  - abandonment elevated
+  - moderate retry pressure
+- likely safer actions:
+  - controlled `shift_traffic`
+  - `increase_retry_backoff`
+  - localized degradation before full failover
+
+## 6. Realistic Metrics
+
+The incident portfolio should use metrics that feel real for healthcare access operations.
+
+Core technical metrics:
+
+- scheduling latency p95
+- scheduling error rate
+- booking retry rate
+- dependency timeout rate
+- regional saturation / load
+
+Business and access metrics:
+
+- booking completion rate
+- scheduling abandonment rate
+- slot hold utilization
+- slot hold expiration rate
+- access skew / fairness pressure
+
+Guardrail health metrics:
+
 - predicted blast radius
-- predicted latency / retry impact
-- rollback trigger or stop condition
-- final recommended action
+- actual blast radius
+- decision fidelity
+- predicted-vs-actual drift
 
-### 5.5 Three-Action Sequence Planning Extension
+The simulator should preserve believable relationships:
 
-This is an **optional extension**. The primary Week 2 goal is still to finish the **one-action workflow first**.
+- higher retry rate should usually worsen latency and abandonment
+- higher slot hold utilization should usually worsen access fairness and completion
+- stronger throttling or circuit breaking should reduce retry pressure first, then improve latency
+- disabling online scheduling should sharply reduce digital load but force manual fallback
 
-Only after the one-action flow is stable should the system move from single-action choice to **three-action sequence planning**.
+## 7. Multi-Agent Workflow
 
-The sequence should be designed in three stages:
+The main workflow should be:
 
-1. **stabilize**
-   - first action reduces immediate pressure
-2. **contain / clean up**
-   - second action prevents recurrence or clears residual risk
-3. **restore / normalize**
-   - third action returns the system toward normal operating mode
+1. **Parallel observation**
+2. **Case-library retrieval**
+3. **Shortlist generation**
+4. **Stratus guardrail ranking**
+5. **OpenClaw execution**
+6. **Post-action evaluation**
+7. **Case writeback**
 
-The Guardrail Decision Agent should output:
+### 7.1 Observation Layer
 
-- `action_sequence`
-  - up to three ordered actions
-- `stop_conditions`
-  - what success looks like after each action
-- `replan_conditions`
-  - when to ask Stratus to replan
+Run four specialist agents in parallel.
 
-### Replan Policy
+#### Eligibility Sentinel Agent
 
-Default Week 2 policy:
+- reads eligibility latency, timeout rate, and dependency health
+- determines whether the dependency is degraded, flapping, or truly down
 
-- do **not** replan after every action
-- only replan when evaluation shows:
-  - **partial failure**
-  - or **severe failure**
+#### Access & Fairness Sentinel Agent
 
-Priority rule:
+- reads scheduling abandonment, retry factor, and access-skew signals
+- summarizes whether the system is merely slow or becoming unfair
 
-- ship one-action planning, execution, and verification first
-- add three-action planning only if the one-action loop is already demo-stable
+#### Slot Inventory Sentinel Agent
 
-Suggested evaluation classes:
+- reads slot hold utilization and expiration pressure
+- detects when access is clogged even if the core service is still technically up
 
-- **strong recovery**
-  - continue planned sequence or stop early
-- **partial failure**
-  - some improvement, but key constraints still violated
-  - ask Stratus to replan
-- **severe failure**
-  - blast radius grows, fairness worsens, or primary metrics collapse
-  - immediately ask Stratus to replan
+#### Browser Sentinel Agent
 
-This keeps the demo more autonomous without making it look random or over-reactive.
+- opens the Guardrail Console
+- captures the visible incident state
+- verifies that the browser-facing operator surface matches the metrics story
 
-### 5.6 Baseline Mode
+The output of these four agents becomes one normalized incident state.
 
-Baseline is no longer a permanent agent in the main product story.
+### 7.2 Case-Library Retrieval
 
-Instead, Week 2 should support a **baseline demo toggle**:
+Before deciding, the system should retrieve similar prior cases for reference.
 
-- same incident
-- same shortlist
-- replace Stratus ranking with a naive baseline chooser
+The case library should store:
 
-The purpose is to show:
-
-- baseline picks the obvious reflex
-- guardrail path picks the safer action
-
-### 5.7 Execution
-
-The **Operator Agent** uses OpenClaw browser to:
-
-- open the console and source dashboards
-- inspect the chosen action
-- execute the remediation
-- refresh and capture post-action evidence
-
-### 5.8 Evaluation And Learning
-
-The **Evaluation Agent** measures:
-
-- system metrics after action
-- browser-visible state after action
-- business-relevant signals after action
-- predicted vs actual drift
-
-Then it writes a new case into the case library with:
-
-- situation
+- incident features
 - shortlisted actions
 - chosen action
 - predicted result
 - actual result
-- narrative verdict
+- verdict
 
-This is critical: we are saving full outcomes, not only success/failure.
+Retrieval signal can be simple in Week 2:
 
-## 6. Optional Extension: Abnormality Localization
+- nearest scenario type
+- closest retry / abandonment / completion pattern
+- dependency status category
 
-If we have time, we should extend the system beyond overall guardrailing and let it pinpoint specific abnormalities such as bot attacks.
+The point is not a perfect retrieval system. The point is to show that each incident is informed by prior cases, not treated as a blank slate.
 
-### Recommended Design
+### 7.3 Shortlist Mechanism
 
-Add one post-observation component:
+We should keep the design:
 
-- **Abnormality Attribution Agent**
+1. **Action library**
+   - maintain a broader healthcare-access remediation library
+2. **Scenario shortlist**
+   - select the 4-6 most relevant actions for the current incident
+3. **Guardrail ranking**
+   - ask Stratus to rank only the shortlist
 
-It consumes the four sentinel outputs and classifies the dominant abnormality, for example:
+Shortlist mechanism for Week 2:
 
-- payment degradation
-- retry storm
-- queue fairness distortion
-- seat hold clogging
-- suspected bot pressure
+- use a **hybrid algorithmic shortlist builder**
+- not a separate planning LLM agent
 
-### Suggested Mechanism
+Inputs:
 
-Use a hybrid mechanism again:
+- scenario classification
+- dependency status
+- retry intensity
+- slot-hold pressure
+- abandonment severity
+- regional saturation
 
-- rules for obvious signals
-  - spike in retry factor
-  - fairness skew jump
-  - large homepage flood with weak payment conversion
-  - abnormal seat hold churn
-- agent synthesis for mixed cases
-  - when multiple abnormalities overlap
+Rules:
 
-### Why It Matters
+- always include the dangerous reflex if it is realistically tempting
+- always include 1-2 conservative stabilizers
+- include aggressive or disruptive actions only when severity crosses a threshold
+- keep shortlist size at 4-6 so Stratus reasons over a tight, meaningful set
 
-This gives us a cleaner story than “metrics are bad.”
+Why this is the right Week 2 choice:
 
-It lets us say:
+- easier to debug than a free-form agentic selector
+- deterministic enough for demo stability
+- still rich enough for Tony to improve
 
-> The system did not only choose a safer action. It identified what kind of abnormality was happening and responded accordingly.
+### 7.4 Guardrail Decision
 
-## 7. Frontend Product Surface
+Stratus should rank the shortlist and explain:
 
-Week 2 needs a real frontend, not just dashboards and JSON artifacts.
+- latency direction
+- error direction
+- retry-storm risk
+- blast radius
+- recovery confidence
+- why the dangerous reflex is unsafe right now
 
-The target frontend is one operator-facing surface:
+The main product moment is:
 
-> **Guardrail Console**
+- the system does not merely pick an action
+- it rejects a locally reasonable but globally dangerous action before execution
 
-### Required Views
+### 7.5 Execution
 
-1. **Incident View**
-   - incident summary
-   - scenario selector
-   - payment / queue / inventory / browser evidence
-   - active alerts
-   - recent similar cases
-2. **Decision View**
-   - full action library summary
-   - chosen shortlist
-   - baseline result vs guardrail result
-   - Stratus rationale and predicted blast radius
-   - optional 3-step planned sequence
-3. **Execution View**
-   - OpenClaw execution log
-   - chosen remediation target
-   - step-by-step sequence status
-   - before / after browser evidence
-4. **Verdict View**
-   - predicted vs actual
-   - dangerous reflex rejected
-   - blast radius avoided
-   - case saved to library
+Execution remains OpenClaw-first:
 
-### Frontend Rule
+- run `run.py --phase demo`
+- read the demo artifact and browser playbook
+- open `/openclaw-execution`
+- inspect the before-action incident card
+- click the single stable execution button
+- run verify
+- open the verdict surface
 
-- one polished console
-- no disconnected mini-pages
-- one owner per view
+Browser fallback remains:
 
-## 8. Responsibilities
+- if browser control fails, do not replan
+- run `run.py --phase fallback`
+- finish the report from the saved plan
 
-Everyone must touch both **OpenClaw** and **Stratus**, but with non-overlapping primary ownership.
+Operational fallback inside the scenario remains:
+
+- last-resort action can disable online scheduling and route to a manual call-center or callback workflow
+
+### 7.6 Evaluation and Case Writeback
+
+After action, the Evaluation Agent should measure:
+
+- before vs after scheduling latency
+- retry reduction
+- abandonment change
+- booking completion change
+- blast radius
+- predicted-vs-actual drift
+
+Then it should write back:
+
+- situation
+- action
+- result
+- verdict
+
+This is more useful than a binary success/failure log.
+
+## 8. Action Library and Mappings
+
+We should keep the existing action IDs for code stability, but present them with healthcare labels.
+
+Core action mappings:
+
+- `rate_limit_retries` -> **Throttle Booking Retries**
+- `enable_payment_circuit_breaker` -> **Enable Eligibility Circuit Breaker**
+- `increase_retry_backoff` -> **Increase Booking Retry Backoff**
+- `restart_payment` -> **Restart Eligibility Service**
+- `shift_traffic` -> **Shift Scheduling Traffic**
+- `disable_flag` -> **Disable Online Scheduling**
+
+Operational meaning:
+
+- throttling retries reduces self-inflicted pressure
+- circuit breaking fails fast on a degraded dependency
+- retry backoff smooths load without a full shutdown
+- restarting eligibility is a tempting but risky reflex
+- traffic shift is only safe if spare capacity is real
+- disabling online scheduling is a harsh but credible manual fallback
+
+## 9. Frontend Product Surface
+
+The frontend should remain one polished shell:
+
+- **Guardrail Console**
+
+Required views:
+
+- `Incident View`
+- `Decision View`
+- `Execution View`
+- `Verdict View`
+
+What changes in Week 2:
+
+- all copy, labels, and business metrics should speak healthcare access language
+- scenario switching should move across the healthcare incident portfolio
+- verdicts should read like operational decisions, not debug logs
+
+Judge-facing outcome:
+
+- the system should look like a product an access operations team could plausibly use
+
+## 10. Extensions
+
+These are good extensions, but only after the one-action workflow is stable.
+
+### 10.1 Optional Extension: Abnormality Localization
+
+If time allows, add a second pass that pinpoints individual abnormalities such as:
+
+- bot-like booking bursts
+- slot-hold abuse or stuck holds
+- regional skew
+- specific dependency hotspots
+
+Week 2 recommendation:
+
+- implement this as a lightweight classifier or specialist agent output
+- do not let it block the main one-action workflow
+
+### 10.2 Optional Extension: Three-Action Sequence Planning
+
+If time allows, add a sequence planner that proposes three actions in one go.
+
+Default behavior:
+
+- plan action 1, action 2, action 3
+- execute only step 1 immediately
+- continue with the sequence only if the post-action state supports it
+
+Replanning rule:
+
+- only ask Stratus to replan when the outcome is **partial** or **severe failure**
+
+Week 2 priority:
+
+- the one-action loop is primary
+- three-action planning is explicitly secondary
+
+## 11. Team Responsibilities
+
+Everyone should touch both OpenClaw and Stratus, but primary ownership should stay clear.
 
 ### Hansen
-
 Primary ownership:
 
 - Operator Agent
-- Execution flow
+- execution flow
 - Guardrail Console shell
 
 Develop:
 
 - own the OpenClaw execution handoff and browser playbook integration
-- own the `Execution View`
+- own the Execution View
 - own overall console shell and navigation
-- own scenario selection and sequence-progress presentation in the console
-- connect plan -> execute -> verify -> verdict into one clean product flow
+- own scenario selection and sequence-progress presentation
+- connect plan -> execute -> verify -> verdict into one product flow
 
 Test:
 
 - rehearse end-to-end browser runs
-- test fallback path reliability
+- test fallback-path reliability
 - test console flow across all four views
 
 Furnish:
@@ -579,7 +485,7 @@ Furnish:
 - final demo script
 - final OpenClaw prompt
 - final shell polish
-- final scenario-switch UX and sequence-timeline UX
+- scenario-switch UX and sequence-timeline UX
 
 OpenClaw touchpoint:
 
@@ -587,287 +493,171 @@ OpenClaw touchpoint:
 
 Stratus touchpoint:
 
-- renders guardrail output into execution and verdict surfaces
+- render guardrail output clearly in Execution and Verdict
 
 Frontend touchpoint:
 
-- Guardrail Console shell + `Execution View`
+- Guardrail Console shell + Execution View
 
 ### Tony
-
 Primary ownership:
 
-- Shortlist Builder Agent
-- Guardrail Decision Agent
-- Stratus schema / prompt / ranking logic
-- optional three-action sequence planning policy
+- Guardrail Agent
+- shortlist mechanism
+- Stratus ranking stability
 
 Develop:
 
 - own the `12-20 -> 4-6` shortlist mechanism
-- define action metadata schema for shortlist selection
-- implement the Stratus input/output contract
-- own the decision rationale, veto reasoning, and rollback criteria
-- design the three-action sequence output format as a stretch extension
-- define which conditions should trigger Stratus replanning after partial or severe failure
+- stabilize Stratus output on shortlist ranking
+- improve rationale quality around dangerous-reflex rejection
+- tune how guardrail outputs are shaped for execution
 
 Test:
 
-- compare shortlist stability across repeated runs
-- compare Stratus prompt variants
+- repeated Stratus runs on the healthcare incident portfolio
+- compare shortlist rules and prompt variants
 - maintain `实验记录 TBD`
-- test one-action guardrail stability first
-- test whether three-action plans stay coherent across multiple scenarios if extension time remains
 
 Furnish:
 
-- final shortlist policy
-- final Stratus schema
-- final reasoning copy for why the dangerous reflex is rejected
-- final sequence-planning and replan policy for the optional extension
+- final shortlist logic note
+- final Stratus request/response schema
+- concise explanation of why the reflex is unsafe
 
 OpenClaw touchpoint:
 
-- ensure decision output is directly usable by the Operator Agent
+- make guardrail outputs directly usable by OpenClaw execution
 
 Stratus touchpoint:
 
-- deepest Stratus integration owner
+- deepest owner of counterfactual ranking
 
 Frontend touchpoint:
 
-- `Decision View`
+- Decision View ranking cards and shortlist explanation
 
 ### Charlie
-
 Primary ownership:
 
-- concert-ticket scenario truth
-- sentinel schemas
-- abnormality attribution extension
-- incident portfolio design
+- healthcare scenario truth
+- incident portfolio
+- product narrative
 
 Develop:
 
-- write the canonical concert ticket incident spec
-- define the list of demo incidents and their expected safe actions
-- define realistic metric ranges and reference snapshots for each incident
-- define the four sentinel outputs and anomaly tags
-- define case-library taxonomy and retrieval tags
-- define what fairness, seat hold stress, and operator-visible success mean
-- design the abnormality-localization extension
+- define the healthcare-access scenario portfolio
+- own incident realism and case-library taxonomy
+- define access/fairness semantics and visual acceptance criteria
+- define the optional abnormality-localization taxonomy
 
 Test:
 
-- validate that the live demo still feels like a real ticket-drop incident
-- validate that browser-visible evidence matches the intended story
-- validate that the anomaly labels make business sense
+- validate that scenarios feel real and distinct
+- validate that chosen actions make sense per scenario
+- validate that the narrative is clear to judges without extra explanation
 
 Furnish:
 
-- scenario spec
-- incident catalog
-- UI labels and annotations for incident evidence
-- concise product narrative
-- abnormality-extension proposal
+- final Scenario A spec
+- incident portfolio sheet
+- evaluation rubric
+- short positioning copy for the pitch
 
 OpenClaw touchpoint:
 
-- defines what the Browser Sentinel Agent and Operator Agent should inspect
+- define what the Browser Sentinel and Verifier should look for
 
 Stratus touchpoint:
 
-- defines the constraints and truths the guardrail should optimize for
+- define the truth conditions Stratus should reason over
 
 Frontend touchpoint:
 
-- `Incident View`
+- Incident View copy and scenario framing
 
 ### Eason
-
 Primary ownership:
 
 - Evaluation Agent
-- baseline demo toggle
-- case-library writeback and replay
-- realistic incident simulation profiles
+- baseline mode
+- case writeback
 
 Develop:
 
-- implement baseline mode on the same shortlist used by Stratus
-- own post-action evaluation and verdict generation
-- implement case-library persistence format and replay-friendly outputs
-- implement realistic simulation profiles for each incident in the portfolio
-- define how ticket-drop metrics are generated from runtime state plus scenario overlays
-- own comparison between:
-  - baseline result
-  - guardrail result
-  - predicted vs actual
+- own baseline-mode comparison against the same shortlist
+- own post-action evaluation and drift scoring
+- own case-library writeback structure
+- define how simulated healthcare metrics move after each action
+
+Important independence rule:
+
+- this work should remain buildable without waiting on Hansen integration changes
 
 Test:
 
-- confirm baseline picks the naive action in Scenario A
-- confirm evaluation catches when predicted and actual diverge
-- confirm case-library records are understandable and reusable
-- validate that incident metrics look realistic and differ meaningfully across scenarios
+- show baseline chooses the obvious but worse reflex in Scenario A
+- show guardrail path outperforms baseline on the same incident
+- ensure comparison artifacts are readable in one screen
 
 Furnish:
 
-- final verdict schema
-- baseline-vs-guardrail comparison artifact
-- final copy for “what happened after action”
-- simulation profile spec for the incident portfolio
+- final baseline artifact
+- evaluation artifact
+- case-library record format
 
 OpenClaw touchpoint:
 
-- owns what is shown after execution and verification
+- surface evaluation outputs in the final OpenClaw-driven story
 
 Stratus touchpoint:
 
-- compares baseline and Stratus outcomes on the same shortlist
+- compare baseline vs guardrail on the same scenario and shortlist
 
 Frontend touchpoint:
 
-- `Verdict View`
+- Verdict View comparison and writeback messaging
 
-## 9. Frontend Ownership Split
+## 12. Demo Prep
 
-To avoid overlap, frontend work is split by surface:
+To stand out in the hackathon, the demo should emphasize:
 
-- **Hansen**
-  - shell
-  - navigation
-  - `Execution View`
-- **Tony**
-  - `Decision View`
-- **Charlie**
-  - `Incident View`
-- **Eason**
-  - `Verdict View`
+1. **A dangerous reflex was rejected**
+   - not just “an action was recommended”
+2. **Patient access and fairness were protected**
+   - not just uptime
+3. **OpenClaw visibly acted**
+   - the browser is part of the story
+4. **Predicted vs actual was verified**
+   - this is not fire-and-forget automation
 
-If time permits, the team can review style together, but ownership remains by view.
+Recommended demo sequence:
 
-## 10. Repo And Workstreams
+1. Trigger one healthcare-access incident live
+2. Show the incident in the Guardrail Console
+3. Turn on baseline mode and show it picks `restart_payment` shown as `Restart Eligibility Service`
+4. Show Stratus ranking a safer action from the shortlist
+5. Let OpenClaw execute the safer action
+6. Verify the after-state
+7. End on a verdict that explicitly says:
+   - dangerous reflex rejected
+   - safer action chosen
+   - blast radius stayed low
+   - case written back for future incidents
 
-Repo:
+## 13. Grounding
 
-- `https://github.com/hanshengzhu0001/stratusxpennai`
+This framing should be grounded in real scheduling and healthcare-IT concepts.
 
-Branches:
+- HL7 FHIR `Appointment` and `Slot` resources justify the scheduling / slot-hold semantics
+- Telehealth patient-preparation guidance supports realistic scheduling and manual-support flows
+- Health IT contingency-planning guidance supports orderly fallback and restart discipline
+- Open-source scheduling systems such as OpenEMR can inform future mirrors if we want a more realistic front-end shell later
 
-- `workflow`
-  - integration
-  - OpenClaw execution flow
-  - console shell
-- `ranking+rollback`
-  - shortlist logic
-  - Stratus schema and decision logic
-  - sequence planning
-- `baseline`
-  - baseline mode
-  - evaluation
-  - case-library writeback / replay
-- `scenario+eval`
-  - scenario truth
-  - incident portfolio
-  - sentinel schema
-  - anomaly extension
-  - UI labels
+Suggested source links:
 
-Recommended base setup:
-
-```bash
-git clone -b workflow https://github.com/hanshengzhu0001/stratusxpennai.git
-cd stratusxpennai
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-git fetch origin
-```
-
-Independent starting points:
-
-- Tony can start immediately on shortlist and Stratus logic
-- Charlie can start immediately on scenario, incident catalog, sentinel schema, and anomaly design
-- Eason can start immediately on baseline mode, simulation profiles, and verdict/case-library schema
-- Hansen can start immediately on OpenClaw execution flow and console shell
-
-## 11. Demo Prep: How We Differentiate And Impress
-
-This section matters as much as the code.
-
-### What Makes The Project Different
-
-We are not just “using Stratus to pick an action.”
-
-We are showing:
-
-- a dangerous local reflex is rejected
-- the product protects fairness and seat access, not just uptime
-- OpenClaw visibly acts in the browser
-- the system learns by saving the full case after action
-
-### Demo Structure
-
-The cleanest live demo should be:
-
-1. Trigger one concert ticket incident live
-2. Show all four sentinel panels update
-3. Show similar prior cases retrieved from the case library
-4. Turn on baseline mode and show it picks `restart_payment`
-5. Switch to guardrail mode and show Stratus picks the safer action
-6. Let OpenClaw execute the first action
-7. Show the verdict and save the case
-8. If time permits, show the optional 3-step plan as a stretch preview
-
-### Scenario Demonstration Plan
-
-To stand out, we should prepare:
-
-- one flagship live scenario
-  - `Retry Death Spiral`
-- one secondary scenario ready for quick replay
-  - `Payment Gateway Flap`
-- one stretch replay scenario if time allows
-  - `Seat Hold Clog` or `Regional Saturation`
-
-This makes the project feel like a platform, not a one-off script.
-
-### Priority Order
-
-1. one flagship scenario with one-action guardrail flow
-2. one additional replay scenario with a different chosen action
-3. optional three-action sequence extension
-
-### What Judges Should Remember
-
-- “The obvious fix was wrong.”
-- “The system knew why it was wrong before acting.”
-- “The agent acted in the UI and then verified the result.”
-- “It protects fairness, not just latency.”
-
-### Rehearsal Checklist
-
-- one polished Guardrail Console
-- one scenario selector with realistic incident profiles
-- one clean baseline-vs-guardrail toggle
-- one incident portfolio with believable metrics
-- one visible OpenClaw execution moment
-- one visible sequence plan, even if only step 1 is executed in the live demo
-- one before / after verdict slide inside the app
-- one backup local-control-plane run recorded in case the K8s demo is flaky
-
-## 12. Grounding / Sources
-
-Official references supporting the live demo path:
-
-- OpenTelemetry Demo scenarios and feature-flag path
-  - https://opentelemetry.io/docs/demo/scenarios/
-- OpenTelemetry Demo repository
-  - https://github.com/open-telemetry/opentelemetry-demo
-- Prometheus Alertmanager documentation
-  - https://prometheus.io/docs/alerting/latest/alertmanager/
-- Kubernetes Horizontal Pod Autoscaler documentation
-  - https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
-- OpenFeature overview
-  - https://openfeature.dev/docs/reference/intro/
+- https://hl7.org/fhir/r4/appointment.html
+- https://fhir.hl7.org/fhir/slot.html
+- https://telehealth.hhs.gov/providers/preparing-patients-for-telehealth/helping-patients-prepare-for-their-appointment
+- https://www.healthit.gov/sites/default/files/playbook/pdf/2-contingency-planning-final.pdf
+- https://www.open-emr.org/wiki/index.php/OpenEMR_Wiki_Home_Page

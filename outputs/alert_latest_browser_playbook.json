@@ -1,5 +1,5 @@
 {
-  "plan_id": "alert_latest-89accadd",
+  "plan_id": "alert_latest-a993c03d",
   "workflow": {
     "orchestrator": "openclaw",
     "level": "level_3_browser_k8s_scaffold",
@@ -9,7 +9,7 @@
   "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the verdict page.",
   "chosen_action": {
     "id": "enable_payment_circuit_breaker",
-    "label": "Enable Payment Circuit Breaker",
+    "label": "Enable Eligibility Circuit Breaker",
     "selector": "#openclaw-demo-run",
     "fallback_selector": "#action-enable_payment_circuit_breaker"
   },
@@ -34,7 +34,7 @@
     {
       "kind": "click",
       "target": "#openclaw-demo-run",
-      "label": "Execute Planned Action: Enable Payment Circuit Breaker",
+      "label": "Execute Planned Action: Enable Eligibility Circuit Breaker",
       "purpose": "apply_chosen_remediation"
     },
     {

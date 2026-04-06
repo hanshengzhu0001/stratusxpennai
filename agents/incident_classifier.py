@@ -6,12 +6,13 @@ def classify_incident(alert_payload: dict, evidence: dict) -> dict:
     common = alert_payload.get("commonAnnotations", {})
     summary = common.get(
         "summary",
-        "Checkout latency spiked after payment dependency degradation and retries are increasing.",
+        "Scheduling latency spiked after eligibility dependency degradation and retries are increasing.",
     )
     patterns = []
     if metrics.get("retry_rate", 0) >= 0.2:
         patterns.append("retry_amplification")
-    if "payment" in evidence.get("services", []):
+    services = set(evidence.get("services", []))
+    if {"payment", "eligibility"} & services:
         patterns.append("payment_degradation")
     if metrics.get("latency_p95_ms", 0) >= 2000:
         patterns.append("high_checkout_latency")

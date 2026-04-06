@@ -11,7 +11,7 @@ SIMULATED_OUTCOMES = {
         "impact": "medium",
         "blast_radius": "medium",
         "recovery": "partial",
-        "notes": "Restarting refreshes pods, but the retry loop keeps pressure on payment.",
+        "notes": "Restarting workers refreshes local state, but the retry loop keeps pressure on eligibility.",
     },
     "disable_flag": {
         "latency_p95_ms": 500,
@@ -22,7 +22,7 @@ SIMULATED_OUTCOMES = {
         "impact": "high",
         "blast_radius": "high",
         "recovery": "mixed",
-        "notes": "Feature disable sheds the degraded dependency path quickly, but disables payment capability.",
+        "notes": "Disabling online self-scheduling sheds the degraded dependency path quickly, but forces a manual access fallback.",
     },
     "rate_limit_retries": {
         "latency_p95_ms": 1250,
@@ -33,7 +33,7 @@ SIMULATED_OUTCOMES = {
         "impact": "medium_high",
         "blast_radius": "low",
         "recovery": "strong",
-        "notes": "Retry shaping stabilizes the system while keeping the product mostly available.",
+        "notes": "Retry shaping stabilizes scheduling while keeping digital access mostly available.",
     },
     "shift_traffic": {
         "latency_p95_ms": 1450,
@@ -44,7 +44,7 @@ SIMULATED_OUTCOMES = {
         "impact": "high",
         "blast_radius": "high",
         "recovery": "partial",
-        "notes": "Traffic shifting spreads load but does not fix the core degraded dependency.",
+        "notes": "Traffic shifting spreads load but does not fix the core degraded eligibility dependency.",
     },
 }
 

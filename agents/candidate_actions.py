@@ -7,7 +7,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "throttle",
         "target": "checkout",
         "category": "retry_overload_control",
-        "description": "Rate-limit checkout retries to break retry amplification.",
+        "description": "Throttle appointment-booking retries to break retry amplification.",
         "execution_surface": "browser",
     },
     {
@@ -15,7 +15,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "circuit_breaker",
         "target": "payment",
         "category": "retry_overload_control",
-        "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
+        "description": "Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.",
         "execution_surface": "browser",
     },
     {
@@ -23,7 +23,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "config",
         "target": "checkout",
         "category": "retry_overload_control",
-        "description": "Increase retry backoff so checkout stops hammering payment during partial degradation.",
+        "description": "Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.",
         "execution_surface": "browser",
     },
     {
@@ -31,7 +31,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "restart",
         "target": "payment",
         "category": "service_recovery",
-        "description": "Restart payment pods to clear local state after backlog is reduced.",
+        "description": "Restart eligibility workers after backlog pressure is reduced.",
         "execution_surface": "browser",
     },
     {
@@ -39,7 +39,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "traffic_shift",
         "target": "secondary_region",
         "category": "traffic_management",
-        "description": "Shift a slice of checkout traffic to the secondary region.",
+        "description": "Shift a slice of patient-portal scheduling traffic to the secondary region.",
         "execution_surface": "browser",
     },
     {
@@ -47,7 +47,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "flag",
         "target": "payment_feature",
         "category": "graceful_degradation",
-        "description": "Disable the payment feature flag as a last-resort kill switch.",
+        "description": "Disable online self-scheduling as a last-resort kill switch and route patients to staffed fallback.",
         "execution_surface": "browser",
     },
     {
@@ -55,7 +55,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "rollback",
         "target": "payment",
         "category": "deployment_recovery",
-        "description": "Rollback the most recent payment deployment.",
+        "description": "Rollback the most recent eligibility-service deployment.",
         "execution_surface": "k8s",
     },
     {
@@ -63,7 +63,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "rollback",
         "target": "checkout",
         "category": "deployment_recovery",
-        "description": "Rollback the most recent checkout deployment.",
+        "description": "Rollback the most recent scheduling-service deployment.",
         "execution_surface": "k8s",
     },
     {
@@ -71,7 +71,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "degrade",
         "target": "checkout",
         "category": "graceful_degradation",
-        "description": "Disable nonessential checkout features and keep the transaction path alive.",
+        "description": "Disable nonessential patient-portal features and keep the scheduling path alive.",
         "execution_surface": "future",
     },
     {
@@ -79,7 +79,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "cache",
         "target": "catalog",
         "category": "graceful_degradation",
-        "description": "Serve stale catalog data to preserve capacity for checkout and payment.",
+        "description": "Serve stale provider-directory and slot-search data to preserve scheduling capacity.",
         "execution_surface": "future",
     },
     {
@@ -87,7 +87,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "failover",
         "target": "region",
         "category": "traffic_management",
-        "description": "Fail over fully to the secondary region when the primary region is no longer safe.",
+        "description": "Fail over fully to the secondary scheduling region when the primary region is no longer safe.",
         "execution_surface": "k8s",
     },
     {
@@ -95,7 +95,7 @@ RETAIL_ACTION_LIBRARY = [
         "type": "workload_shaping",
         "target": "background_workers",
         "category": "capacity_management",
-        "description": "Pause noncritical background jobs to free capacity for checkout and payment.",
+        "description": "Pause noncritical batch work to free capacity for patient access and eligibility checks.",
         "execution_surface": "k8s",
     },
 ]
@@ -126,10 +126,10 @@ def build_scenario_shortlist(state: dict, limit: int = 6) -> dict:
             ]
         )
         selection_rationale.append(
-            "Planner Agent prioritized overload-control actions because retry amplification and elevated checkout latency are present."
+            "Planner Agent prioritized access-stabilizing actions because retry amplification and elevated scheduling latency are present."
         )
 
-    if "payment" in services:
+    if {"payment", "eligibility"} & services:
         selected_ids.extend(
             [
                 "restart_payment",
@@ -151,7 +151,7 @@ def build_scenario_shortlist(state: dict, limit: int = 6) -> dict:
             ]
         )
         selection_rationale.append(
-            "Planner Agent used a generic retail shortlist because the incident did not strongly match a narrower pattern."
+            "Planner Agent used a generic healthcare-access shortlist because the incident did not strongly match a narrower pattern."
         )
 
     shortlist_ids = _dedupe(selected_ids)[:limit]
@@ -161,7 +161,7 @@ def build_scenario_shortlist(state: dict, limit: int = 6) -> dict:
     return {
         "action_library": library,
         "shortlist": shortlist,
-        "selection_strategy": "broader_retail_action_library -> scenario_shortlist -> stratus_ranking",
+        "selection_strategy": "broader_healthcare_access_action_library -> scenario_shortlist -> stratus_ranking",
         "selection_rationale": selection_rationale,
     }
 

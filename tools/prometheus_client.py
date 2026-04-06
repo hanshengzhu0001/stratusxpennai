@@ -11,19 +11,19 @@ from tools.runtime_state import derive_metrics, load_state
 
 
 DEFAULT_EVIDENCE = {
-    "services": ["frontend", "checkout", "payment"],
+    "services": ["portal", "scheduling", "eligibility"],
     "metrics": {
         "latency_p95_ms": 2300,
         "error_rate": 0.18,
         "retry_rate": 0.31,
     },
     "logs": [
-        "payment timeout spikes observed",
-        "checkout retries exceeding normal threshold",
+        "eligibility timeout spikes observed",
+        "scheduling retries exceeding normal threshold",
     ],
     "traces": [
-        "checkout -> payment span dominates p95",
-        "retry fan-out visible across checkout service",
+        "scheduling -> eligibility span dominates p95",
+        "retry fan-out visible across scheduling service",
     ],
     "prometheus": {
         "source": "mock",
@@ -33,8 +33,8 @@ DEFAULT_EVIDENCE = {
             "checkout_retry_rate": 0.31,
         },
         "active_alerts": [
-            "CheckoutLatencyHigh",
-            "CheckoutRetryStorm",
+            "SchedulingLatencyHigh",
+            "SchedulingRetrySpiral",
         ],
     },
 }
@@ -153,9 +153,9 @@ def _direct_evidence_fallback(evidence: dict, alert_payload: dict, note: str) ->
 def _active_alerts_from_metrics(metrics: dict) -> list[str]:
     alerts: list[str] = []
     if float(metrics.get("latency_p95_ms", 0)) > 2000:
-        alerts.append("CheckoutLatencyHigh")
+        alerts.append("SchedulingLatencyHigh")
     if float(metrics.get("retry_rate", 0.0)) > 0.25:
-        alerts.append("CheckoutRetryStorm")
+        alerts.append("SchedulingRetrySpiral")
     return alerts
 
 

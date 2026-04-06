@@ -1,6 +1,6 @@
-# OpenClaw + Stratus Counterfactual Remediation Guardrail
+# OpenClaw + Stratus Counterfactual Access Guardrail
 
-This repo is the hackathon demo for a narrow incident-response decision module:
+This repo is the hackathon demo for a narrow healthcare-access decision module:
 
 - OpenClaw is the outer orchestrator
 - Stratus is only used at the guarded decision step
@@ -10,8 +10,9 @@ The current demo supports:
 
 - alert intake through a local webhook
 - live Prometheus-backed evidence collection
-- a broader retail remediation library with scenario-specific shortlist selection
+- a healthcare-access remediation library with scenario-specific shortlist selection
 - Stratus ranking and predicted downstream effects
+- a dedicated telehealth-style operations board at `/operations`
 - a dedicated OpenClaw execution surface at `/openclaw-execution`
 - a browser playbook for OpenClaw to execute
 - post-action verification and predicted-vs-actual comparison
@@ -29,7 +30,7 @@ The current demo supports:
 Core workflow:
 
 1. Alertmanager posts an incident payload to `tools/alert_receiver.py`.
-2. `run.py --phase plan` loads evidence, has the Planner Agent select a shortlist from the retail action library, and calls Stratus to rank only that shortlist.
+2. `run.py --phase plan` loads evidence, has the Planner Agent select a shortlist from the healthcare-access action library, and calls Stratus to rank only that shortlist.
 3. `run.py --phase demo` writes both a dedicated OpenClaw demo-mode artifact and the browser handoff artifact.
 4. OpenClaw browser follows those artifacts:
    - open `/openclaw-execution`
@@ -50,9 +51,9 @@ Core workflow:
 - `tools/prometheus_client.py`: evidence collection from Prometheus
 - `tools/alert_receiver.py`: local Alertmanager webhook receiver
 - `tools/metrics_target.py`: synthetic Prometheus scrape target
-- `tools/visual_control_plane.py`: Guardrail Console shell, dedicated OpenClaw execution surface, and feature-flag fallback UI
+- `tools/visual_control_plane.py`: Guardrail Console shell, dedicated OpenClaw execution surface, and manual ops fallback surface
 - `tools/runtime_state.py`: shared state across UI and metrics
-- `tools/scenario_catalog.py`: concert ticket scenario metadata and business-metric overlays
+- `tools/scenario_catalog.py`: healthcare scheduling scenario metadata and business-metric overlays
 - `outputs/`: generated plan, browser playbook, and report artifacts
 - `k8s/`: Level 3 Kubernetes and Chaos Mesh scaffolding
 
@@ -81,6 +82,11 @@ PROMQL_CHECKOUT_ERROR_RATE=checkout_error_rate
 PROMQL_CHECKOUT_RETRY_RATE=checkout_retry_rate
 CONTROL_PLANE_BASE_URL=http://127.0.0.1:8010
 ```
+
+Note:
+
+- the underlying Prometheus metric names still use legacy `checkout/payment` identifiers for demo speed
+- the operator-facing product surfaces and documentation map those internals to healthcare scheduling language
 
 ### 3. Start the local services
 
@@ -125,6 +131,21 @@ Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode.
 The skill is defined in `skills/incident_guardrail/SKILL.md`.
 
 ## Running the Demo
+
+The default story is a **high-demand telehealth / specialist scheduling release**:
+
+- patient portal demand spikes
+- eligibility verification degrades
+- booking retries amplify the issue
+- slot holds clog access
+- the dangerous reflex is restarting eligibility too early
+- the safer first move is usually throttling retries or enabling an eligibility circuit breaker
+
+Reality anchor:
+
+- the product story mirrors real healthcare scheduling concepts such as appointment slots, holds, and eligibility checks
+- if we want a more literal surface later, we can mirror open-source scheduling systems such as OpenEMR while keeping the same guardrail flow
+- for Week 2, the architecture stays the same and only the operator-facing semantics change
 
 ### Reset the incident state
 
@@ -181,7 +202,7 @@ Fallback path:
    - `outputs/alert_latest_report.md`
 4. summarize that execution used the saved-plan fallback because browser control was unavailable
 
-Manual console fallback:
+Manual console backup:
 
 1. open `http://127.0.0.1:8010/`
 2. use the Guardrail Console to inspect the incident, shortlist, and execution flow

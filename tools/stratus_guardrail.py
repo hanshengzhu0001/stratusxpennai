@@ -79,37 +79,37 @@ def _mock_ranking(actions: list[dict], notes: list[str] | None = None) -> dict:
             "id": "rate_limit_retries",
             "rank": 1,
             "confidence": 0.84,
-            "rationale": "Controls retry amplification directly with low blast radius.",
+            "rationale": "Controls booking retry amplification directly with low blast radius.",
         },
         {
             "id": "enable_payment_circuit_breaker",
             "rank": 2,
             "confidence": 0.78,
-            "rationale": "Fails fast at the dependency edge and contains retry pressure, but may drop some payment attempts.",
+            "rationale": "Fails fast at the eligibility edge and contains retry pressure, but may defer some bookings.",
         },
         {
             "id": "increase_retry_backoff",
             "rank": 3,
             "confidence": 0.72,
-            "rationale": "Reduces retry pressure more gently, but takes longer to stabilize the feedback loop.",
+            "rationale": "Reduces retry pressure more gently, but takes longer to stabilize the booking feedback loop.",
         },
         {
             "id": "restart_payment",
             "rank": 4,
             "confidence": 0.43,
-            "rationale": "Tempting local fix, but it can amplify retries while payment is unstable.",
+            "rationale": "Tempting local fix, but it can amplify retries while eligibility is unstable.",
         },
         {
             "id": "shift_traffic",
             "rank": 5,
             "confidence": 0.30,
-            "rationale": "Widens exposure without directly reducing the retry storm.",
+            "rationale": "Widens exposure without directly reducing the retry spiral.",
         },
         {
             "id": "disable_flag",
             "rank": 6,
             "confidence": 0.24,
-            "rationale": "Stops the pain quickly, but is too destructive to be the first safe move.",
+            "rationale": "Stops online pain quickly, but is too destructive to be the first safe move.",
         },
     ]
     action_ids = {action["id"] for action in actions}
