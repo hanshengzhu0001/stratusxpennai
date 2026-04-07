@@ -1,9 +1,9 @@
 {
-  "plan_id": "alert_latest-89accadd",
-  "generated_at_utc": "2026-04-05T20:28:20.110531+00:00",
+  "plan_id": "alert_latest-977f66d4",
+  "generated_at_utc": "2026-04-06T21:55:27.428843+00:00",
   "workflow": {
     "orchestrator": "openclaw",
-    "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase demo",
+    "entrypoint": ".venv/bin/python run.py alerts\\latest.json --phase plan --mode stratus",
     "workspace_skill": "incident_guardrail",
     "level": "level_3_browser_k8s_scaffold",
     "phase": "plan"
@@ -31,12 +31,11 @@
     ],
     "metrics": {
       "latency_p95_ms": 2300,
-      "error_rate": 0.18,
+      "error_rate": 0.16,
       "retry_rate": 0.31
     },
     "logs": [
-      "payment timeout spikes observed",
-      "checkout retries exceeding normal threshold"
+      "Retry pressure above baseline"
     ],
     "traces": [
       "checkout -> payment span dominates p95",
@@ -58,7 +57,7 @@
         "CheckoutLatencyHigh",
         "CheckoutRetryStorm"
       ],
-      "note": "Prometheus query failed; using direct control-plane metrics: URLError"
+      "note": "PROMETHEUS_BASE_URL not set; using direct control-plane metrics."
     },
     "browser_targets": {
       "dashboard": "http://127.0.0.1:8010/",
@@ -218,38 +217,38 @@
     {
       "id": "enable_payment_circuit_breaker",
       "rank": 1,
-      "confidence": 0.94,
-      "rationale": "Fail-fast pattern directly breaks retry amplification loop at degraded dependency boundary"
+      "confidence": 0.93,
+      "rationale": "Fail fast stops retry amplification at source, immediate relief for payment degradation"
     },
     {
       "id": "increase_retry_backoff",
       "rank": 2,
       "confidence": 0.88,
-      "rationale": "Reduces retry pressure by spacing attempts, less aggressive than circuit breaker"
+      "rationale": "Reduces retry pressure while maintaining functionality, less disruptive than rate limiting"
     },
     {
       "id": "rate_limit_retries",
       "rank": 3,
       "confidence": 0.82,
-      "rationale": "Caps retry volume but doesn't address root cause of hammering degraded payment"
+      "rationale": "Direct control over retry storm but may increase user-visible errors temporarily"
     },
     {
       "id": "restart_payment",
       "rank": 4,
-      "confidence": 0.65,
-      "rationale": "May help payment recovery but risky during active retry storm amplification"
+      "confidence": 0.71,
+      "rationale": "Clears state but risky during active degradation, could worsen availability"
     },
     {
       "id": "shift_traffic",
       "rank": 5,
-      "confidence": 0.58,
-      "rationale": "Spreads load but doesn't solve retry amplification pattern at checkout-payment boundary"
+      "confidence": 0.65,
+      "rationale": "Spreads load but doesn't address root retry amplification, secondary may inherit problem"
     },
     {
       "id": "disable_flag",
       "rank": 6,
       "confidence": 0.45,
-      "rationale": "Nuclear option with high business impact, premature given targeted alternatives available"
+      "rationale": "Last resort only, complete feature outage, too aggressive for current metrics"
     }
   ],
   "best_action": {
@@ -260,17 +259,17 @@
     "description": "Enable a payment circuit breaker to fail fast instead of retrying into a degraded dependency.",
     "execution_surface": "browser"
   },
-  "overall_confidence": 0.94,
+  "overall_confidence": 0.87,
   "predicted_effects_by_action": {
     "rate_limit_retries": {
       "latency_direction": "down",
-      "error_direction": "mixed",
+      "error_direction": "up",
       "blast_radius": "medium",
-      "retry_storm_risk": "medium"
+      "retry_storm_risk": "low"
     },
     "enable_payment_circuit_breaker": {
       "latency_direction": "down",
-      "error_direction": "down",
+      "error_direction": "mixed",
       "blast_radius": "low",
       "retry_storm_risk": "low"
     },
@@ -284,7 +283,7 @@
       "latency_direction": "mixed",
       "error_direction": "up",
       "blast_radius": "high",
-      "retry_storm_risk": "high"
+      "retry_storm_risk": "medium"
     },
     "shift_traffic": {
       "latency_direction": "mixed",
@@ -304,23 +303,35 @@
       "id": "restart_payment",
       "rank": 1,
       "confidence": 0.5,
-      "rationale": "Keyword match (score: 3)."
+      "rationale": "Keyword match (score: 2)."
     },
     {
-      "id": "disable_flag",
+      "id": "rate_limit_retries",
       "rank": 2,
       "confidence": 0.1,
       "rationale": "Not chosen."
     },
     {
-      "id": "rate_limit_retries",
+      "id": "enable_payment_circuit_breaker",
       "rank": 3,
       "confidence": 0.1,
       "rationale": "Not chosen."
     },
     {
-      "id": "shift_traffic",
+      "id": "increase_retry_backoff",
       "rank": 4,
+      "confidence": 0.1,
+      "rationale": "Not chosen."
+    },
+    {
+      "id": "shift_traffic",
+      "rank": 5,
+      "confidence": 0.1,
+      "rationale": "Not chosen."
+    },
+    {
+      "id": "disable_flag",
+      "rank": 6,
       "confidence": 0.1,
       "rationale": "Not chosen."
     }
@@ -329,7 +340,9 @@
     "id": "restart_payment",
     "type": "restart",
     "target": "payment",
-    "description": "Restart payment pods"
+    "category": "service_recovery",
+    "description": "Restart payment pods to clear local state after backlog is reduced.",
+    "execution_surface": "browser"
   },
   "baseline_confidence": 0.5,
   "baseline_notes": [
@@ -354,7 +367,7 @@
   "artifacts": {
     "browser_playbook": "outputs/alert_latest_browser_playbook.json",
     "openclaw_demo_mode": "outputs/alert_latest_openclaw_demo.json",
-    "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify"
+    "verify_command": ".venv/bin/python run.py alerts\\latest.json --phase verify"
   },
   "kubernetes_plan": {
     "cluster_stack": {
@@ -368,6 +381,6 @@
     "recommended_remediation_manifest": "k8s/remediations/enable-payment-circuit-breaker-configmap.yaml"
   },
   "notes": [
-    "Using deterministic local ranking because Stratus credentials are missing or network access is unavailable."
+    "Used live Stratus ranking."
   ]
 }

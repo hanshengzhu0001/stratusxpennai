@@ -4,8 +4,8 @@
 
 - Level: `level_3_browser_k8s_scaffold`
 - Phase: `plan`
-- Entrypoint: `.venv/bin/python run.py alerts/latest.json --phase demo`
-- Mode: `stratus` (use `--mode baseline` for baseline comparison)
+- Entrypoint: `.venv/bin/python run.py alerts\latest.json --phase plan --mode stratus`
+- Mode: `stratus`
 
 ## Incident
 
@@ -45,11 +45,11 @@
 
 ## Stratus Ranking
 
-- Rank 1: `enable_payment_circuit_breaker` (0.94)
+- Rank 1: `enable_payment_circuit_breaker` (0.93)
 - Rank 2: `increase_retry_backoff` (0.88)
 - Rank 3: `rate_limit_retries` (0.82)
-- Rank 4: `restart_payment` (0.65)
-- Rank 5: `shift_traffic` (0.58)
+- Rank 4: `restart_payment` (0.71)
+- Rank 5: `shift_traffic` (0.65)
 - Rank 6: `disable_flag` (0.45)
 
 ## Browser Workflow
@@ -70,9 +70,7 @@
 - Guardrail choice: `enable_payment_circuit_breaker`
 - Executed action: `enable_payment_circuit_breaker`
 - Plan/execution match: `True`
-- Confidence: `0.94`
-- Dashboard: `http://127.0.0.1:8010/`
-- Feature flags: `http://127.0.0.1:8010/feature-flags`
+- Confidence: `0.87`
 
 ## Predicted vs Actual
 

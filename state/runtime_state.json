@@ -2,10 +2,10 @@
   "active_scenario": "retry_death_spiral",
   "payment_service_unreachable": true,
   "loadgenerator_flood_homepage": true,
-  "retry_rate_limit_enabled": false,
-  "payment_circuit_breaker_enabled": true,
+  "retry_rate_limit_enabled": true,
+  "payment_circuit_breaker_enabled": false,
   "retry_backoff_enabled": false,
   "traffic_shift_enabled": false,
   "payment_feature_disabled": false,
-  "last_action": "enable_payment_circuit_breaker"
+  "last_action": "rate_limit_retries"
 }

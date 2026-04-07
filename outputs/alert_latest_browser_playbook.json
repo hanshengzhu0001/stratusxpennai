@@ -1,5 +1,5 @@
 {
-  "plan_id": "alert_latest-89accadd",
+  "plan_id": "alert_latest-977f66d4",
   "workflow": {
     "orchestrator": "openclaw",
     "level": "level_3_browser_k8s_scaffold",
@@ -60,12 +60,12 @@
   ],
   "expected_before": {
     "latency_p95_ms": 2300,
-    "error_rate": 0.18,
+    "error_rate": 0.16,
     "retry_rate": 0.31
   },
   "predicted_after": {
     "latency_direction": "down",
-    "error_direction": "down",
+    "error_direction": "mixed",
     "blast_radius": "low",
     "retry_storm_risk": "low"
   }
