@@ -234,6 +234,13 @@ verdict</li>
 <li>the dedicated browser page at <code>/openclaw-execution</code></li>
 <li>gives OpenClaw one stable place to inspect, click, and verify</li>
 </ul></li>
+<li><strong>Armed Watch Layer</strong>
+<ul>
+<li>OpenClaw is armed once and stays in the background</li>
+<li>a watcher latches a <code>pending_incident</code> from the
+Alertmanager webhook path</li>
+<li>OpenClaw wakes up only when a real incident arrives</li>
+</ul></li>
 <li><strong>Case-Aware Decision Loop</strong>
 <ul>
 <li>parallel sentinel agents observe the situation</li>
@@ -259,6 +266,7 @@ that they are looking at:</p>
 <ul>
 <li>a real telehealth scheduling operations board</li>
 <li>a real operator decision console</li>
+<li>a real background monitoring and wake-up path</li>
 <li>a real OpenClaw execution step</li>
 <li>a real closed loop from prediction to verification</li>
 </ul>
@@ -286,6 +294,7 @@ without changing the core mechanics.</p>
 <p>We keep the stack:</p>
 <ul>
 <li>OpenClaw for orchestration and browser execution</li>
+<li>an Alertmanager/webhook watcher for background activation</li>
 <li>Stratus for counterfactual ranking</li>
 <li>Prometheus for verification</li>
 <li>the current shared state, alert flow, browser playbook, and verdict
@@ -509,6 +518,7 @@ force manual fallback</li>
 <p>The main workflow should be:</p>
 <ol type="1">
 <li><strong>Parallel observation</strong></li>
+<li><strong>Incident latch / wake-up</strong></li>
 <li><strong>Case-library retrieval</strong></li>
 <li><strong>Shortlist generation</strong></li>
 <li><strong>Stratus guardrail ranking</strong></li>
@@ -516,6 +526,23 @@ force manual fallback</li>
 <li><strong>Post-action evaluation</strong></li>
 <li><strong>Case writeback</strong></li>
 </ol>
+<h3 id="armed-watch-layer">7.0 Armed Watch Layer</h3>
+<p>Before the rest of the workflow runs, OpenClaw should be armed once
+and remain idle in the background.</p>
+<p>The watcher should:</p>
+<ul>
+<li>observe <code>alerts/latest.json</code> or the Alertmanager alert
+state</li>
+<li>latch a <code>pending_incident</code> when a new firing alert
+arrives</li>
+<li>mark the incident <code>acknowledged</code> when OpenClaw starts
+handling it</li>
+<li>mark it <code>completed</code> after verify or fallback</li>
+<li>return to watch mode automatically</li>
+</ul>
+<p>This is better than a manual trigger prompt because the demo now
+feels like an operational agent waking up to a real incident instead of
+being told exactly when to act.</p>
 <h3 id="observation-layer">7.1 Observation Layer</h3>
 <p>Run four specialist agents in parallel.</p>
 <h4 id="eligibility-sentinel-agent">Eligibility Sentinel Agent</h4>
@@ -633,6 +660,8 @@ execution</li>
 <h3 id="execution">7.5 Execution</h3>
 <p>Execution remains OpenClaw-first:</p>
 <ul>
+<li>OpenClaw is armed once through watch mode</li>
+<li>the watcher latches a new firing incident from the webhook path</li>
 <li>run <code>run.py --phase demo</code></li>
 <li>read the demo artifact and browser playbook</li>
 <li>open <code>/openclaw-execution</code></li>
@@ -987,10 +1016,17 @@ the baseline and what was written back into the case library</li>
 <ul>
 <li>this is not fire-and-forget automation</li>
 </ul></li>
+<li><strong>The agent woke up on its own</strong>
+<ul>
+<li>it was armed in the background and activated from a real incident
+signal</li>
+</ul></li>
 </ol>
 <p>Recommended demo sequence:</p>
 <ol type="1">
 <li>Trigger one healthcare-access incident live</li>
+<li>Show that OpenClaw is already armed and waiting</li>
+<li>Let the incident latch from the webhook path</li>
 <li>Show the incident in the Guardrail Console</li>
 <li>Turn on baseline mode and show it picks <code>restart_payment</code>
 shown as <code>Restart Eligibility Service</code></li>

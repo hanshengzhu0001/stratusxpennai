@@ -12,6 +12,12 @@ from agents.candidate_actions import build_scenario_shortlist
 from agents.incident_classifier import classify_incident
 from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
 from tools.execute_action import execute_action
+from tools.incident_watch import (
+    acknowledge_pending_incident,
+    complete_active_incident,
+    load_watch_state,
+    watch_for_pending_incident,
+)
 from tools.prometheus_client import collect_evidence
 from tools.runtime_state import control_plane_urls, derive_metrics, load_state, reset_state
 from tools.stratus_guardrail import rank_actions
@@ -34,13 +40,29 @@ def main() -> None:
     load_local_env()
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path", nargs="?", default="alerts/latest.json")
-    parser.add_argument("--phase", choices=["plan", "demo", "fallback", "verify", "auto"], default="auto")
+    parser.add_argument("--phase", choices=["plan", "demo", "fallback", "verify", "auto", "watch"], default="auto")
+    parser.add_argument("--timeout-seconds", type=float, default=0.0)
+    parser.add_argument("--poll-interval-seconds", type=float, default=2.0)
     args = parser.parse_args()
 
     input_path = Path(args.input_path)
+    if args.phase == "watch":
+        watch_state = watch_for_pending_incident(
+            alert_path=input_path,
+            timeout_seconds=args.timeout_seconds,
+            poll_interval_seconds=args.poll_interval_seconds,
+        )
+        print(json.dumps(build_watch_artifact(watch_state), indent=2))
+        if watch_state.get("pending_incident"):
+            print("Latched pending incident and armed OpenClaw workflow.")
+        else:
+            print("Watcher remains armed; no new incident latched during this interval.")
+        return
+
     payload = load_json_path(input_path)
 
     if args.phase == "demo":
+        acknowledge_pending_incident("openclaw_demo_start")
         state, evidence = prepare_demo_state(payload)
         source_type = "alertmanager_webhook"
     else:
@@ -98,6 +120,7 @@ def main() -> None:
             mode="openclaw_browser_fallback",
         )
         write_outputs(report, scenario_id, "report")
+        complete_active_incident("fallback_verified", f"outputs/{scenario_id}_report.json")
         print(json.dumps(report, indent=2))
         print(f"Wrote fallback report to outputs/{scenario_id}_report.json")
         return
@@ -116,6 +139,7 @@ def main() -> None:
             mode="browser_verify",
         )
         write_outputs(verify, scenario_id, "report")
+        complete_active_incident("verified", f"outputs/{scenario_id}_report.json")
         print(json.dumps(verify, indent=2))
         print(f"Wrote report to outputs/{scenario_id}_report.json")
         return
@@ -147,6 +171,7 @@ def main() -> None:
     write_browser_playbook(plan, scenario_id)
     write_openclaw_demo_mode(plan, scenario_id)
     write_outputs(report, scenario_id, "report")
+    complete_active_incident("auto_verified", f"outputs/{scenario_id}_report.json")
     print(json.dumps(report, indent=2))
     print(f"Wrote report to outputs/{scenario_id}_report.json")
 
@@ -384,6 +409,30 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 """
 
 
+def build_watch_artifact(watch_state: dict) -> dict:
+    pending = watch_state.get("pending_incident")
+    active = watch_state.get("active_incident")
+    return {
+        "watcher": {
+            "mode": "armed_background_watch",
+            "status": watch_state.get("status", "idle"),
+            "armed": watch_state.get("armed", False),
+            "watch_command": ".venv/bin/python run.py alerts/latest.json --phase watch",
+            "demo_command": ".venv/bin/python run.py alerts/latest.json --phase demo",
+            "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify",
+            "fallback_command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
+        },
+        "pending_incident": pending,
+        "active_incident": active,
+        "last_completed_incident": watch_state.get("last_completed_incident"),
+        "next_step": (
+            ".venv/bin/python run.py alerts/latest.json --phase demo"
+            if pending
+            else "Stay idle and continue watching for the next firing incident."
+        ),
+    }
+
+
 def load_json_path(path: Path) -> dict:
     raw = path.read_text()
     try:
@@ -596,28 +645,38 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
     execution_surface = playbook["urls"]["openclaw_execution"]
     verdict_surface = playbook["urls"]["openclaw_verdict"]
     state_api = playbook["urls"]["state_api"]
+    watch_state = load_watch_state()
     return {
         "plan_id": plan.get("plan_id"),
         "workflow": {
             "orchestrator": "openclaw",
             "phase": "demo_mode",
             "workspace_skill": "incident_guardrail",
-            "launch_style": "start_from_openclaw_chat",
+            "launch_style": "armed_background_watch",
         },
         "scenario_id": plan["scenario_id"],
-        "goal": "Start from OpenClaw chat, generate the guardrail plan, execute the browser remediation from one dedicated execution page, run verify, and summarize the final verdict without using the console shortcut buttons.",
+        "goal": "Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, summarize the final verdict, and return to watch mode.",
         "starter_prompt": default_openclaw_demo_prompt(),
         "artifacts": {
             "plan": f"outputs/{plan['scenario_id']}_plan.json",
             "browser_playbook": f"outputs/{plan['scenario_id']}_browser_playbook.json",
             "report": f"outputs/{plan['scenario_id']}_report.json",
         },
+        "watch_state": {
+            "status": watch_state.get("status", "idle"),
+            "armed": watch_state.get("armed", False),
+            "pending_incident": watch_state.get("pending_incident"),
+            "active_incident": watch_state.get("active_incident"),
+        },
         "demo_contract": {
+            "watch_command": ".venv/bin/python run.py alerts/latest.json --phase watch",
             "run_first_command": ".venv/bin/python run.py alerts/latest.json --phase demo",
             "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify",
             "fallback_command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
             "must_start_in_chat": True,
+            "must_wait_for_incident": True,
             "manual_console_buttons_are_fallback_only": True,
+            "return_to_watch_after_summary": True,
         },
         "browser_sequence": [
             {
@@ -691,19 +750,7 @@ def resolve_executed_action(plan: dict, execution: dict | None) -> dict:
 
 
 def default_openclaw_demo_prompt() -> str:
-    return (
-        "Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode. "
-        "Run `.venv/bin/python run.py alerts/latest.json --phase demo`, read "
-        "`outputs/alert_latest_openclaw_demo.json` and "
-        "`outputs/alert_latest_browser_playbook.json`, then use the browser to open the "
-        "dedicated OpenClaw execution page, inspect the before-action incident card, click the "
-        "single execution button for the chosen remediation, run verify, inspect the verdict page, and summarize "
-        "the final verdict with the dangerous reflex that was avoided. If the browser tool "
-        "fails or times out, do not stop and do not replan. Instead run "
-        "`.venv/bin/python run.py alerts/latest.json --phase fallback`, then read "
-        "`outputs/alert_latest_report.json` and summarize the final verdict while explicitly "
-        "noting that execution used the saved-plan fallback because browser control was unavailable."
-    )
+    return "Arm the incident_guardrail skill in background mode for this workspace."
 
 
 def render_browser_playbook_markdown(playbook: dict) -> str:
@@ -763,10 +810,18 @@ def render_openclaw_demo_markdown(demo_mode: dict) -> str:
 
 ## Demo Contract
 
-- Run first: `{demo_mode['demo_contract']['run_first_command']}`
+- Arm watcher first: `{demo_mode['demo_contract']['watch_command']}`
+- When incident is latched, run: `{demo_mode['demo_contract']['run_first_command']}`
 - Verify after browser action: `{demo_mode['demo_contract']['verify_command']}`
 - Fallback if browser control fails: `{demo_mode['demo_contract']['fallback_command']}`
+- Return to watch after summary: `{demo_mode['demo_contract']['return_to_watch_after_summary']}`
 - Console buttons are fallback only: `{demo_mode['demo_contract']['manual_console_buttons_are_fallback_only']}`
+
+## Watch State
+
+- Status: `{demo_mode['watch_state']['status']}`
+- Armed: `{demo_mode['watch_state']['armed']}`
+- Pending incident latched: `{bool(demo_mode['watch_state']['pending_incident'])}`
 
 ## Browser Sequence
 

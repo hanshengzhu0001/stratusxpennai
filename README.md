@@ -20,26 +20,28 @@ The current demo supports:
 ## Recommended Demo Path
 
 1. Start the local services and OpenClaw gateway.
-2. Post `alerts/latest.json` to the local webhook.
-3. In OpenClaw chat, paste the prompt from `docs/openclaw_demo_prompt.md`.
-4. OpenClaw runs `run.py --phase demo`, reads the generated artifacts, opens `/openclaw-execution`, clicks the single remediation button, runs verify, then opens `/openclaw-execution?stage=verdict`.
-5. If browser control fails, OpenClaw runs `run.py --phase fallback` and still finishes the report.
+2. In OpenClaw chat, paste the prompt from `docs/openclaw_demo_prompt.md` to arm the watcher once.
+3. OpenClaw runs `run.py --phase watch` and waits for a new webhook incident.
+4. Trigger the incident by posting `alerts/latest.json` to the local webhook.
+5. When the incident is latched, OpenClaw runs `run.py --phase demo`, reads the generated artifacts, opens `/openclaw-execution`, clicks the single remediation button, runs verify, then opens `/openclaw-execution?stage=verdict`.
+6. If browser control fails, OpenClaw runs `run.py --phase fallback` and still finishes the report.
 
 ## Architecture
 
 Core workflow:
 
 1. Alertmanager posts an incident payload to `tools/alert_receiver.py`.
-2. `run.py --phase plan` loads evidence, has the Planner Agent select a shortlist from the healthcare-access action library, and calls Stratus to rank only that shortlist.
-3. `run.py --phase demo` writes both a dedicated OpenClaw demo-mode artifact and the browser handoff artifact.
-4. OpenClaw browser follows those artifacts:
+2. `run.py --phase watch` latches a `pending_incident` from `alerts/latest.json` and keeps OpenClaw armed in the background.
+3. `run.py --phase plan` loads evidence, has the Planner Agent select a shortlist from the healthcare-access action library, and calls Stratus to rank only that shortlist.
+4. `run.py --phase demo` acknowledges the pending incident, then writes both a dedicated OpenClaw demo-mode artifact and the browser handoff artifact.
+5. OpenClaw browser follows those artifacts:
    - open `/openclaw-execution`
    - inspect the before-action incident card
    - click one stable execution button
    - run verify
    - open `/openclaw-execution?stage=verdict`
-5. `run.py --phase verify` re-queries Prometheus and compares predicted vs actual.
-6. Final outputs are written into `outputs/`.
+6. `run.py --phase verify` re-queries Prometheus and compares predicted vs actual.
+7. Final outputs are written into `outputs/`, and the watcher returns to armed mode for the next incident.
 
 ## Repo Layout
 
@@ -125,7 +127,7 @@ openclaw gateway
 Then open the dashboard at `http://127.0.0.1:18789/` and invoke:
 
 ```text
-Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode.
+Arm the incident_guardrail skill in background mode for this workspace.
 ```
 
 The skill is defined in `skills/incident_guardrail/SKILL.md`.
@@ -153,7 +155,15 @@ Reality anchor:
 curl -X POST http://127.0.0.1:8010/api/reset
 ```
 
-### Post the alert payload
+### Arm OpenClaw first
+
+```bash
+.venv/bin/python run.py alerts/latest.json --phase watch
+```
+
+This blocks until a new webhook incident is latched and then returns the pending-incident state to OpenClaw.
+
+### Trigger the incident
 
 ```bash
 curl -X POST http://127.0.0.1:8000/alerts \
@@ -161,7 +171,9 @@ curl -X POST http://127.0.0.1:8000/alerts \
   --data @alerts/latest.json
 ```
 
-### Generate the OpenClaw demo-mode handoff
+### OpenClaw handles the rest
+
+Once the incident is latched, OpenClaw should run:
 
 ```bash
 .venv/bin/python run.py alerts/latest.json --phase demo
@@ -175,8 +187,6 @@ This writes:
 - `outputs/alert_latest_openclaw_demo.md`
 - `outputs/alert_latest_browser_playbook.json`
 - `outputs/alert_latest_browser_playbook.md`
-
-### Execute through the browser
 
 Primary path:
 

@@ -21,6 +21,7 @@ from run import (
     write_outputs,
 )
 from tools.execute_action import execute_action
+from tools.incident_watch import load_watch_state
 from tools.prometheus_client import collect_evidence
 
 from tools.runtime_state import (
@@ -91,6 +92,7 @@ load_local_env()
 def dashboard(view: str = Query("incident")) -> str:
     active_view = view if view in VIEW_ORDER else "incident"
     state = load_state()
+    watch_state = load_watch_state()
     technical_metrics = derive_metrics(state)
     business_metrics = derive_business_metrics(state, technical_metrics)
     urls = control_plane_urls(BASE_URL)
@@ -116,6 +118,7 @@ def dashboard(view: str = Query("incident")) -> str:
         active_view=active_view,
         body=body,
         state=state,
+        watch_state=watch_state,
         technical_metrics=technical_metrics,
         business_metrics=business_metrics,
         active_scenario=active_scenario,
@@ -125,6 +128,7 @@ def dashboard(view: str = Query("incident")) -> str:
 @app.get("/operations", response_class=HTMLResponse)
 def operations_dashboard() -> str:
     state = load_state()
+    watch_state = load_watch_state()
     technical_metrics = derive_metrics(state)
     business_metrics = derive_business_metrics(state, technical_metrics)
     active_scenario = get_scenario(state.get("active_scenario"))
@@ -139,6 +143,7 @@ def operations_dashboard() -> str:
         scenarios=scenarios,
         plan=plan,
         report=report,
+        watch_state=watch_state,
     )
 
 
@@ -243,10 +248,12 @@ def openclaw_execution(stage: str = Query("before")) -> str:
 @app.get("/api/state")
 def state_api() -> dict:
     state = load_state()
+    watch_state = load_watch_state()
     technical_metrics = derive_metrics(state)
     return {
         "scenario": get_scenario(state.get("active_scenario")),
         "state": state,
+        "watch_state": watch_state,
         "metrics": technical_metrics,
         "business_metrics": derive_business_metrics(state, technical_metrics),
         "artifacts": {
@@ -406,6 +413,7 @@ def _render_shell(
     active_view: str,
     body: str,
     state: dict,
+    watch_state: dict,
     technical_metrics: dict,
     business_metrics: dict,
     active_scenario: dict,
@@ -419,6 +427,7 @@ def _render_shell(
         f'<span class="pill">{escape(label)}</span>'
         for label in [
             f"Scenario: {active_scenario['label']}",
+            f"OpenClaw: {_watch_label(watch_state)}",
             f"Last action: {last_action}",
             f"Retry factor: {business_metrics['retry_amplification_factor']}x",
             f"Booking completion: {business_metrics['payment_success_rate']:.2f}",
@@ -1022,6 +1031,7 @@ def _render_operations_dashboard(
     scenarios: list[dict],
     plan: dict | None,
     report: dict | None,
+    watch_state: dict,
 ) -> str:
     scenario_options = "".join(
         f'<option value="{escape(item["id"])}"{" selected" if item["id"] == active_scenario["id"] else ""}>{escape(item["label"])}</option>'
@@ -1264,6 +1274,7 @@ def _render_operations_dashboard(
       <div class="hero-pills">
         <span class="pill">Scenario: {escape(active_scenario['label'])}</span>
         <span class="pill">System state: {escape(system_state.title())}</span>
+        <span class="pill">OpenClaw: {escape(_watch_label(watch_state))}</span>
         <span class="pill">Recommended remediation: {escape(_action_label(chosen_action)) if chosen_action else 'Generate guardrail plan'}</span>
         <span class="pill">Last executed: {escape(_action_label(executed_action))}</span>
       </div>
@@ -1326,6 +1337,10 @@ def _render_operations_dashboard(
             <a href="/">Open Guardrail Console</a>
             <a href="/openclaw-execution">Open Execution Surface</a>
           </div>
+          <ul class="summary-list" style="margin-top:14px;">
+            <li>Watcher status: <strong>{escape(_watch_label(watch_state))}</strong></li>
+            <li>Arm command: <code>.venv/bin/python run.py alerts/latest.json --phase watch</code></li>
+          </ul>
         </section>
 
         <section class="recommend">
@@ -1514,6 +1529,17 @@ def _ops_incident_feed(
         f'<div class="feed-item"><strong>{escape(title)}</strong><span class="muted">{escape(body)}</span></div>'
         for title, body in items
     )
+
+
+def _watch_label(watch_state: dict) -> str:
+    status = watch_state.get("status", "idle")
+    if status == "pending" and watch_state.get("pending_incident"):
+        return "Pending incident latched"
+    if status == "acknowledged" and watch_state.get("active_incident"):
+        return "Investigating active incident"
+    if watch_state.get("armed"):
+        return "Armed and waiting"
+    return "Idle"
 
 
 def _dangerous_reflex_from_plan(plan: dict | None, chosen_action: str) -> str:

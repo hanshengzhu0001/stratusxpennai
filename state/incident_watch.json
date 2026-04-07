@@ -1,0 +1,9 @@
+{
+  "status": "idle",
+  "armed": false,
+  "pending_incident": null,
+  "active_incident": null,
+  "last_completed_incident": null,
+  "last_seen_alert_mtime_ns": 0,
+  "last_acknowledged_alert_mtime_ns": 0
+}

@@ -43,6 +43,10 @@ By demo day, the product should look like one coherent healthcare-access operati
 3. **OpenClaw Execution Surface**
    - the dedicated browser page at `/openclaw-execution`
    - gives OpenClaw one stable place to inspect, click, and verify
+4. **Armed Watch Layer**
+   - OpenClaw is armed once and stays in the background
+   - a watcher latches a `pending_incident` from the Alertmanager webhook path
+   - OpenClaw wakes up only when a real incident arrives
 4. **Case-Aware Decision Loop**
    - parallel sentinel agents observe the situation
    - a shortlist is built from the broader remediation library
@@ -60,6 +64,7 @@ If the final product is working correctly, the audience should feel that they ar
 
 - a real telehealth scheduling operations board
 - a real operator decision console
+- a real background monitoring and wake-up path
 - a real OpenClaw execution step
 - a real closed loop from prediction to verification
 
@@ -85,6 +90,7 @@ This is the lowest-churn way to make the product feel more serious without chang
 We keep the stack:
 
 - OpenClaw for orchestration and browser execution
+- an Alertmanager/webhook watcher for background activation
 - Stratus for counterfactual ranking
 - Prometheus for verification
 - the current shared state, alert flow, browser playbook, and verdict surfaces
@@ -257,12 +263,27 @@ The simulator should preserve believable relationships:
 The main workflow should be:
 
 1. **Parallel observation**
-2. **Case-library retrieval**
-3. **Shortlist generation**
-4. **Stratus guardrail ranking**
-5. **OpenClaw execution**
-6. **Post-action evaluation**
-7. **Case writeback**
+2. **Incident latch / wake-up**
+3. **Case-library retrieval**
+4. **Shortlist generation**
+5. **Stratus guardrail ranking**
+6. **OpenClaw execution**
+7. **Post-action evaluation**
+8. **Case writeback**
+
+### 7.0 Armed Watch Layer
+
+Before the rest of the workflow runs, OpenClaw should be armed once and remain idle in the background.
+
+The watcher should:
+
+- observe `alerts/latest.json` or the Alertmanager alert state
+- latch a `pending_incident` when a new firing alert arrives
+- mark the incident `acknowledged` when OpenClaw starts handling it
+- mark it `completed` after verify or fallback
+- return to watch mode automatically
+
+This is better than a manual trigger prompt because the demo now feels like an operational agent waking up to a real incident instead of being told exactly when to act.
 
 ### 7.1 Observation Layer
 
@@ -370,6 +391,8 @@ The main product moment is:
 
 Execution remains OpenClaw-first:
 
+- OpenClaw is armed once through watch mode
+- the watcher latches a new firing incident from the webhook path
 - run `run.py --phase demo`
 - read the demo artifact and browser playbook
 - open `/openclaw-execution`
@@ -690,16 +713,20 @@ To stand out in the hackathon, the demo should emphasize:
    - the browser is part of the story
 4. **Predicted vs actual was verified**
    - this is not fire-and-forget automation
+5. **The agent woke up on its own**
+   - it was armed in the background and activated from a real incident signal
 
 Recommended demo sequence:
 
 1. Trigger one healthcare-access incident live
-2. Show the incident in the Guardrail Console
-3. Turn on baseline mode and show it picks `restart_payment` shown as `Restart Eligibility Service`
-4. Show Stratus ranking a safer action from the shortlist
-5. Let OpenClaw execute the safer action
-6. Verify the after-state
-7. End on a verdict that explicitly says:
+2. Show that OpenClaw is already armed and waiting
+3. Let the incident latch from the webhook path
+4. Show the incident in the Guardrail Console
+5. Turn on baseline mode and show it picks `restart_payment` shown as `Restart Eligibility Service`
+6. Show Stratus ranking a safer action from the shortlist
+7. Let OpenClaw execute the safer action
+8. Verify the after-state
+9. End on a verdict that explicitly says:
    - dangerous reflex rejected
    - safer action chosen
    - blast radius stayed low

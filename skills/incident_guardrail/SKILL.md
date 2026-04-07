@@ -8,23 +8,25 @@ description: Run the Stratus-powered incident remediation workflow in this repos
 When asked to evaluate an incident scenario in this repo, do the following:
 
 1. Use the `exec` tool in the workspace root.
-2. Run:
+2. Arm the watcher first by running:
+   `.venv/bin/python run.py alerts/latest.json --phase watch`
+3. When a new pending incident is latched, run:
    `.venv/bin/python run.py alerts/latest.json --phase demo`
-3. Read:
+4. Read:
    - `outputs/alert_latest_openclaw_demo.json`
    - `outputs/alert_latest_browser_playbook.json`
-4. Use the browser tool to follow the playbook exactly:
+5. Use the browser tool to follow the playbook exactly:
    open `/openclaw-execution`
    inspect the before-action incident card
    click the single execution button using the provided selector
    open `/openclaw-execution?stage=verdict` after verify
    inspect the state API if needed
-5. If the browser tool fails or times out, do not stop and do not replan. Instead run:
+6. If the browser tool fails or times out, do not stop and do not replan. Instead run:
    `.venv/bin/python run.py alerts/latest.json --phase fallback`
-6. If the browser action succeeds, run:
+7. If the browser action succeeds, run:
    `.venv/bin/python run.py alerts/latest.json --phase verify`
-7. Read the generated report from `outputs/`.
-8. Summarize:
+8. Read the generated report from `outputs/`.
+9. Summarize:
    - incident summary
    - candidate actions
    - Stratus ranking
@@ -32,6 +34,8 @@ When asked to evaluate an incident scenario in this repo, do the following:
    - predicted vs actual
    - before/after browser-visible evidence
    - whether execution used the saved-plan fallback because browser control was unavailable
+10. Return to:
+   `.venv/bin/python run.py alerts/latest.json --phase watch`
 
 Do not call Stratus directly from chat.
 Always use the local repo workflow.

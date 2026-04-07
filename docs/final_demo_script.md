@@ -13,19 +13,22 @@ Show that OpenClaw + Stratus does not just automate remediation. It rejects a da
    - eligibility verification degrades but is not fully down
    - scheduling retries amplify the issue
    - online access and fairness are now at risk
-4. Let OpenClaw run:
+4. Let OpenClaw arm itself and wait in the background:
+   - `.venv/bin/python run.py alerts/latest.json --phase watch`
+5. Trigger the incident through the Alertmanager/webhook path.
+6. Let OpenClaw wake up and run:
    - `.venv/bin/python run.py alerts/latest.json --phase demo`
-5. In the Guardrail Console, show:
+7. In the Guardrail Console, show:
    - the shortlisted remediations
    - Stratus ranking
    - the dangerous reflex: `restart_payment` shown as `Restart Eligibility Service`
    - the guardrail choice
-6. Let OpenClaw browser execute the remediation handoff end to end.
-7. If browser control fails, let OpenClaw run the saved-plan fallback instead:
+8. Let OpenClaw browser execute the remediation handoff end to end.
+9. If browser control fails, let OpenClaw run the saved-plan fallback instead:
    - `.venv/bin/python run.py alerts/latest.json --phase fallback`
-8. If browser control succeeds, let OpenClaw run verify:
+10. If browser control succeeds, let OpenClaw run verify:
    - `.venv/bin/python run.py alerts/latest.json --phase verify`
-9. In the `Verdict View`, show:
+11. In the `Verdict View`, show:
    - before vs after scheduling metrics
    - dangerous reflex rejected
    - blast radius stayed contained
@@ -47,7 +50,7 @@ Next, the planner narrows a broad healthcare-access action library into a scenar
 
 ### Execution
 
-Now OpenClaw takes over the browser step. It starts from the generated demo-mode artifact, reads the playbook, opens the dedicated `/openclaw-execution` surface, clicks one stable remediation button, and then we verify the system state again. If browser control flakes out, OpenClaw still completes the saved plan through the fallback command instead of abandoning the demo.
+OpenClaw is armed once and waits in the background until a firing incident is latched from the webhook path. Then it takes over the browser step. It starts from the generated demo-mode artifact, reads the playbook, opens the dedicated `/openclaw-execution` surface, clicks one stable remediation button, and then we verify the system state again. If browser control flakes out, OpenClaw still completes the saved plan through the fallback command instead of abandoning the demo.
 
 ### Verdict
 

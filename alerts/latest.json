@@ -1,43 +1,43 @@
 {
   "receiver": "openclaw-webhook",
-  "status": "resolved",
+  "status": "firing",
   "alerts": [
     {
-      "status": "resolved",
+      "status": "firing",
       "labels": {
-        "alertname": "CheckoutRetryStorm",
-        "dependency": "payment",
+        "alertname": "SchedulingRetrySpiral",
+        "dependency": "eligibility",
         "instance": "host.docker.internal:9101",
         "job": "synthetic_incident_target",
-        "service": "checkout",
+        "service": "scheduling",
         "severity": "critical"
       },
       "annotations": {
-        "summary": "Retry pressure above baseline"
+        "summary": "Scheduling retry pressure above baseline"
       },
-      "startsAt": "2026-04-06T23:09:29.82Z",
-      "endsAt": "2026-04-06T23:11:49.82Z",
-      "generatorURL": "http://ebac79c85684:9090/graph?g0.expr=checkout_retry_rate+%3E+0.25&g0.tab=1",
-      "fingerprint": "01aa77fc2b8c87fd"
+      "startsAt": "2026-04-07T10:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://localhost:9091/graph?g0.expr=checkout_retry_rate+%3E+0.25&g0.tab=1",
+      "fingerprint": "healthcare-access-retry-spiral"
     }
   ],
   "groupLabels": {
-    "alertname": "CheckoutRetryStorm",
-    "service": "checkout"
+    "alertname": "SchedulingRetrySpiral",
+    "service": "scheduling"
   },
   "commonLabels": {
-    "alertname": "CheckoutRetryStorm",
-    "dependency": "payment",
+    "alertname": "SchedulingRetrySpiral",
+    "dependency": "eligibility",
     "instance": "host.docker.internal:9101",
     "job": "synthetic_incident_target",
-    "service": "checkout",
+    "service": "scheduling",
     "severity": "critical"
   },
   "commonAnnotations": {
-    "summary": "Retry pressure above baseline"
+    "summary": "Scheduling retry pressure above baseline"
   },
-  "externalURL": "http://04e32fa07b62:9093",
+  "externalURL": "http://localhost:9093",
   "version": "4",
-  "groupKey": "{}:{alertname=\"CheckoutRetryStorm\", service=\"checkout\"}",
+  "groupKey": "{}:{alertname=\"SchedulingRetrySpiral\", service=\"scheduling\"}",
   "truncatedAlerts": 0
 }
