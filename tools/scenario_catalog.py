@@ -22,6 +22,13 @@ SCENARIO_PROFILES = {
             "booking retry amplification",
             "scheduling abandonment",
         ],
+        "alert_profile": {
+            "alertname": "SchedulingRetrySpiral",
+            "service": "scheduling",
+            "dependency": "eligibility",
+            "severity": "critical",
+            "summary": "Scheduling retry pressure above baseline",
+        },
     },
     "payment_gateway_flap": {
         "id": "payment_gateway_flap",
@@ -43,6 +50,13 @@ SCENARIO_PROFILES = {
             "timeout spikes",
             "retry backoff need",
         ],
+        "alert_profile": {
+            "alertname": "EligibilityVerificationFlap",
+            "service": "eligibility",
+            "dependency": "eligibility",
+            "severity": "critical",
+            "summary": "Eligibility verification is flapping and causing access instability",
+        },
     },
     "seat_hold_clog": {
         "id": "seat_hold_clog",
@@ -64,6 +78,13 @@ SCENARIO_PROFILES = {
             "hold expiration",
             "access skew",
         ],
+        "alert_profile": {
+            "alertname": "SlotHoldClog",
+            "service": "scheduling",
+            "dependency": "inventory",
+            "severity": "critical",
+            "summary": "Slot holds are clogging access and delaying booking completion",
+        },
     },
     "regional_saturation": {
         "id": "regional_saturation",
@@ -85,6 +106,13 @@ SCENARIO_PROFILES = {
             "headroom",
             "blast-radius risk",
         ],
+        "alert_profile": {
+            "alertname": "RegionalAccessSaturation",
+            "service": "portal",
+            "dependency": "region_capacity",
+            "severity": "critical",
+            "summary": "Primary-region access saturation is approaching unsafe failover territory",
+        },
     },
 }
 

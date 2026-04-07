@@ -14,10 +14,9 @@ Show that OpenClaw + Stratus does not just automate remediation. It rejects a da
    - scheduling retries amplify the issue
    - online access and fairness are now at risk
 4. Let OpenClaw arm itself and wait in the background:
-   - `.venv/bin/python run.py alerts/latest.json --phase watch`
+   - `.venv/bin/python run.py alerts/latest.json --phase await-demo`
 5. Trigger the incident through the Alertmanager/webhook path.
-6. Let OpenClaw wake up and run:
-   - `.venv/bin/python run.py alerts/latest.json --phase demo`
+6. Let the blocking arm command return with the prepared demo artifacts.
 7. In the Guardrail Console, show:
    - the shortlisted remediations
    - Stratus ranking
@@ -51,6 +50,8 @@ Next, the planner narrows a broad healthcare-access action library into a scenar
 ### Execution
 
 OpenClaw is armed once and waits in the background until a firing incident is latched from the webhook path. Then it takes over the browser step. It starts from the generated demo-mode artifact, reads the playbook, opens the dedicated `/openclaw-execution` surface, clicks one stable remediation button, and then we verify the system state again. If browser control flakes out, OpenClaw still completes the saved plan through the fallback command instead of abandoning the demo.
+
+Important scope note for the demo: this is a one-action guarded remediation loop. We are not claiming multi-step sequencing in the live workflow yet.
 
 ### Verdict
 

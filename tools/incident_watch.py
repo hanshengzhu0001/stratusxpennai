@@ -54,8 +54,9 @@ def watch_for_pending_incident(
 
     deadline = time.monotonic() + timeout_seconds if timeout_seconds and timeout_seconds > 0 else None
     while True:
-        current = _pending_incident_from_path(path)
         state = load_watch_state()
+        state = _maintain_armed_state(state)
+        current = _pending_incident_from_path(path)
         if current and _is_new_incident(current, state):
             state["status"] = "pending"
             state["pending_incident"] = current
@@ -64,6 +65,7 @@ def watch_for_pending_incident(
             return state
         if deadline is not None and time.monotonic() >= deadline:
             state["status"] = "armed"
+            state["armed"] = True
             save_watch_state(state)
             return state
         time.sleep(max(0.25, poll_interval_seconds))
@@ -109,6 +111,24 @@ def complete_active_incident(outcome: str, report_path: str | None = None) -> di
 def clear_watch_state() -> dict:
     save_watch_state(DEFAULT_WATCH_STATE)
     return load_watch_state()
+
+
+def _maintain_armed_state(state: dict) -> dict:
+    if state.get("pending_incident") or state.get("active_incident"):
+        return state
+
+    updated = dict(state)
+    changed = False
+    if not updated.get("armed"):
+        updated["armed"] = True
+        changed = True
+    if updated.get("status") in {"idle", "completed"}:
+        updated["status"] = "armed"
+        changed = True
+
+    if changed:
+        save_watch_state(updated)
+    return updated
 
 
 def _pending_incident_from_path(path: Path) -> dict | None:

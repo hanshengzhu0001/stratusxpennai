@@ -14,6 +14,7 @@ from agents.simulator import compare_prediction_to_actual, normalize_actual, nor
 from tools.execute_action import execute_action
 from tools.incident_watch import (
     acknowledge_pending_incident,
+    clear_watch_state,
     complete_active_incident,
     load_watch_state,
     watch_for_pending_incident,
@@ -40,12 +41,22 @@ def main() -> None:
     load_local_env()
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path", nargs="?", default="alerts/latest.json")
-    parser.add_argument("--phase", choices=["plan", "demo", "fallback", "verify", "auto", "watch"], default="auto")
+    parser.add_argument(
+        "--phase",
+        choices=["plan", "demo", "fallback", "verify", "auto", "watch", "await-demo", "idle"],
+        default="auto",
+    )
     parser.add_argument("--timeout-seconds", type=float, default=0.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=2.0)
     args = parser.parse_args()
 
     input_path = Path(args.input_path)
+    if args.phase == "idle":
+        watch_state = clear_watch_state()
+        print(json.dumps(build_watch_artifact(watch_state), indent=2))
+        print("Watcher reset to idle.")
+        return
+
     if args.phase == "watch":
         watch_state = watch_for_pending_incident(
             alert_path=input_path,
@@ -57,6 +68,31 @@ def main() -> None:
             print("Latched pending incident and armed OpenClaw workflow.")
         else:
             print("Watcher remains armed; no new incident latched during this interval.")
+        return
+
+    if args.phase == "await-demo":
+        watch_state = load_watch_state()
+        if not watch_state.get("pending_incident"):
+            watch_state = watch_for_pending_incident(
+                alert_path=input_path,
+                timeout_seconds=args.timeout_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
+        if not watch_state.get("pending_incident"):
+            print(json.dumps(build_watch_artifact(watch_state), indent=2))
+            print("Watcher remains armed; no new incident latched during this interval.")
+            return
+        payload = load_json_path(input_path)
+        acknowledge_pending_incident("openclaw_await_demo")
+        state, evidence = prepare_demo_state(payload)
+        scenario_id = payload.get("id", "alert_latest")
+        plan = build_plan_report(payload, scenario_id, "alertmanager_webhook", input_path, state, evidence)
+        write_outputs(plan, scenario_id, "plan")
+        write_browser_playbook(plan, scenario_id)
+        demo_mode = build_openclaw_demo_mode(plan)
+        write_openclaw_demo_mode(plan, scenario_id)
+        print(json.dumps(demo_mode, indent=2))
+        print(f"Wrote OpenClaw demo mode artifact to outputs/{scenario_id}_openclaw_demo.json")
         return
 
     payload = load_json_path(input_path)
@@ -418,6 +454,7 @@ def build_watch_artifact(watch_state: dict) -> dict:
             "status": watch_state.get("status", "idle"),
             "armed": watch_state.get("armed", False),
             "watch_command": ".venv/bin/python run.py alerts/latest.json --phase watch",
+            "await_demo_command": ".venv/bin/python run.py alerts/latest.json --phase await-demo",
             "demo_command": ".venv/bin/python run.py alerts/latest.json --phase demo",
             "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify",
             "fallback_command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
@@ -453,7 +490,7 @@ def load_incident_input(payload: dict) -> tuple[str, dict, dict]:
     return "alertmanager_webhook", state, evidence
 
 
-def prepare_demo_state(payload: dict, timeout_seconds: float = 20.0) -> tuple[dict, dict]:
+def prepare_demo_state(payload: dict, timeout_seconds: float = 6.0) -> tuple[dict, dict]:
     reset_runtime = reset_state()
     expected_metrics = derive_metrics(reset_runtime)
     deadline = time.monotonic() + timeout_seconds
@@ -468,8 +505,37 @@ def prepare_demo_state(payload: dict, timeout_seconds: float = 20.0) -> tuple[di
             break
         time.sleep(min(2.0, remaining))
         latest = collect_evidence(payload)
+    if latest.get("metrics") != expected_metrics:
+        latest = evidence_from_reset_state(latest, expected_metrics)
     state = classify_incident(payload, latest)
     return state, latest
+
+
+def evidence_from_reset_state(latest: dict, expected_metrics: dict) -> dict:
+    refreshed = json.loads(json.dumps(latest))
+    refreshed["metrics"] = {
+        "latency_p95_ms": int(expected_metrics["latency_p95_ms"]),
+        "error_rate": round(float(expected_metrics["error_rate"]), 4),
+        "retry_rate": round(float(expected_metrics["retry_rate"]), 4),
+    }
+    refreshed["prometheus"] = {
+        "source": "reset_state_fallback",
+        "queries": {
+            "checkout_latency_p95_ms": refreshed["metrics"]["latency_p95_ms"],
+            "checkout_error_rate": refreshed["metrics"]["error_rate"],
+            "checkout_retry_rate": refreshed["metrics"]["retry_rate"],
+        },
+        "active_alerts": [
+            alert
+            for alert, enabled in (
+                ("SchedulingLatencyHigh", refreshed["metrics"]["latency_p95_ms"] > 2000),
+                ("SchedulingRetrySpiral", refreshed["metrics"]["retry_rate"] > 0.25),
+            )
+            if enabled
+        ],
+        "note": "Used reset-state fallback because Prometheus had not yet reflected the fresh incident baseline.",
+    }
+    return refreshed
 
 
 def normalize_best_action(best_action: dict | str, actions: list[dict]) -> dict:
@@ -587,6 +653,8 @@ def write_outputs(payload: dict, scenario_id: str, suffix: str) -> None:
     out = Path("outputs") / f"{scenario_id}_{suffix}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(payload, indent=2))
+    if not out.exists():
+        raise RuntimeError(f"Expected artifact write failed: {out}")
     md_out = Path("outputs") / f"{scenario_id}_{suffix}.md"
     md_out.write_text(render_markdown(payload))
 
@@ -670,6 +738,7 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
         },
         "demo_contract": {
             "watch_command": ".venv/bin/python run.py alerts/latest.json --phase watch",
+            "await_demo_command": ".venv/bin/python run.py alerts/latest.json --phase await-demo",
             "run_first_command": ".venv/bin/python run.py alerts/latest.json --phase demo",
             "verify_command": ".venv/bin/python run.py alerts/latest.json --phase verify",
             "fallback_command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
@@ -732,6 +801,8 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
             "trigger": "browser tool times out, fails to load the dashboard, or loses browser control",
             "command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
             "must_say": "execution used the saved-plan fallback because browser control was unavailable",
+            "must_open_verdict_surface_after_fallback": True,
+            "verdict_url": verdict_surface,
         },
     }
 
@@ -750,7 +821,13 @@ def resolve_executed_action(plan: dict, execution: dict | None) -> dict:
 
 
 def default_openclaw_demo_prompt() -> str:
-    return "Arm the incident_guardrail skill in background mode for this workspace."
+    return (
+        "Monitor this workspace in background mode for new webhook incidents. "
+        "Follow the local workflow described in AGENTS.md and "
+        "`skills/incident_guardrail/SKILL.md` in this repo. "
+        "Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` "
+        "so the workflow waits for the next incident and immediately prepares demo artifacts when it arrives."
+    )
 
 
 def render_browser_playbook_markdown(playbook: dict) -> str:
@@ -811,6 +888,7 @@ def render_openclaw_demo_markdown(demo_mode: dict) -> str:
 ## Demo Contract
 
 - Arm watcher first: `{demo_mode['demo_contract']['watch_command']}`
+- Preferred blocking arm command: `{demo_mode['demo_contract']['await_demo_command']}`
 - When incident is latched, run: `{demo_mode['demo_contract']['run_first_command']}`
 - Verify after browser action: `{demo_mode['demo_contract']['verify_command']}`
 - Fallback if browser control fails: `{demo_mode['demo_contract']['fallback_command']}`
@@ -844,6 +922,8 @@ def write_browser_playbook(plan: dict, scenario_id: str) -> None:
     out = Path("outputs") / f"{scenario_id}_browser_playbook.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(playbook, indent=2))
+    if not out.exists():
+        raise RuntimeError(f"Expected artifact write failed: {out}")
     md_out = Path("outputs") / f"{scenario_id}_browser_playbook.md"
     md_out.write_text(render_browser_playbook_markdown(playbook))
 
@@ -853,6 +933,8 @@ def write_openclaw_demo_mode(plan: dict, scenario_id: str) -> None:
     out = Path("outputs") / f"{scenario_id}_openclaw_demo.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(demo_mode, indent=2))
+    if not out.exists():
+        raise RuntimeError(f"Expected artifact write failed: {out}")
     md_out = Path("outputs") / f"{scenario_id}_openclaw_demo.md"
     md_out.write_text(render_openclaw_demo_markdown(demo_mode))
 

@@ -21,8 +21,9 @@ from run import (
     write_outputs,
 )
 from tools.execute_action import execute_action
-from tools.incident_watch import load_watch_state
-from tools.prometheus_client import collect_evidence
+from tools.incident_cases import build_alert_payload_for_scenario
+from tools.incident_watch import clear_watch_state, load_watch_state
+from tools.prometheus_client import collect_evidence, save_alert_payload
 
 from tools.runtime_state import (
     apply_action,
@@ -34,6 +35,7 @@ from tools.runtime_state import (
     set_scenario,
 )
 from tools.scenario_catalog import (
+    default_state_for_scenario,
     default_sequence_preview,
     derive_business_metrics,
     get_scenario,
@@ -215,6 +217,10 @@ def feature_flags() -> str:
         <form method="post" action="/api/reset" style="margin-top:12px;">
           <input type="hidden" name="return_to" value="feature-flags">
           <button>Reset Active Scenario</button>
+        </form>
+        <form method="post" action="/api/disarm-watch" style="margin-top:12px;">
+          <input type="hidden" name="return_to" value="feature-flags">
+          <button>Disarm OpenClaw Watcher</button>
         </form>
       </div>
       <div class="card">
@@ -402,10 +408,34 @@ def execute_from_form(
     return RedirectResponse(_return_path(return_to), status_code=303)
 
 
-@app.post("/api/reset")
-def reset_from_form(return_to: str = Form("incident")) -> RedirectResponse:
-    reset_state()
+@app.post("/api/trigger-incident")
+def trigger_incident_from_form(
+    scenario_id: str = Form(...),
+    return_to: str = Form("operations"),
+) -> RedirectResponse:
+    set_scenario(scenario_id)
+    payload = build_alert_payload_for_scenario(scenario_id)
+    save_alert_payload(payload)
     _clear_console_artifacts()
+    return RedirectResponse(_return_path(return_to), status_code=303)
+
+
+@app.post("/api/reset")
+def reset_from_form(
+    return_to: str = Form("incident"),
+    scenario_id: str | None = Form(None),
+) -> RedirectResponse:
+    if scenario_id:
+        set_scenario(scenario_id)
+    else:
+        reset_state()
+    _clear_console_artifacts()
+    return RedirectResponse(_return_path(return_to), status_code=303)
+
+
+@app.post("/api/disarm-watch")
+def disarm_watch_from_form(return_to: str = Form("incident")) -> RedirectResponse:
+    clear_watch_state()
     return RedirectResponse(_return_path(return_to), status_code=303)
 
 
@@ -686,12 +716,24 @@ def _render_incident_view(
         <h2 style="margin-bottom:8px;">Incident View</h2>
         <p class="callout"><strong>{escape(active_scenario['label'])}</strong><br>{escape(active_scenario['headline'])}</p>
         <p class="muted">{escape(active_scenario['story'])}</p>
+        <p class="muted"><strong>Reset behavior:</strong> {escape(_scenario_reset_copy(active_scenario))}</p>
         <form class="inline" method="post" action="/api/scenario" style="margin-top:16px;">
           <input type="hidden" name="return_to" value="incident">
           <label for="scenario_id"><strong>Scenario</strong></label>
           <select id="scenario_id" name="scenario_id">{scenario_options}</select>
           <button class="primary">Apply Scenario</button>
-          <button formaction="/api/reset" name="return_to" value="incident">Reset Active Scenario</button>
+          <button formaction="/api/reset" name="return_to" value="incident">Reset Current Scenario Baseline</button>
+          <button formaction="/api/disarm-watch" name="return_to" value="incident">Disarm OpenClaw Watcher</button>
+        </form>
+        <form class="inline" method="post" action="/api/reset" style="margin-top:12px;">
+          <input type="hidden" name="scenario_id" value="retry_death_spiral">
+          <input type="hidden" name="return_to" value="incident">
+          <button>Reset to Retry Spiral Demo (2300ms)</button>
+        </form>
+        <form class="inline" method="post" action="/api/trigger-incident" style="margin-top:12px;">
+          <input type="hidden" name="scenario_id" value="{escape(active_scenario['id'])}">
+          <input type="hidden" name="return_to" value="incident">
+          <button class="primary">Trigger Current Incident</button>
         </form>
         <form class="inline" method="post" action="/api/plan" style="margin-top:12px;" data-loading-label="Planning with Stratus..." data-loading-phase="plan">
           <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
@@ -1108,6 +1150,20 @@ def _render_operations_dashboard(
         if executed_action
         else "No remediation has been executed yet."
     )
+    case_cards = "".join(
+        f"""
+        <div class="case-card">
+          <strong>{escape(item['label'])}</strong>
+          <div class="muted" style="margin-bottom:10px;">{escape(item['headline'])}</div>
+          <form method="post" action="/api/trigger-incident">
+            <input type="hidden" name="scenario_id" value="{escape(item['id'])}">
+            <input type="hidden" name="return_to" value="operations">
+            <button class="primary">Trigger This Case</button>
+          </form>
+        </div>
+        """
+        for item in scenarios
+    )
     return f"""<!doctype html>
 <html>
 <head>
@@ -1231,6 +1287,11 @@ def _render_operations_dashboard(
       border:1px solid var(--line); border-radius:18px; padding:14px 16px; background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
     }}
     .feed-item strong {{ display:block; margin-bottom:4px; }}
+    .case-grid {{ display:grid; gap:12px; }}
+    .case-card {{
+      border:1px solid var(--line); border-radius:18px; padding:14px 16px; background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    }}
+    .case-card strong {{ display:block; margin-bottom:4px; }}
     .side-stack {{ display:grid; gap:14px; }}
     .recommend {{
       background:linear-gradient(180deg, rgba(15,122,120,0.07) 0%, rgba(31,94,150,0.04) 100%);
@@ -1331,7 +1392,19 @@ def _render_operations_dashboard(
             <input type="hidden" name="return_to" value="operations">
             <select id="scenario_id" name="scenario_id">{scenario_options}</select>
             <button class="primary">Apply Scenario</button>
-            <button formaction="/api/reset" name="return_to" value="operations">Reset Scenario</button>
+            <button formaction="/api/reset" name="return_to" value="operations">Reset Current Scenario Baseline</button>
+            <button formaction="/api/disarm-watch" name="return_to" value="operations">Disarm Watcher</button>
+          </form>
+          <p class="muted" style="margin:12px 0 0;">{escape(_scenario_reset_copy(active_scenario))}</p>
+          <form class="inline" method="post" action="/api/reset" style="margin-top:12px;">
+            <input type="hidden" name="scenario_id" value="retry_death_spiral">
+            <input type="hidden" name="return_to" value="operations">
+            <button>Reset to Retry Spiral Demo (2300ms)</button>
+          </form>
+          <form class="inline" method="post" action="/api/trigger-incident" style="margin-top:12px;">
+            <input type="hidden" name="scenario_id" value="{escape(active_scenario['id'])}">
+            <input type="hidden" name="return_to" value="operations">
+            <button class="primary">Trigger Current Incident</button>
           </form>
           <div class="link-row">
             <a href="/">Open Guardrail Console</a>
@@ -1339,7 +1412,8 @@ def _render_operations_dashboard(
           </div>
           <ul class="summary-list" style="margin-top:14px;">
             <li>Watcher status: <strong>{escape(_watch_label(watch_state))}</strong></li>
-            <li>Arm command: <code>.venv/bin/python run.py alerts/latest.json --phase watch</code></li>
+            <li>Arm command: <code>.venv/bin/python run.py alerts/latest.json --phase await-demo</code></li>
+            <li>Reset Scenario keeps the watcher armed. Use <strong>Disarm Watcher</strong> only when you want OpenClaw to stop waiting.</li>
           </ul>
         </section>
 
@@ -1369,6 +1443,18 @@ def _render_operations_dashboard(
           </div>
           <div class="feed">
             {incidents}
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h2>Prepared Incident Cases</h2>
+              <p class="muted">Use these buttons instead of `curl` to trigger different webhook incidents during the demo.</p>
+            </div>
+          </div>
+          <div class="case-grid">
+            {case_cards}
           </div>
         </section>
       </div>
@@ -1542,6 +1628,18 @@ def _watch_label(watch_state: dict) -> str:
     return "Idle"
 
 
+def _scenario_baseline_metrics(scenario_id: str) -> dict:
+    return derive_metrics(default_state_for_scenario(scenario_id))
+
+
+def _scenario_reset_copy(scenario: dict) -> str:
+    baseline = _scenario_baseline_metrics(scenario["id"])
+    return (
+        f"Resetting this scenario returns it to {baseline['latency_p95_ms']} ms latency, "
+        f"{baseline['error_rate']:.2f} error rate, and {baseline['retry_rate']:.2f} retry rate."
+    )
+
+
 def _dangerous_reflex_from_plan(plan: dict | None, chosen_action: str) -> str:
     if not plan:
         return "restart_payment"
@@ -1603,6 +1701,7 @@ def _render_openclaw_execution_surface(
     rejected_action = _dangerous_reflex_from_plan(plan, chosen_action)
     before_metrics = plan.get("observed_condition", {}).get("metrics", {})
     report_actual = (report or {}).get("actual_outcome", {})
+    baseline_metrics = _scenario_baseline_metrics(active_scenario["id"])
     notes = "".join(f"<li>{escape(note)}</li>" for note in plan.get("notes", []))
     stage = stage if stage in {"before", "after-action", "verdict"} else "before"
     verdict_block = ""
@@ -1685,6 +1784,7 @@ def _render_openclaw_execution_surface(
       <div class="card">
         <h2 style="margin-top:0;">Before-Action Incident Card</h2>
         <p class="callout"><strong>{escape(active_scenario['label'])}</strong><br>{escape(active_scenario['headline'])}</p>
+        <p style="color:var(--muted); margin-top:0;">Scenario baseline on reset: <code>{baseline_metrics['latency_p95_ms']}</code> ms latency, <code>{baseline_metrics['error_rate']:.2f}</code> error rate, <code>{baseline_metrics['retry_rate']:.2f}</code> retry rate.</p>
         <ul>
           <li>Guardrail choice: <strong>{escape(_action_label(chosen_action))}</strong></li>
           <li>Operator action label: <code>{escape(chosen_label)}</code></li>
@@ -1699,6 +1799,11 @@ def _render_openclaw_execution_surface(
         <form method="post" action="/api/execute-planned" style="margin-top:18px;">
           <input type="hidden" name="return_to" value="/openclaw-execution?stage=after-action">
           <button id="openclaw-demo-run">Execute Planned Action: {escape(chosen_label)}</button>
+        </form>
+        <form method="post" action="/api/reset" style="margin-top:12px;">
+          <input type="hidden" name="scenario_id" value="retry_death_spiral">
+          <input type="hidden" name="return_to" value="/openclaw-execution">
+          <button style="background:#405f7f;">Reset to Retry Spiral Demo (2300ms)</button>
         </form>
         <p style="margin-top:12px; color:var(--muted);">Manual ops controls: <a href="/feature-flags">/feature-flags</a></p>
       </div>

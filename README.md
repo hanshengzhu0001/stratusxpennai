@@ -12,28 +12,45 @@ The current demo supports:
 - live Prometheus-backed evidence collection
 - a healthcare-access remediation library with scenario-specific shortlist selection
 - Stratus ranking and predicted downstream effects
+- one-action guarded remediation execution
 - a dedicated telehealth-style operations board at `/operations`
 - a dedicated OpenClaw execution surface at `/openclaw-execution`
 - a browser playbook for OpenClaw to execute
 - post-action verification and predicted-vs-actual comparison
 
+What it does not do yet:
+
+- no multi-step or multi-action execution in the live workflow
+- no automatic replanning chain after action 1
+- three-action sequencing remains an extension, not part of the current shipped path
+
 ## Recommended Demo Path
 
 1. Start the local services and OpenClaw gateway.
 2. In OpenClaw chat, paste the prompt from `docs/openclaw_demo_prompt.md` to arm the watcher once.
-3. OpenClaw runs `run.py --phase watch` and waits for a new webhook incident.
-4. Trigger the incident by posting `alerts/latest.json` to the local webhook.
-5. When the incident is latched, OpenClaw runs `run.py --phase demo`, reads the generated artifacts, opens `/openclaw-execution`, clicks the single remediation button, runs verify, then opens `/openclaw-execution?stage=verdict`.
+3. OpenClaw runs `run.py --phase await-demo` and waits for a new webhook incident while preparing the demo artifacts automatically when one arrives.
+4. Trigger the incident from the Telehealth Scheduling Stability Board using `Trigger Current Incident` or one of the prepared case buttons.
+5. When the incident is latched, the blocking `await-demo` command returns with the generated artifacts, and OpenClaw opens `/openclaw-execution`, clicks the single remediation button, runs verify, then opens `/openclaw-execution?stage=verdict`.
 6. If browser control fails, OpenClaw runs `run.py --phase fallback` and still finishes the report.
+
+This is a single-action loop today:
+
+1. observe the incident
+2. shortlist candidate actions
+3. let Stratus choose one guarded action
+4. execute that one action
+5. verify the outcome
+
+There is no live multi-step sequence execution in the current demo.
 
 ## Architecture
 
 Core workflow:
 
 1. Alertmanager posts an incident payload to `tools/alert_receiver.py`.
-2. `run.py --phase watch` latches a `pending_incident` from `alerts/latest.json` and keeps OpenClaw armed in the background.
+2. `run.py --phase await-demo` waits for the next incident, latches it from `alerts/latest.json`, acknowledges it, then writes both a dedicated OpenClaw demo-mode artifact and the browser handoff artifact.
 3. `run.py --phase plan` loads evidence, has the Planner Agent select a shortlist from the healthcare-access action library, and calls Stratus to rank only that shortlist.
-4. `run.py --phase demo` acknowledges the pending incident, then writes both a dedicated OpenClaw demo-mode artifact and the browser handoff artifact.
+4. OpenClaw reads the prepared artifacts and continues directly into the browser step.
 5. OpenClaw browser follows those artifacts:
    - open `/openclaw-execution`
    - inspect the before-action incident card
@@ -127,7 +144,7 @@ openclaw gateway
 Then open the dashboard at `http://127.0.0.1:18789/` and invoke:
 
 ```text
-Arm the incident_guardrail skill in background mode for this workspace.
+Use the incident_guardrail skill in this workspace. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo`, let that command block until the next incident is latched and the demo artifacts are prepared, then continue through browser execution, verification or fallback, summary, and return to await-demo mode.
 ```
 
 The skill is defined in `skills/incident_guardrail/SKILL.md`.
@@ -155,15 +172,34 @@ Reality anchor:
 curl -X POST http://127.0.0.1:8010/api/reset
 ```
 
+Optional watcher reset only:
+
+```bash
+.venv/bin/python run.py alerts/latest.json --phase idle
+```
+
 ### Arm OpenClaw first
 
 ```bash
-.venv/bin/python run.py alerts/latest.json --phase watch
+.venv/bin/python run.py alerts/latest.json --phase await-demo
 ```
 
-This blocks until a new webhook incident is latched and then returns the pending-incident state to OpenClaw.
+This blocks until a new webhook incident is latched, acknowledged, and converted into demo artifacts for OpenClaw.
+
+Recommended OpenClaw chat prompt:
+
+```text
+Use the incident_guardrail skill in this workspace and stay in the same task until the workflow is complete. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo`, let that command block until the next incident is latched and the demo artifacts are prepared, then continue immediately through browser execution, verification or fallback, summary, and return to await-demo mode. Do not stop after `await-demo` returns.
+```
 
 ### Trigger the incident
+
+Primary demo path:
+
+- open `http://127.0.0.1:8010/operations`
+- click `Trigger Current Incident` or one of the prepared incident-case buttons
+
+CLI fallback:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/alerts \
@@ -173,13 +209,7 @@ curl -X POST http://127.0.0.1:8000/alerts \
 
 ### OpenClaw handles the rest
 
-Once the incident is latched, OpenClaw should run:
-
-```bash
-.venv/bin/python run.py alerts/latest.json --phase demo
-```
-
-This writes:
+Once the incident is latched, the blocking `await-demo` command should return and the following files should already exist:
 
 - `outputs/alert_latest_plan.json`
 - `outputs/alert_latest_plan.md`
@@ -197,6 +227,18 @@ Primary path:
   - `http://127.0.0.1:8010/openclaw-execution`
   - `#openclaw-demo-run`
   - `http://127.0.0.1:8010/openclaw-execution?stage=verdict`
+
+Expected runtime behavior:
+
+1. `await-demo` blocks
+2. you trigger an incident from `/operations`
+3. OpenClaw receives prepared artifacts
+4. OpenClaw opens `/openclaw-execution`
+5. OpenClaw attempts one managed browser click for the chosen action
+6. if that click succeeds, OpenClaw runs `verify`
+7. if that click fails, OpenClaw runs `fallback`
+8. either way, OpenClaw should end on `/openclaw-execution?stage=verdict`
+9. OpenClaw summarizes the verdict and returns to `await-demo`
 
 Fallback path:
 
@@ -219,6 +261,14 @@ Manual console backup:
 3. open `http://127.0.0.1:8010/openclaw-execution`
 4. click the chosen remediation button there
 5. run verify or refresh the verdict page
+
+### Resume an already active incident
+
+If the UI already shows `Investigating active incident`, do not restart all services. Use this in OpenClaw chat:
+
+```text
+Use the incident_guardrail skill in this workspace. An incident is already acknowledged and the demo artifacts are prepared. Resume now by reading `outputs/alert_latest_openclaw_demo.json` and `outputs/alert_latest_browser_playbook.json`, executing the browser step in `/openclaw-execution`, then running verify or fallback. If fallback is used, still open `/openclaw-execution?stage=verdict` before summarizing the verdict and returning to await-demo mode.
+```
 
 ### Verify after execution
 

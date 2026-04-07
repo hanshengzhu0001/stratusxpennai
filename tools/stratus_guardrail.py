@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
+import time
+from contextlib import contextmanager
 
 from openai import OpenAI
 
@@ -58,8 +61,16 @@ Rules:
 - Output JSON only.
 """.strip()
 
+    request_timeout_seconds = max(5.0, float(os.environ.get("STRATUS_TIMEOUT_SECONDS", "20")))
+    max_attempts = max(1, int(os.environ.get("STRATUS_MAX_ATTEMPTS", "3")))
+
     try:
-        payload = _live_ranking(client, prompt)
+        payload = _live_ranking(
+            client,
+            prompt,
+            request_timeout_seconds=request_timeout_seconds,
+            max_attempts=max_attempts,
+        )
         payload = _normalize_live_payload(payload, actions)
         payload.setdefault("notes", [])
         payload["notes"].append("Used live Stratus ranking.")
@@ -172,26 +183,60 @@ def _mock_ranking(actions: list[dict], notes: list[str] | None = None) -> dict:
     }
 
 
-def _live_ranking(client: OpenAI, prompt: str) -> dict:
+def _live_ranking(
+    client: OpenAI,
+    prompt: str,
+    request_timeout_seconds: float,
+    max_attempts: int,
+) -> dict:
     model = os.environ.get("STRATUS_MODEL", "stratus-x1ac-base-claude-sonnet-4-5")
+    retry_backoff_seconds = max(0.0, float(os.environ.get("STRATUS_RETRY_BACKOFF_SECONDS", "1.5")))
+    hard_timeout_seconds = max(request_timeout_seconds + 5.0, request_timeout_seconds * 1.5)
     errors: list[Exception] = []
-    for attempt in range(2):
+    for attempt in range(max_attempts):
         try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": "Return compact JSON only."},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                timeout=30,
-                temperature=0,
-            )
+            with _hard_timeout(hard_timeout_seconds):
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "Return compact JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    timeout=request_timeout_seconds,
+                    temperature=0,
+                )
             content = _extract_response_content(resp)
             return _parse_json_payload(content)
         except Exception as exc:
             errors.append(exc)
+            if attempt < max_attempts - 1 and retry_backoff_seconds > 0:
+                time.sleep(retry_backoff_seconds * (attempt + 1))
     raise errors[-1]
+
+
+class StratusDeadlineExceeded(TimeoutError):
+    pass
+
+
+@contextmanager
+def _hard_timeout(seconds: float):
+    if seconds <= 0 or os.name == "nt":
+        yield
+        return
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _raise_timeout(signum, frame):
+        raise StratusDeadlineExceeded(f"Stratus deadline exceeded after {seconds:.1f}s")
+
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def _normalize_live_payload(payload: dict, actions: list[dict]) -> dict:
