@@ -1,6 +1,6 @@
 {
-  "plan_id": "alert_latest-a993c03d",
-  "generated_at_utc": "2026-04-06T23:11:24.024131+00:00",
+  "plan_id": "alert_latest-8a49c144",
+  "generated_at_utc": "2026-04-08T20:41:49.626432+00:00",
   "workflow": {
     "orchestrator": "openclaw",
     "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase demo",
@@ -11,15 +11,18 @@
   "source_type": "alertmanager_webhook",
   "input_path": "alerts/latest.json",
   "scenario_id": "alert_latest",
-  "incident_summary": "Retry pressure above baseline",
+  "incident_summary": "Scheduling retry pressure above baseline",
   "planner": {
     "agent": "Planner Agent",
-    "selection_strategy": "broader_healthcare_access_action_library -> scenario_shortlist -> stratus_ranking",
-    "action_library_size": 12,
+    "selection_strategy": "broader_healthcare_access_action_library -> constraint_aware_shortlist -> stratus_ranking",
+    "action_library_size": 15,
     "shortlist_size": 6,
     "selection_rationale": [
-      "Planner Agent prioritized access-stabilizing actions because retry amplification and elevated scheduling latency are present.",
-      "Planner Agent kept one tempting local reflex, one traffic option, and one kill switch so Guardrail can compare safe versus dangerous futures."
+      "Planner Agent detected retry amplification and kept three access-stabilizing actions in contention.",
+      "Planner Agent kept dependency-facing actions because eligibility health is part of the incident surface.",
+      "rate_limit_retries: Retry amplification is elevated and early throttling can still break the spiral.; This scenario rewards early retry throttling before backlog fully entrenches.",
+      "enable_payment_circuit_breaker: Dependency isolation is relevant while retry pressure remains active.; Eligibility degradation appears material enough that fail-fast protection may be safest.",
+      "increase_retry_backoff: Retry pressure is significant and backoff can smooth residual load."
     ]
   },
   "observed_condition": {
@@ -29,33 +32,66 @@
       "eligibility"
     ],
     "metrics": {
-      "latency_p95_ms": 2300,
-      "error_rate": 0.16,
-      "retry_rate": 0.31
+      "latency_p95_ms": 1617,
+      "error_rate": 0.11,
+      "retry_rate": 0.4
+    },
+    "business_metrics": {
+      "queue_abandonment_rate": 0.02,
+      "payment_success_rate": 0.45,
+      "retry_amplification_factor": 1.7,
+      "fairness_skew": 0.12,
+      "seat_hold_utilization": 0.25,
+      "seat_hold_expiration_rate": 0.01,
+      "manual_callback_queue_depth": 0.0,
+      "secondary_headroom": 0.33
+    },
+    "constraints": {
+      "time_sec": 0,
+      "queue_depth": 30.0,
+      "lambda_external": 6.624,
+      "lambda_retry": 4.416,
+      "lambda_gated": 0.0,
+      "effective_service_rate": 3.0,
+      "eligibility_health": 0.58,
+      "slot_holds": 30.0,
+      "regional_headroom_primary": 0.369,
+      "regional_headroom_secondary": 0.328,
+      "projected_secondary_headroom_after_shift": 0.328,
+      "manual_callback_queue": 0.0,
+      "fairness_pressure": 0.12,
+      "dependency_pressure": 0.519,
+      "retry_pressure": 0.969,
+      "hold_pressure": 0.29,
+      "regional_pressure": 0.163,
+      "slot_hold_ttl_factor": 1.0,
+      "callback_routing_fraction": 0.0,
+      "priority_slot_reserve_fraction": 0.0
     },
     "logs": [
-      "Retry pressure above baseline"
+      "Scheduling retry pressure above baseline",
+      "eligibility timeouts are clustering behind a retry burst",
+      "portal retries are consuming more capacity than new booking demand"
     ],
     "traces": [
-      "scheduling -> eligibility span dominates p95",
-      "retry fan-out visible across scheduling service"
+      "scheduling -> eligibility spans dominate p95 while retry fan-out is still increasing",
+      "hold backlog is present but not the primary root cause"
     ],
     "pattern_matches": [
       "retry_amplification",
-      "payment_degradation",
-      "high_checkout_latency"
+      "payment_degradation"
     ],
     "prometheus": {
-      "source": "live",
+      "source": "direct_fallback",
       "queries": {
-        "checkout_latency_p95_ms": 2300.0,
-        "checkout_error_rate": 0.16,
-        "checkout_retry_rate": 0.31
+        "checkout_latency_p95_ms": 1617,
+        "checkout_error_rate": 0.11,
+        "checkout_retry_rate": 0.4
       },
       "active_alerts": [
-        "CheckoutLatencyHigh",
-        "CheckoutRetryStorm"
-      ]
+        "SchedulingRetrySpiral"
+      ],
+      "note": "Prometheus query failed; using direct control-plane metrics: URLError"
     },
     "browser_targets": {
       "dashboard": "http://127.0.0.1:8010/",
@@ -86,6 +122,30 @@
       "target": "checkout",
       "category": "retry_overload_control",
       "description": "Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "shorten_slot_hold_ttl",
+      "type": "inventory_policy",
+      "target": "slot_inventory",
+      "category": "fairness_and_inventory_control",
+      "description": "Shorten slot-hold TTL so trapped appointment inventory is released back to real patients faster.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "route_to_callback_queue",
+      "type": "fallback_routing",
+      "target": "overflow_patients",
+      "category": "graceful_access_fallback",
+      "description": "Route a controlled slice of demand to staffed callback instead of letting repeated online attempts starve access.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "reserve_priority_slots",
+      "type": "fairness_policy",
+      "target": "high_priority_cohorts",
+      "category": "fairness_and_inventory_control",
+      "description": "Reserve a protected slice of scarce appointment capacity for higher-priority patients and reduce hold concentration.",
       "execution_surface": "browser"
     },
     {
@@ -187,11 +247,11 @@
       "execution_surface": "browser"
     },
     {
-      "id": "restart_payment",
-      "type": "restart",
-      "target": "payment",
-      "category": "service_recovery",
-      "description": "Restart eligibility workers after backlog pressure is reduced.",
+      "id": "route_to_callback_queue",
+      "type": "fallback_routing",
+      "target": "overflow_patients",
+      "category": "graceful_access_fallback",
+      "description": "Route a controlled slice of demand to staffed callback instead of letting repeated online attempts starve access.",
       "execution_surface": "browser"
     },
     {
@@ -203,97 +263,98 @@
       "execution_surface": "browser"
     },
     {
-      "id": "disable_flag",
-      "type": "flag",
-      "target": "payment_feature",
-      "category": "graceful_degradation",
-      "description": "Disable online self-scheduling as a last-resort kill switch and route patients to staffed fallback.",
+      "id": "restart_payment",
+      "type": "restart",
+      "target": "payment",
+      "category": "service_recovery",
+      "description": "Restart eligibility workers after backlog pressure is reduced.",
       "execution_surface": "browser"
     }
   ],
   "stratus_ranking": [
     {
-      "id": "enable_payment_circuit_breaker",
-      "rank": 1,
-      "confidence": 0.88,
-      "rationale": "Breaks retry amplification at source by failing fast on degraded payment dependency."
-    },
-    {
       "id": "rate_limit_retries",
-      "rank": 2,
-      "confidence": 0.82,
-      "rationale": "Directly throttles retry storm but doesn't address root dependency degradation issue."
+      "rank": 1,
+      "confidence": 0.95,
+      "rationale": "Early throttle timing still has enough leverage to win."
     },
     {
       "id": "increase_retry_backoff",
+      "rank": 2,
+      "confidence": 0.72,
+      "rationale": "Smooths retry pressure but acts more gradually."
+    },
+    {
+      "id": "enable_payment_circuit_breaker",
       "rank": 3,
-      "confidence": 0.79,
-      "rationale": "Reduces retry pressure gradually without hard limits or circuit breaking benefits."
+      "confidence": 0.68,
+      "rationale": "Contains dependency retries when eligibility is a real bottleneck."
+    },
+    {
+      "id": "route_to_callback_queue",
+      "rank": 4,
+      "confidence": 0.55,
+      "rationale": "Retained for comparison against safer futures."
     },
     {
       "id": "shift_traffic",
-      "rank": 4,
-      "confidence": 0.65,
-      "rationale": "May help if regional issue but doesn't fix retry amplification pattern."
+      "rank": 5,
+      "confidence": 0.55,
+      "rationale": "Retained for comparison against safer futures."
     },
     {
       "id": "restart_payment",
-      "rank": 5,
-      "confidence": 0.58,
-      "rationale": "Risky without first controlling retry storm; could worsen transient payment failures."
-    },
-    {
-      "id": "disable_flag",
       "rank": 6,
-      "confidence": 0.45,
-      "rationale": "Nuclear option with high user impact; reserve for complete system failure."
+      "confidence": 0.38,
+      "rationale": "Tempting local fix, but unsafe while backlog and retry pressure remain high."
     }
   ],
   "best_action": {
-    "id": "enable_payment_circuit_breaker",
-    "type": "circuit_breaker",
-    "target": "payment",
+    "id": "rate_limit_retries",
+    "type": "throttle",
+    "target": "checkout",
     "category": "retry_overload_control",
-    "description": "Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.",
+    "description": "Throttle appointment-booking retries to break retry amplification.",
     "execution_surface": "browser"
   },
-  "overall_confidence": 0.88,
+  "dangerous_reflex": "restart_payment",
+  "overall_confidence": 0.95,
   "predicted_effects_by_action": {
-    "rate_limit_retries": {
-      "latency_direction": "down",
-      "error_direction": "mixed",
+    "restart_payment": {
+      "latency_direction": "mixed",
+      "error_direction": "down",
       "blast_radius": "medium",
-      "retry_storm_risk": "low"
+      "retry_storm_risk": "high"
     },
     "enable_payment_circuit_breaker": {
       "latency_direction": "down",
-      "error_direction": "down",
+      "error_direction": "mixed",
       "blast_radius": "low",
       "retry_storm_risk": "low"
     },
     "increase_retry_backoff": {
       "latency_direction": "down",
-      "error_direction": "down",
+      "error_direction": "mixed",
       "blast_radius": "low",
       "retry_storm_risk": "medium"
     },
-    "restart_payment": {
-      "latency_direction": "mixed",
+    "route_to_callback_queue": {
+      "latency_direction": "down",
       "error_direction": "mixed",
-      "blast_radius": "high",
-      "retry_storm_risk": "high"
+      "blast_radius": "low",
+      "retry_storm_risk": "low"
+    },
+    "rate_limit_retries": {
+      "latency_direction": "down",
+      "error_direction": "mixed",
+      "blast_radius": "low",
+      "retry_storm_risk": "low"
     },
     "shift_traffic": {
       "latency_direction": "mixed",
       "error_direction": "mixed",
-      "blast_radius": "medium",
-      "retry_storm_risk": "medium"
-    },
-    "disable_flag": {
-      "latency_direction": "down",
-      "error_direction": "down",
       "blast_radius": "high",
-      "retry_storm_risk": "low"
+      "retry_storm_risk": "medium"
     }
   },
   "browser_workflow": {
@@ -302,9 +363,9 @@
     "openclaw_execution_url": "http://127.0.0.1:8010/openclaw-execution",
     "openclaw_verdict_url": "http://127.0.0.1:8010/openclaw-execution?stage=verdict",
     "state_api_url": "http://127.0.0.1:8010/api/state",
-    "button_label": "Enable Eligibility Circuit Breaker",
+    "button_label": "Throttle Booking Retries",
     "button_selector": "#openclaw-demo-run",
-    "fallback_button_selector": "#action-enable_payment_circuit_breaker",
+    "fallback_button_selector": "#action-rate_limit_retries",
     "steps": [
       "Open the dedicated OpenClaw execution page.",
       "Inspect the before-action incident card and chosen remediation.",
@@ -326,9 +387,9 @@
       "k8s/chaos/payment-unreachable-networkchaos.yaml",
       "k8s/chaos/payment-latency-httpchaos.yaml"
     ],
-    "recommended_remediation_manifest": "k8s/remediations/enable-payment-circuit-breaker-configmap.yaml"
+    "recommended_remediation_manifest": "k8s/remediations/rate-limit-retries-configmap.yaml"
   },
   "notes": [
-    "Used live Stratus ranking."
+    "Live Stratus call failed; using deterministic fallback: APIConnectionError"
   ]
 }

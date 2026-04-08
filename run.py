@@ -251,6 +251,8 @@ def build_plan_report(
         "observed_condition": {
             "services": state.get("services", []),
             "metrics": state.get("metrics", {}),
+            "business_metrics": state.get("business_metrics", {}),
+            "constraints": state.get("constraints", {}),
             "logs": state.get("logs", []),
             "traces": state.get("traces", []),
             "pattern_matches": state.get("pattern_matches", []),
@@ -263,6 +265,12 @@ def build_plan_report(
         "candidate_actions": shortlist,
         "stratus_ranking": ranking["ranked_actions"],
         "best_action": chosen,
+        "dangerous_reflex": dangerous_reflex_for_scenario(
+            scenario_id=scenario_id,
+            candidate_actions=shortlist,
+            chosen_action_id=chosen["id"],
+            constraints=state.get("constraints", {}),
+        ),
         "overall_confidence": ranking["overall_confidence"],
         "predicted_effects_by_action": ranking["predicted_effects_by_action"],
         "browser_workflow": browser_workflow(chosen),
@@ -293,6 +301,9 @@ def build_verify_report(
     actual = actual_outcome_from_evidence(
         before_metrics=plan["observed_condition"]["metrics"],
         after_metrics=current_evidence["metrics"],
+        before_business=plan["observed_condition"].get("business_metrics", {}),
+        after_business=current_state.get("business_metrics", current_evidence.get("business_metrics", {})),
+        after_constraints=current_state.get("constraints", current_evidence.get("constraints", {})),
         action_id=executed_action["id"],
     )
     drift = compare_prediction_to_actual(executed_action["id"], predicted, actual)
@@ -320,6 +331,8 @@ def build_verify_report(
         "observed_condition": {
             "services": current_state.get("services", []),
             "metrics": current_state.get("metrics", {}),
+            "business_metrics": current_state.get("business_metrics", {}),
+            "constraints": current_state.get("constraints", {}),
             "logs": current_state.get("logs", []),
             "traces": current_state.get("traces", []),
             "pattern_matches": current_state.get("pattern_matches", []),
@@ -333,6 +346,7 @@ def build_verify_report(
         "stratus_ranking": plan["stratus_ranking"],
         "best_action": planned_action,
         "executed_action": executed_action,
+        "dangerous_reflex": plan.get("dangerous_reflex"),
         "action_alignment": alignment,
         "overall_confidence": plan["overall_confidence"],
         "predicted_effects_by_action": plan["predicted_effects_by_action"],
@@ -491,8 +505,8 @@ def load_incident_input(payload: dict) -> tuple[str, dict, dict]:
 
 
 def prepare_demo_state(payload: dict, timeout_seconds: float = 6.0) -> tuple[dict, dict]:
-    reset_runtime = reset_state()
-    expected_metrics = derive_metrics(reset_runtime)
+    current_runtime = load_state()
+    expected_metrics = derive_metrics(current_runtime)
     deadline = time.monotonic() + timeout_seconds
     latest = collect_evidence(payload)
     while True:
@@ -506,12 +520,12 @@ def prepare_demo_state(payload: dict, timeout_seconds: float = 6.0) -> tuple[dic
         time.sleep(min(2.0, remaining))
         latest = collect_evidence(payload)
     if latest.get("metrics") != expected_metrics:
-        latest = evidence_from_reset_state(latest, expected_metrics)
+        latest = evidence_from_expected_state(latest, expected_metrics)
     state = classify_incident(payload, latest)
     return state, latest
 
 
-def evidence_from_reset_state(latest: dict, expected_metrics: dict) -> dict:
+def evidence_from_expected_state(latest: dict, expected_metrics: dict) -> dict:
     refreshed = json.loads(json.dumps(latest))
     refreshed["metrics"] = {
         "latency_p95_ms": int(expected_metrics["latency_p95_ms"]),
@@ -519,7 +533,7 @@ def evidence_from_reset_state(latest: dict, expected_metrics: dict) -> dict:
         "retry_rate": round(float(expected_metrics["retry_rate"]), 4),
     }
     refreshed["prometheus"] = {
-        "source": "reset_state_fallback",
+        "source": "expected_state_fallback",
         "queries": {
             "checkout_latency_p95_ms": refreshed["metrics"]["latency_p95_ms"],
             "checkout_error_rate": refreshed["metrics"]["error_rate"],
@@ -533,7 +547,7 @@ def evidence_from_reset_state(latest: dict, expected_metrics: dict) -> dict:
             )
             if enabled
         ],
-        "note": "Used reset-state fallback because Prometheus had not yet reflected the fresh incident baseline.",
+        "note": "Used expected-state fallback because Prometheus had not yet reflected the latest shared simulation state.",
     }
     return refreshed
 
@@ -547,19 +561,59 @@ def normalize_best_action(best_action: dict | str, actions: list[dict]) -> dict:
     return {"id": str(best_action), "description": str(best_action)}
 
 
-def actual_outcome_from_evidence(before_metrics: dict, after_metrics: dict, action_id: str) -> dict:
+def actual_outcome_from_evidence(
+    before_metrics: dict,
+    after_metrics: dict,
+    action_id: str,
+    before_business: dict | None = None,
+    after_business: dict | None = None,
+    after_constraints: dict | None = None,
+) -> dict:
+    before_business = before_business or {}
+    after_business = after_business or {}
+    after_constraints = after_constraints or {}
     retry_rate = float(after_metrics.get("retry_rate", 0.0))
     error_rate = float(after_metrics.get("error_rate", 0.0))
     latency = int(after_metrics.get("latency_p95_ms", 0))
+    abandonment = float(after_business.get("queue_abandonment_rate", 0.0))
+    fairness = float(after_business.get("fairness_skew", 0.0))
+    hold_util = float(after_business.get("seat_hold_utilization", 0.0))
+    secondary_headroom = float(
+        after_business.get("secondary_headroom", after_constraints.get("regional_headroom_secondary", 1.0))
+    )
+    callback_queue = float(
+        after_business.get("manual_callback_queue_depth", after_constraints.get("manual_callback_queue", 0.0))
+    )
+    if retry_rate <= 0.12 and abandonment <= 0.18 and fairness <= 0.16 and secondary_headroom >= 0.14:
+        risk_level = "low"
+    elif retry_rate <= 0.25 and abandonment <= 0.24 and fairness <= 0.24:
+        risk_level = "medium"
+    else:
+        risk_level = "high"
+    if secondary_headroom < 0.12 or callback_queue > 24 or hold_util > 0.9:
+        blast_radius = "high"
+    elif risk_level == "low":
+        blast_radius = "low"
+    else:
+        blast_radius = "medium"
     return {
         "latency_p95_ms": latency,
         "error_rate": error_rate,
         "retry_rate": retry_rate,
+        "queue_abandonment_rate": round(abandonment, 2),
+        "fairness_skew": round(fairness, 2),
+        "seat_hold_utilization": round(hold_util, 2),
+        "secondary_headroom": round(secondary_headroom, 2),
+        "manual_callback_queue_depth": round(callback_queue, 1),
         "time_to_effect_seconds": 30,
-        "risk_level": "low" if retry_rate <= 0.12 else "medium",
+        "risk_level": risk_level,
         "impact": "medium_high",
-        "blast_radius": "low" if retry_rate <= 0.12 else "medium",
-        "recovery": "strong" if latency < before_metrics.get("latency_p95_ms", latency) else "partial",
+        "blast_radius": blast_radius,
+        "recovery": (
+            "strong"
+            if risk_level == "low" and latency < before_metrics.get("latency_p95_ms", latency)
+            else "partial"
+        ),
         "notes": f"Observed live metrics after {action_id} via Prometheus-backed verification.",
         "action_id": action_id,
         "latency_direction": direction(before_metrics.get("latency_p95_ms"), latency),
@@ -591,6 +645,9 @@ def browser_workflow(chosen: dict) -> dict:
         "rate_limit_retries": "Throttle Booking Retries",
         "enable_payment_circuit_breaker": "Enable Eligibility Circuit Breaker",
         "increase_retry_backoff": "Increase Booking Retry Backoff",
+        "shorten_slot_hold_ttl": "Shorten Slot Hold TTL",
+        "route_to_callback_queue": "Route Overflow to Callback Queue",
+        "reserve_priority_slots": "Reserve Priority Slots",
         "restart_payment": "Restart Eligibility Service",
         "shift_traffic": "Shift Scheduling Traffic",
         "disable_flag": "Disable Online Scheduling",
@@ -599,6 +656,9 @@ def browser_workflow(chosen: dict) -> dict:
         "rate_limit_retries": "#action-rate_limit_retries",
         "enable_payment_circuit_breaker": "#action-enable_payment_circuit_breaker",
         "increase_retry_backoff": "#action-increase_retry_backoff",
+        "shorten_slot_hold_ttl": "#action-shorten_slot_hold_ttl",
+        "route_to_callback_queue": "#action-route_to_callback_queue",
+        "reserve_priority_slots": "#action-reserve_priority_slots",
         "restart_payment": "#action-restart_payment",
         "shift_traffic": "#action-shift_traffic",
         "disable_flag": "#action-disable_flag",
@@ -794,7 +854,7 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
                 "before and after browser-visible evidence",
                 "predicted versus actual drift",
             ],
-            "dangerous_reflex": "restart_payment",
+            "dangerous_reflex": plan.get("dangerous_reflex", "restart_payment"),
             "chosen_action": chosen["id"],
         },
         "fallback_contract": {
@@ -818,6 +878,30 @@ def resolve_executed_action(plan: dict, execution: dict | None) -> dict:
     if execution_action_id and execution_action_id in action_by_id:
         return action_by_id[execution_action_id]
     return planned_action
+
+
+def dangerous_reflex_for_scenario(
+    scenario_id: str,
+    candidate_actions: list[dict],
+    chosen_action_id: str,
+    constraints: dict | None = None,
+) -> str:
+    constraints = constraints or {}
+    candidate_ids = [action.get("id") for action in candidate_actions]
+    if scenario_id == "seat_hold_clog":
+        for action_id in ("enable_payment_circuit_breaker", "shift_traffic", "restart_payment"):
+            if action_id in candidate_ids and action_id != chosen_action_id:
+                return action_id
+    if scenario_id == "regional_saturation":
+        secondary_headroom = float(constraints.get("regional_headroom_secondary", 1.0))
+        if secondary_headroom <= 0.24 and "shift_traffic" in candidate_ids and chosen_action_id != "shift_traffic":
+            return "shift_traffic"
+    if "restart_payment" in candidate_ids and chosen_action_id != "restart_payment":
+        return "restart_payment"
+    for action_id in candidate_ids:
+        if action_id != chosen_action_id:
+            return str(action_id)
+    return "restart_payment"
 
 
 def default_openclaw_demo_prompt() -> str:

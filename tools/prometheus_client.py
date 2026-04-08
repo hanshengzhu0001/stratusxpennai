@@ -7,7 +7,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from tools.runtime_state import derive_metrics, load_state
+from tools.runtime_state import current_constraints, derive_metrics, ensure_alert_scenario_active, load_state
+from tools.scenario_catalog import derive_business_metrics
 
 
 DEFAULT_EVIDENCE = {
@@ -16,6 +17,20 @@ DEFAULT_EVIDENCE = {
         "latency_p95_ms": 2300,
         "error_rate": 0.18,
         "retry_rate": 0.31,
+    },
+    "business_metrics": {
+        "queue_abandonment_rate": 0.24,
+        "payment_success_rate": 0.72,
+        "retry_amplification_factor": 2.7,
+        "fairness_skew": 0.16,
+        "seat_hold_utilization": 0.78,
+        "seat_hold_expiration_rate": 0.14,
+    },
+    "constraints": {
+        "queue_depth": 28.0,
+        "eligibility_health": 0.46,
+        "regional_headroom_secondary": 0.27,
+        "manual_callback_queue": 0.0,
     },
     "logs": [
         "eligibility timeout spikes observed",
@@ -41,12 +56,16 @@ DEFAULT_EVIDENCE = {
 
 
 def collect_evidence(alert_payload: dict) -> dict:
+    ensure_alert_scenario_active(alert_payload)
+    state = load_state()
     evidence = json.loads(json.dumps(DEFAULT_EVIDENCE))
+    _enrich_with_state(evidence, alert_payload, state)
     prom_base = os.environ.get("PROMETHEUS_BASE_URL")
     if not prom_base:
         return _direct_evidence_fallback(
             evidence,
             alert_payload,
+            state,
             "PROMETHEUS_BASE_URL not set; using direct control-plane metrics.",
         )
 
@@ -64,12 +83,13 @@ def collect_evidence(alert_payload: dict) -> dict:
             "queries": query_results,
             "active_alerts": active_alerts,
         }
-        evidence["logs"] = _alert_summaries(alert_payload)
+        _enrich_with_state(evidence, alert_payload, state)
         return evidence
     except Exception as exc:
         return _direct_evidence_fallback(
             evidence,
             alert_payload,
+            state,
             f"Prometheus query failed; using direct control-plane metrics: {exc.__class__.__name__}",
         )
 
@@ -130,8 +150,7 @@ def _alert_summaries(alert_payload: dict) -> list[str]:
     return summaries or list(DEFAULT_EVIDENCE["logs"])
 
 
-def _direct_evidence_fallback(evidence: dict, alert_payload: dict, note: str) -> dict:
-    state = load_state()
+def _direct_evidence_fallback(evidence: dict, alert_payload: dict, state: dict, note: str) -> dict:
     metrics = derive_metrics(state)
     evidence["metrics"]["latency_p95_ms"] = int(metrics["latency_p95_ms"])
     evidence["metrics"]["error_rate"] = round(float(metrics["error_rate"]), 4)
@@ -146,8 +165,30 @@ def _direct_evidence_fallback(evidence: dict, alert_payload: dict, note: str) ->
         "active_alerts": _active_alerts_from_metrics(evidence["metrics"]),
         "note": note,
     }
-    evidence["logs"] = _alert_summaries(alert_payload)
+    _enrich_with_state(evidence, alert_payload, state)
     return evidence
+
+
+def _enrich_with_state(evidence: dict, alert_payload: dict, state: dict) -> None:
+    scenario_id = (
+        alert_payload.get("commonLabels", {}).get("scenario_id")
+        or alert_payload.get("alerts", [{}])[0].get("labels", {}).get("scenario_id")
+        or state.get("active_scenario")
+        or "retry_death_spiral"
+    )
+    technical = evidence.get("metrics", {})
+    evidence["business_metrics"] = derive_business_metrics(state, technical)
+    evidence["constraints"] = current_constraints(state)
+    evidence["services"] = {
+        "retry_death_spiral": ["portal", "scheduling", "eligibility"],
+        "payment_gateway_flap": ["portal", "scheduling", "eligibility"],
+        "seat_hold_clog": ["portal", "scheduling", "inventory"],
+        "regional_saturation": ["portal", "scheduling", "region_capacity"],
+    }.get(scenario_id, ["portal", "scheduling", "eligibility"])
+    hints = _scenario_hints(scenario_id)
+    summaries = _alert_summaries(alert_payload)
+    evidence["logs"] = summaries + [item for item in hints["logs"] if item not in summaries]
+    evidence["traces"] = hints["traces"]
 
 
 def _active_alerts_from_metrics(metrics: dict) -> list[str]:
@@ -157,6 +198,52 @@ def _active_alerts_from_metrics(metrics: dict) -> list[str]:
     if float(metrics.get("retry_rate", 0.0)) > 0.25:
         alerts.append("SchedulingRetrySpiral")
     return alerts
+
+
+def _scenario_hints(scenario_id: str) -> dict:
+    hints = {
+        "retry_death_spiral": {
+            "logs": [
+                "eligibility timeouts are clustering behind a retry burst",
+                "portal retries are consuming more capacity than new booking demand",
+            ],
+            "traces": [
+                "scheduling -> eligibility spans dominate p95 while retry fan-out is still increasing",
+                "hold backlog is present but not the primary root cause",
+            ],
+        },
+        "payment_gateway_flap": {
+            "logs": [
+                "eligibility verifier is oscillating between healthy and degraded responses",
+                "backlog exists, but dependency instability is the dominant bottleneck",
+            ],
+            "traces": [
+                "eligibility span health drives most of the latency variance",
+                "retry fan-out is moderate relative to dependency degradation",
+            ],
+        },
+        "seat_hold_clog": {
+            "logs": [
+                "slot-hold TTL is trapping scarce inventory for duplicate attempts",
+                "fairness degradation is rising faster than eligibility error rate",
+            ],
+            "traces": [
+                "inventory pressure dominates user-visible wait more than dependency latency",
+                "eligibility is partially healthy, but hold release lags booking completion",
+            ],
+        },
+        "regional_saturation": {
+            "logs": [
+                "secondary-region headroom is close to the failover safety floor",
+                "a small traffic shift may help, but the margin is narrow",
+            ],
+            "traces": [
+                "regional ingress saturation dominates more than dependency health",
+                "routing decisions change blast radius more than retry tuning alone",
+            ],
+        },
+    }
+    return hints.get(scenario_id, hints["retry_death_spiral"])
 
 
 def _prom_queries() -> dict[str, str]:

@@ -30,7 +30,7 @@ This should feel like a **world-model safety layer for operational agents**, not
 
 ## 0.1 Final Product Snapshot
 
-By demo day, the product should look like one coherent healthcare-access operations system with five visible pieces:
+By demo day, the product should look like one coherent healthcare-access operations system with six visible pieces:
 
 1. **Telehealth Scheduling Stability Board**
    - a business-facing operations page at `/operations`
@@ -43,15 +43,16 @@ By demo day, the product should look like one coherent healthcare-access operati
 3. **OpenClaw Execution Surface**
    - the dedicated browser page at `/openclaw-execution`
    - gives OpenClaw one stable place to inspect, click, and verify
-4. **Armed Watch Layer**
+4. **Armed Await-Demo Layer**
    - OpenClaw is armed once and stays in the background
-   - a watcher latches a `pending_incident` from the Alertmanager webhook path
-   - OpenClaw wakes up only when a real incident arrives
-4. **Case-Aware Decision Loop**
+   - `.venv/bin/python run.py alerts/latest.json --phase await-demo` is the primary arm command
+   - a watcher latches a `pending_incident` from the Alertmanager webhook path, acknowledges it, and prepares the demo artifacts
+   - OpenClaw wakes up only when a real incident arrives, then returns to `await-demo` mode after summary
+5. **Case-Aware Decision Loop**
    - parallel sentinel agents observe the situation
    - a shortlist is built from the broader remediation library
    - Stratus ranks only the shortlist and rejects the dangerous reflex
-5. **Final Verdict Artifact**
+6. **Final Verdict Artifact**
    - one judge-facing report that states:
      - incident summary
      - dangerous reflex rejected
@@ -73,13 +74,18 @@ If the final product is working correctly, the audience should feel that they ar
 We are not starting from zero. The current base already includes:
 
 - an end-to-end OpenClaw + Stratus flow on `workflow`
-- live Stratus ranking at the guarded decision step
+- live Stratus ranking at the guarded decision step, with deterministic fallback when needed
 - a dedicated OpenClaw browser execution surface
+- an armed `await-demo` mode for one-prompt OpenClaw activation
+- multi-scenario incident triggering from the frontend instead of only `curl`
 - Prometheus-backed verification
 - plan, browser playbook, demo artifact, and final report outputs
 - a broader remediation library with scenario-specific shortlist selection
 - a baseline direction and simulator/comparison shape
 - a Guardrail Console shell with Incident, Decision, Execution, and Verdict views
+- a separate Telehealth Scheduling Stability Board at `/operations`
+- a manual fallback surface at `/feature-flags`
+- fallback-to-verdict behavior so browser failure still lands on a final browser-visible outcome
 
 Week 2 is about turning that base into a **healthcare-access product story** with stronger realism, clearer multi-agent boundaries, and a more impressive demo.
 
@@ -263,7 +269,7 @@ The simulator should preserve believable relationships:
 The main workflow should be:
 
 1. **Parallel observation**
-2. **Incident latch / wake-up**
+2. **Incident latch / await-demo wake-up**
 3. **Case-library retrieval**
 4. **Shortlist generation**
 5. **Stratus guardrail ranking**
@@ -271,17 +277,20 @@ The main workflow should be:
 7. **Post-action evaluation**
 8. **Case writeback**
 
-### 7.0 Armed Watch Layer
+### 7.0 Armed Await-Demo Layer
 
 Before the rest of the workflow runs, OpenClaw should be armed once and remain idle in the background.
 
 The watcher should:
 
 - observe `alerts/latest.json` or the Alertmanager alert state
+- let OpenClaw arm itself with:
+  - `.venv/bin/python run.py alerts/latest.json --phase await-demo`
 - latch a `pending_incident` when a new firing alert arrives
 - mark the incident `acknowledged` when OpenClaw starts handling it
+- prepare the demo artifacts before handing control back to OpenClaw
 - mark it `completed` after verify or fallback
-- return to watch mode automatically
+- return to `await-demo` mode automatically
 
 This is better than a manual trigger prompt because the demo now feels like an operational agent waking up to a real incident instead of being told exactly when to act.
 
@@ -391,10 +400,10 @@ The main product moment is:
 
 Execution remains OpenClaw-first:
 
-- OpenClaw is armed once through watch mode
+- OpenClaw is armed once through `await-demo`
 - the watcher latches a new firing incident from the webhook path
-- run `run.py --phase demo`
-- read the demo artifact and browser playbook
+- `await-demo` acknowledges it and writes the plan, browser playbook, and demo artifact
+- OpenClaw reads the demo artifact and browser playbook
 - open `/openclaw-execution`
 - inspect the before-action incident card
 - click the single stable execution button
@@ -406,6 +415,7 @@ Browser fallback remains:
 - if browser control fails, do not replan
 - run `run.py --phase fallback`
 - finish the report from the saved plan
+- still reopen `/openclaw-execution?stage=verdict` so the final browser surface matches the written report
 
 Operational fallback inside the scenario remains:
 
@@ -455,11 +465,12 @@ Operational meaning:
 
 ## 9. Frontend Product Surface
 
-The frontend should now be explicitly split into two surfaces plus one execution page:
+The frontend should now be explicitly split into three surfaces plus one execution page:
 
 - **Telehealth Scheduling Stability Board** at `/operations`
 - **Guardrail Console** at `/`
 - **OpenClaw Execution Surface** at `/openclaw-execution`
+- **Manual Ops Controls** at `/feature-flags`
 
 Required product feel:
 
@@ -478,8 +489,10 @@ What must be true by the end of Week 2:
 
 - all copy, labels, and business metrics speak healthcare-access language
 - scenario switching works across the healthcare incident portfolio
+- incident triggering works through frontend buttons on `/operations`
 - the operations board and control console feel visually distinct
 - verdicts read like operational decisions, not debug logs
+- browser failure still leads to a verdict surface instead of a dead end
 
 Judge-facing outcome:
 
@@ -539,13 +552,14 @@ Develop:
 - own the Execution View
 - own overall console shell and navigation
 - own scenario selection and sequence-progress presentation
-- connect plan -> execute -> verify -> verdict into one product flow
+- connect `await-demo -> execute -> verify/fallback -> verdict -> await-demo` into one product flow
 
 Test:
 
 - rehearse end-to-end browser runs
 - test fallback-path reliability
 - test console flow across all four views
+- test armed-mode wake-up from the frontend incident buttons
 
 Furnish:
 
@@ -553,6 +567,7 @@ Furnish:
 - final OpenClaw prompt
 - final shell polish
 - scenario-switch UX and sequence-timeline UX
+- resume-active-incident prompt and fallback-to-verdict copy
 
 OpenClaw touchpoint:
 
@@ -714,18 +729,18 @@ To stand out in the hackathon, the demo should emphasize:
 4. **Predicted vs actual was verified**
    - this is not fire-and-forget automation
 5. **The agent woke up on its own**
-   - it was armed in the background and activated from a real incident signal
+   - it was armed in the background with one prompt and activated from a real incident signal
 
 Recommended demo sequence:
 
-1. Trigger one healthcare-access incident live
-2. Show that OpenClaw is already armed and waiting
-3. Let the incident latch from the webhook path
-4. Show the incident in the Guardrail Console
+1. Arm OpenClaw once with the `await-demo` prompt
+2. Trigger one healthcare-access incident live from `/operations`
+3. Show that OpenClaw wakes up without another prompt
+4. Show the incident in the Guardrail Console and on the dedicated execution surface
 5. Turn on baseline mode and show it picks `restart_payment` shown as `Restart Eligibility Service`
 6. Show Stratus ranking a safer action from the shortlist
-7. Let OpenClaw execute the safer action
-8. Verify the after-state
+7. Let OpenClaw execute the safer action or fall back cleanly if browser control fails
+8. Open the verdict surface and verify the after-state
 9. End on a verdict that explicitly says:
    - dangerous reflex rejected
    - safer action chosen

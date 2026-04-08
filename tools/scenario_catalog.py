@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tools.simulation import compute_business_metrics, default_simulation_state, profile_for_scenario
 
 SCENARIO_PROFILES = {
     "retry_death_spiral": {
@@ -29,6 +30,7 @@ SCENARIO_PROFILES = {
             "severity": "critical",
             "summary": "Scheduling retry pressure above baseline",
         },
+        "trigger_label": profile_for_scenario("retry_death_spiral")["trigger_label"],
     },
     "payment_gateway_flap": {
         "id": "payment_gateway_flap",
@@ -57,13 +59,14 @@ SCENARIO_PROFILES = {
             "severity": "critical",
             "summary": "Eligibility verification is flapping and causing access instability",
         },
+        "trigger_label": profile_for_scenario("payment_gateway_flap")["trigger_label"],
     },
     "seat_hold_clog": {
         "id": "seat_hold_clog",
         "label": "Slot Hold Clog",
         "headline": "Appointment slots are locked faster than they are confirmed, starving real patients.",
         "story": "Slot inventory gets trapped in pending holds while eligibility remains partially available, driving abandonment, access skew, and delayed care.",
-        "expected_first_action": "increase_retry_backoff",
+        "expected_first_action": "shorten_slot_hold_ttl",
         "sequence_preview": [
             "Relieve slot-hold pressure",
             "Improve booking completion",
@@ -85,12 +88,13 @@ SCENARIO_PROFILES = {
             "severity": "critical",
             "summary": "Slot holds are clogging access and delaying booking completion",
         },
+        "trigger_label": profile_for_scenario("seat_hold_clog")["trigger_label"],
     },
     "regional_saturation": {
         "id": "regional_saturation",
         "label": "Regional Access Saturation",
-        "headline": "Primary-region stress makes failover tempting, but secondary scheduling capacity is limited.",
-        "story": "Portal demand climbs across the telehealth scheduling release while the backup region has only enough headroom for a cautious shift.",
+        "headline": "Primary-region stress makes failover tempting, but the backup region is safe only above a narrow headroom threshold.",
+        "story": "Portal demand climbs across the telehealth scheduling release while the backup region can absorb only a cautious shift. If that headroom slips below threshold, traffic shift becomes the wrong move and diversion is safer.",
         "expected_first_action": "shift_traffic",
         "sequence_preview": [
             "Stabilize primary-region access pressure",
@@ -113,6 +117,7 @@ SCENARIO_PROFILES = {
             "severity": "critical",
             "summary": "Primary-region access saturation is approaching unsafe failover territory",
         },
+        "trigger_label": profile_for_scenario("regional_saturation")["trigger_label"],
     },
 }
 
@@ -131,18 +136,21 @@ def default_state_for_scenario(scenario_id: str | None) -> dict:
     scenario = get_scenario(scenario_id)
     return {
         "active_scenario": scenario["id"],
-        "payment_service_unreachable": scenario["state_overrides"]["payment_service_unreachable"],
-        "loadgenerator_flood_homepage": scenario["state_overrides"]["loadgenerator_flood_homepage"],
+        "payment_service_unreachable": False,
+        "loadgenerator_flood_homepage": False,
         "retry_rate_limit_enabled": False,
         "payment_circuit_breaker_enabled": False,
         "retry_backoff_enabled": False,
         "traffic_shift_enabled": False,
         "payment_feature_disabled": False,
         "last_action": None,
+        "simulation": default_simulation_state(scenario["id"]),
     }
 
 
 def derive_business_metrics(state: dict, technical_metrics: dict) -> dict:
+    if state.get("simulation"):
+        return compute_business_metrics(state)
     scenario = get_scenario(state.get("active_scenario"))
     latency = float(technical_metrics.get("latency_p95_ms", 0))
     error_rate = float(technical_metrics.get("error_rate", 0.0))

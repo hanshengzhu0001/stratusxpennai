@@ -212,7 +212,7 @@ action.</p>
 operational agents</strong>, not a generic incident copilot.</p>
 <h2 id="final-product-snapshot">0.1 Final Product Snapshot</h2>
 <p>By demo day, the product should look like one coherent
-healthcare-access operations system with five visible pieces:</p>
+healthcare-access operations system with six visible pieces:</p>
 <ol type="1">
 <li><strong>Telehealth Scheduling Stability Board</strong>
 <ul>
@@ -234,12 +234,16 @@ verdict</li>
 <li>the dedicated browser page at <code>/openclaw-execution</code></li>
 <li>gives OpenClaw one stable place to inspect, click, and verify</li>
 </ul></li>
-<li><strong>Armed Watch Layer</strong>
+<li><strong>Armed Await-Demo Layer</strong>
 <ul>
 <li>OpenClaw is armed once and stays in the background</li>
+<li><code>.venv/bin/python run.py alerts/latest.json --phase await-demo</code>
+is the primary arm command</li>
 <li>a watcher latches a <code>pending_incident</code> from the
-Alertmanager webhook path</li>
-<li>OpenClaw wakes up only when a real incident arrives</li>
+Alertmanager webhook path, acknowledges it, and prepares the demo
+artifacts</li>
+<li>OpenClaw wakes up only when a real incident arrives, then returns to
+<code>await-demo</code> mode after summary</li>
 </ul></li>
 <li><strong>Case-Aware Decision Loop</strong>
 <ul>
@@ -274,8 +278,13 @@ that they are looking at:</p>
 <p>We are not starting from zero. The current base already includes:</p>
 <ul>
 <li>an end-to-end OpenClaw + Stratus flow on <code>workflow</code></li>
-<li>live Stratus ranking at the guarded decision step</li>
+<li>live Stratus ranking at the guarded decision step, with
+deterministic fallback when needed</li>
 <li>a dedicated OpenClaw browser execution surface</li>
+<li>an armed <code>await-demo</code> mode for one-prompt OpenClaw
+activation</li>
+<li>multi-scenario incident triggering from the frontend instead of only
+<code>curl</code></li>
 <li>Prometheus-backed verification</li>
 <li>plan, browser playbook, demo artifact, and final report outputs</li>
 <li>a broader remediation library with scenario-specific shortlist
@@ -283,6 +292,11 @@ selection</li>
 <li>a baseline direction and simulator/comparison shape</li>
 <li>a Guardrail Console shell with Incident, Decision, Execution, and
 Verdict views</li>
+<li>a separate Telehealth Scheduling Stability Board at
+<code>/operations</code></li>
+<li>a manual fallback surface at <code>/feature-flags</code></li>
+<li>fallback-to-verdict behavior so browser failure still lands on a
+final browser-visible outcome</li>
 </ul>
 <p>Week 2 is about turning that base into a <strong>healthcare-access
 product story</strong> with stronger realism, clearer multi-agent
@@ -518,7 +532,7 @@ force manual fallback</li>
 <p>The main workflow should be:</p>
 <ol type="1">
 <li><strong>Parallel observation</strong></li>
-<li><strong>Incident latch / wake-up</strong></li>
+<li><strong>Incident latch / await-demo wake-up</strong></li>
 <li><strong>Case-library retrieval</strong></li>
 <li><strong>Shortlist generation</strong></li>
 <li><strong>Stratus guardrail ranking</strong></li>
@@ -526,19 +540,25 @@ force manual fallback</li>
 <li><strong>Post-action evaluation</strong></li>
 <li><strong>Case writeback</strong></li>
 </ol>
-<h3 id="armed-watch-layer">7.0 Armed Watch Layer</h3>
+<h3 id="armed-await-demo-layer">7.0 Armed Await-Demo Layer</h3>
 <p>Before the rest of the workflow runs, OpenClaw should be armed once
 and remain idle in the background.</p>
 <p>The watcher should:</p>
 <ul>
 <li>observe <code>alerts/latest.json</code> or the Alertmanager alert
 state</li>
+<li>let OpenClaw arm itself with:
+<ul>
+<li><code>.venv/bin/python run.py alerts/latest.json --phase await-demo</code></li>
+</ul></li>
 <li>latch a <code>pending_incident</code> when a new firing alert
 arrives</li>
 <li>mark the incident <code>acknowledged</code> when OpenClaw starts
 handling it</li>
+<li>prepare the demo artifacts before handing control back to
+OpenClaw</li>
 <li>mark it <code>completed</code> after verify or fallback</li>
-<li>return to watch mode automatically</li>
+<li>return to <code>await-demo</code> mode automatically</li>
 </ul>
 <p>This is better than a manual trigger prompt because the demo now
 feels like an operational agent waking up to a real incident instead of
@@ -660,10 +680,11 @@ execution</li>
 <h3 id="execution">7.5 Execution</h3>
 <p>Execution remains OpenClaw-first:</p>
 <ul>
-<li>OpenClaw is armed once through watch mode</li>
+<li>OpenClaw is armed once through <code>await-demo</code></li>
 <li>the watcher latches a new firing incident from the webhook path</li>
-<li>run <code>run.py --phase demo</code></li>
-<li>read the demo artifact and browser playbook</li>
+<li><code>await-demo</code> acknowledges it and writes the plan, browser
+playbook, and demo artifact</li>
+<li>OpenClaw reads the demo artifact and browser playbook</li>
 <li>open <code>/openclaw-execution</code></li>
 <li>inspect the before-action incident card</li>
 <li>click the single stable execution button</li>
@@ -675,6 +696,8 @@ execution</li>
 <li>if browser control fails, do not replan</li>
 <li>run <code>run.py --phase fallback</code></li>
 <li>finish the report from the saved plan</li>
+<li>still reopen <code>/openclaw-execution?stage=verdict</code> so the
+final browser surface matches the written report</li>
 </ul>
 <p>Operational fallback inside the scenario remains:</p>
 <ul>
@@ -729,7 +752,7 @@ Scheduling</strong></li>
 fallback</li>
 </ul>
 <h2 id="frontend-product-surface">9. Frontend Product Surface</h2>
-<p>The frontend should now be explicitly split into two surfaces plus
+<p>The frontend should now be explicitly split into three surfaces plus
 one execution page:</p>
 <ul>
 <li><strong>Telehealth Scheduling Stability Board</strong> at
@@ -737,6 +760,8 @@ one execution page:</p>
 <li><strong>Guardrail Console</strong> at <code>/</code></li>
 <li><strong>OpenClaw Execution Surface</strong> at
 <code>/openclaw-execution</code></li>
+<li><strong>Manual Ops Controls</strong> at
+<code>/feature-flags</code></li>
 </ul>
 <p>Required product feel:</p>
 <ul>
@@ -760,8 +785,12 @@ browser-friendly for OpenClaw</li>
 language</li>
 <li>scenario switching works across the healthcare incident
 portfolio</li>
+<li>incident triggering works through frontend buttons on
+<code>/operations</code></li>
 <li>the operations board and control console feel visually distinct</li>
 <li>verdicts read like operational decisions, not debug logs</li>
+<li>browser failure still leads to a verdict surface instead of a dead
+end</li>
 </ul>
 <p>Judge-facing outcome:</p>
 <ul>
@@ -825,14 +854,16 @@ integration</li>
 <li>own the Execution View</li>
 <li>own overall console shell and navigation</li>
 <li>own scenario selection and sequence-progress presentation</li>
-<li>connect plan -&gt; execute -&gt; verify -&gt; verdict into one
-product flow</li>
+<li>connect
+<code>await-demo -&gt; execute -&gt; verify/fallback -&gt; verdict -&gt; await-demo</code>
+into one product flow</li>
 </ul>
 <p>Test:</p>
 <ul>
 <li>rehearse end-to-end browser runs</li>
 <li>test fallback-path reliability</li>
 <li>test console flow across all four views</li>
+<li>test armed-mode wake-up from the frontend incident buttons</li>
 </ul>
 <p>Furnish:</p>
 <ul>
@@ -840,6 +871,7 @@ product flow</li>
 <li>final OpenClaw prompt</li>
 <li>final shell polish</li>
 <li>scenario-switch UX and sequence-timeline UX</li>
+<li>resume-active-incident prompt and fallback-to-verdict copy</li>
 </ul>
 <p>OpenClaw touchpoint:</p>
 <ul>
@@ -1018,21 +1050,24 @@ the baseline and what was written back into the case library</li>
 </ul></li>
 <li><strong>The agent woke up on its own</strong>
 <ul>
-<li>it was armed in the background and activated from a real incident
-signal</li>
+<li>it was armed in the background with one prompt and activated from a
+real incident signal</li>
 </ul></li>
 </ol>
 <p>Recommended demo sequence:</p>
 <ol type="1">
-<li>Trigger one healthcare-access incident live</li>
-<li>Show that OpenClaw is already armed and waiting</li>
-<li>Let the incident latch from the webhook path</li>
-<li>Show the incident in the Guardrail Console</li>
+<li>Arm OpenClaw once with the <code>await-demo</code> prompt</li>
+<li>Trigger one healthcare-access incident live from
+<code>/operations</code></li>
+<li>Show that OpenClaw wakes up without another prompt</li>
+<li>Show the incident in the Guardrail Console and on the dedicated
+execution surface</li>
 <li>Turn on baseline mode and show it picks <code>restart_payment</code>
 shown as <code>Restart Eligibility Service</code></li>
 <li>Show Stratus ranking a safer action from the shortlist</li>
-<li>Let OpenClaw execute the safer action</li>
-<li>Verify the after-state</li>
+<li>Let OpenClaw execute the safer action or fall back cleanly if
+browser control fails</li>
+<li>Open the verdict surface and verify the after-state</li>
 <li>End on a verdict that explicitly says:
 <ul>
 <li>dangerous reflex rejected</li>

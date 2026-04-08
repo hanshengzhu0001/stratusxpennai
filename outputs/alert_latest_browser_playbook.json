@@ -1,5 +1,5 @@
 {
-  "plan_id": "alert_latest-a993c03d",
+  "plan_id": "alert_latest-8a49c144",
   "workflow": {
     "orchestrator": "openclaw",
     "level": "level_3_browser_k8s_scaffold",
@@ -8,10 +8,10 @@
   "scenario_id": "alert_latest",
   "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the verdict page.",
   "chosen_action": {
-    "id": "enable_payment_circuit_breaker",
-    "label": "Enable Eligibility Circuit Breaker",
+    "id": "rate_limit_retries",
+    "label": "Throttle Booking Retries",
     "selector": "#openclaw-demo-run",
-    "fallback_selector": "#action-enable_payment_circuit_breaker"
+    "fallback_selector": "#action-rate_limit_retries"
   },
   "urls": {
     "dashboard": "http://127.0.0.1:8010/",
@@ -34,7 +34,7 @@
     {
       "kind": "click",
       "target": "#openclaw-demo-run",
-      "label": "Execute Planned Action: Enable Eligibility Circuit Breaker",
+      "label": "Execute Planned Action: Throttle Booking Retries",
       "purpose": "apply_chosen_remediation"
     },
     {
@@ -59,13 +59,13 @@
     }
   ],
   "expected_before": {
-    "latency_p95_ms": 2300,
-    "error_rate": 0.16,
-    "retry_rate": 0.31
+    "latency_p95_ms": 1617,
+    "error_rate": 0.11,
+    "retry_rate": 0.4
   },
   "predicted_after": {
     "latency_direction": "down",
-    "error_direction": "down",
+    "error_direction": "mixed",
     "blast_radius": "low",
     "retry_storm_risk": "low"
   }

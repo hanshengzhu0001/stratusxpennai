@@ -28,11 +28,13 @@ from tools.prometheus_client import collect_evidence, save_alert_payload
 from tools.runtime_state import (
     apply_action,
     control_plane_urls,
+    current_constraints,
     derive_metrics,
     load_state,
     reset_state,
     set_flag,
     set_scenario,
+    trigger_scenario,
 )
 from tools.scenario_catalog import (
     default_state_for_scenario,
@@ -57,6 +59,9 @@ ACTION_LABELS = {
     "rate_limit_retries": "Throttle Booking Retries",
     "enable_payment_circuit_breaker": "Enable Eligibility Circuit Breaker",
     "increase_retry_backoff": "Increase Booking Retry Backoff",
+    "shorten_slot_hold_ttl": "Shorten Slot Hold TTL",
+    "route_to_callback_queue": "Route Overflow to Callback Queue",
+    "reserve_priority_slots": "Reserve Priority Slots",
     "restart_payment": "Restart Eligibility Service",
     "shift_traffic": "Shift Scheduling Traffic",
     "disable_flag": "Disable Online Scheduling",
@@ -65,6 +70,9 @@ ACTION_SUMMARIES = {
     "rate_limit_retries": "Caps booking retry fan-out from the portal and scheduling workers.",
     "enable_payment_circuit_breaker": "Fails fast on degraded eligibility verification to protect the scheduling path.",
     "increase_retry_backoff": "Spaces repeated booking attempts to reduce pressure on downstream verification.",
+    "shorten_slot_hold_ttl": "Releases trapped appointment inventory faster so online access stops starving real patients.",
+    "route_to_callback_queue": "Moves a controlled slice of demand to staffed callback instead of repeated online contention.",
+    "reserve_priority_slots": "Protects urgent or high-priority patients when fairness breaks down under slot pressure.",
     "restart_payment": "Restarts eligibility workers after pressure has already been contained.",
     "shift_traffic": "Moves a controlled share of scheduling load to a secondary region.",
     "disable_flag": "Temporarily disables online self-scheduling and routes patients to staffed fallback.",
@@ -73,6 +81,9 @@ ACTION_HELP = {
     "rate_limit_retries": "Reduce booking retry fan-out so access can stabilize before more slots are locked.",
     "enable_payment_circuit_breaker": "Fail fast on degraded eligibility checks to protect the scheduling path and preserve capacity.",
     "increase_retry_backoff": "Space out repeated booking attempts so the dependency can recover without additional surge pressure.",
+    "shorten_slot_hold_ttl": "Shorten slot-hold lifetime so duplicate attempts stop trapping scarce inventory.",
+    "route_to_callback_queue": "Move excess booking demand into staffed callback when online fairness is degrading.",
+    "reserve_priority_slots": "Keep a protected slice of appointment capacity available for high-priority patients.",
     "restart_payment": "Restart eligibility workers only if retry pressure is already controlled and cold-start risk is acceptable.",
     "shift_traffic": "Shift a controlled portion of scheduling traffic to spare regional capacity when saturation is localized.",
     "disable_flag": "Pause online self-scheduling and route patients to staffed call-center or callback fallback.",
@@ -133,6 +144,7 @@ def operations_dashboard() -> str:
     watch_state = load_watch_state()
     technical_metrics = derive_metrics(state)
     business_metrics = derive_business_metrics(state, technical_metrics)
+    constraints = current_constraints(state)
     active_scenario = get_scenario(state.get("active_scenario"))
     scenarios = scenario_catalog()
     plan = _load_artifact("plan")
@@ -141,6 +153,7 @@ def operations_dashboard() -> str:
         state=state,
         technical_metrics=technical_metrics,
         business_metrics=business_metrics,
+        constraints=constraints,
         active_scenario=active_scenario,
         scenarios=scenarios,
         plan=plan,
@@ -157,6 +170,9 @@ def feature_flags() -> str:
         ("rate_limit_retries", ACTION_LABELS["rate_limit_retries"]),
         ("enable_payment_circuit_breaker", ACTION_LABELS["enable_payment_circuit_breaker"]),
         ("increase_retry_backoff", ACTION_LABELS["increase_retry_backoff"]),
+        ("shorten_slot_hold_ttl", ACTION_LABELS["shorten_slot_hold_ttl"]),
+        ("route_to_callback_queue", ACTION_LABELS["route_to_callback_queue"]),
+        ("reserve_priority_slots", ACTION_LABELS["reserve_priority_slots"]),
         ("restart_payment", ACTION_LABELS["restart_payment"]),
         ("shift_traffic", ACTION_LABELS["shift_traffic"]),
         ("disable_flag", ACTION_LABELS["disable_flag"]),
@@ -262,6 +278,7 @@ def state_api() -> dict:
         "watch_state": watch_state,
         "metrics": technical_metrics,
         "business_metrics": derive_business_metrics(state, technical_metrics),
+        "constraints": current_constraints(state),
         "artifacts": {
             name: path.exists()
             for name, path in ARTIFACT_PATHS.items()
@@ -413,7 +430,7 @@ def trigger_incident_from_form(
     scenario_id: str = Form(...),
     return_to: str = Form("operations"),
 ) -> RedirectResponse:
-    set_scenario(scenario_id)
+    trigger_scenario(scenario_id)
     payload = build_alert_payload_for_scenario(scenario_id)
     save_alert_payload(payload)
     _clear_console_artifacts()
@@ -728,12 +745,12 @@ def _render_incident_view(
         <form class="inline" method="post" action="/api/reset" style="margin-top:12px;">
           <input type="hidden" name="scenario_id" value="retry_death_spiral">
           <input type="hidden" name="return_to" value="incident">
-          <button>Reset to Retry Spiral Demo (2300ms)</button>
+          <button>Reset to Healthy Baseline</button>
         </form>
         <form class="inline" method="post" action="/api/trigger-incident" style="margin-top:12px;">
           <input type="hidden" name="scenario_id" value="{escape(active_scenario['id'])}">
           <input type="hidden" name="return_to" value="incident">
-          <button class="primary">Trigger Current Incident</button>
+          <button class="primary">{escape(active_scenario.get('trigger_label', 'Trigger Current Incident'))}</button>
         </form>
         <form class="inline" method="post" action="/api/plan" style="margin-top:12px;" data-loading-label="Planning with Stratus..." data-loading-phase="plan">
           <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
@@ -1069,6 +1086,7 @@ def _render_operations_dashboard(
     state: dict,
     technical_metrics: dict,
     business_metrics: dict,
+    constraints: dict,
     active_scenario: dict,
     scenarios: list[dict],
     plan: dict | None,
@@ -1143,6 +1161,46 @@ def _render_operations_dashboard(
             _ops_progress_bar("Booking recovery", business_metrics["payment_success_rate"], _ops_tone(1 - business_metrics["payment_success_rate"], 0.18, 0.28, inverse=True)),
         ]
     )
+    simulation_cards = "".join(
+        [
+            _ops_metric_card(
+                "External arrivals",
+                f"{constraints['lambda_external']:.2f}/s",
+                _ops_tone(min(1.0, constraints["lambda_external"] / 8.5), 0.55, 0.82),
+                "Base demand entering the portal before retries or gating.",
+            ),
+            _ops_metric_card(
+                "Retry arrivals",
+                f"{constraints['lambda_retry']:.2f}/s",
+                _ops_tone(min(1.0, constraints["lambda_retry"] / 4.5), 0.42, 0.72),
+                "Self-amplified load generated by repeated booking attempts.",
+            ),
+            _ops_metric_card(
+                "Queue depth",
+                f"{constraints['queue_depth']:.0f}",
+                _ops_tone(min(1.0, constraints["queue_depth"] / 45.0), 0.48, 0.75),
+                "Backlog proxy inside the scheduling and eligibility path.",
+            ),
+            _ops_metric_card(
+                "Service rate",
+                f"{constraints['effective_service_rate']:.2f}/s",
+                _ops_tone(1 - min(1.0, constraints["effective_service_rate"] / 6.0), 0.36, 0.58, inverse=True),
+                "Effective throughput after degradation, overload, and action effects.",
+            ),
+            _ops_metric_card(
+                "Secondary headroom",
+                f"{constraints['regional_headroom_secondary']:.2f}",
+                _ops_tone(1 - constraints["regional_headroom_secondary"], 0.55, 0.75, inverse=True),
+                "This is the threshold-sensitive term that can make traffic shift safe or dangerous.",
+            ),
+            _ops_metric_card(
+                "Fairness pressure",
+                f"{constraints['fairness_pressure']:.2f}",
+                _ops_tone(min(1.0, constraints["fairness_pressure"] / 0.30), 0.45, 0.72),
+                "Tracks when online access starts starving patients unevenly.",
+            ),
+        ]
+    )
     incidents = _ops_incident_feed(state, technical_metrics, business_metrics, active_scenario)
     recommendation = ACTION_SUMMARIES.get(chosen_action or "", "Generate a guardrail plan to surface the recommended remediation.")
     verdict_summary = (
@@ -1158,7 +1216,7 @@ def _render_operations_dashboard(
           <form method="post" action="/api/trigger-incident">
             <input type="hidden" name="scenario_id" value="{escape(item['id'])}">
             <input type="hidden" name="return_to" value="operations">
-            <button class="primary">Trigger This Case</button>
+            <button class="primary">{escape(item.get('trigger_label', 'Trigger This Case'))}</button>
           </form>
         </div>
         """
@@ -1371,6 +1429,19 @@ def _render_operations_dashboard(
         <section class="card">
           <div class="section-head">
             <div>
+              <h2>Simulation Diagnostics</h2>
+              <p class="muted">Underlying queue-and-constraint terms driving the telehealth incident. This is the causal state the guardrail is reasoning over, not just the final KPIs.</p>
+            </div>
+            <span class="badge {escape(_ops_tone(min(1.0, constraints['time_sec'] / 180), 0.4, 0.75))}">t = {constraints['time_sec']}s</span>
+          </div>
+          <div class="kpi-grid">
+            {simulation_cards}
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
               <h2>Scheduling Board</h2>
               <p class="muted">A realistic scheduling-grid view of virtual-care inventory. Warm colors indicate rising hold pressure and patient-access risk.</p>
             </div>
@@ -1399,12 +1470,12 @@ def _render_operations_dashboard(
           <form class="inline" method="post" action="/api/reset" style="margin-top:12px;">
             <input type="hidden" name="scenario_id" value="retry_death_spiral">
             <input type="hidden" name="return_to" value="operations">
-            <button>Reset to Retry Spiral Demo (2300ms)</button>
+            <button>Reset to Healthy Baseline</button>
           </form>
           <form class="inline" method="post" action="/api/trigger-incident" style="margin-top:12px;">
             <input type="hidden" name="scenario_id" value="{escape(active_scenario['id'])}">
             <input type="hidden" name="return_to" value="operations">
-            <button class="primary">Trigger Current Incident</button>
+            <button class="primary">{escape(active_scenario.get('trigger_label', 'Trigger Current Incident'))}</button>
           </form>
           <div class="link-row">
             <a href="/">Open Guardrail Console</a>
@@ -1643,6 +1714,9 @@ def _scenario_reset_copy(scenario: dict) -> str:
 def _dangerous_reflex_from_plan(plan: dict | None, chosen_action: str) -> str:
     if not plan:
         return "restart_payment"
+    explicit = plan.get("dangerous_reflex")
+    if explicit:
+        return str(explicit)
     candidate_ids = [action.get("id") for action in plan.get("candidate_actions", [])]
     if "restart_payment" in candidate_ids and chosen_action != "restart_payment":
         return "restart_payment"
@@ -1671,6 +1745,7 @@ def _render_openclaw_execution_surface(
     stage: str,
 ) -> str:
     active_scenario = get_scenario(state.get("active_scenario"))
+    constraints = current_constraints(state)
     if not plan:
         return f"""<!doctype html>
 <html>
@@ -1760,6 +1835,7 @@ def _render_openclaw_execution_surface(
     .grid {{ display:grid; grid-template-columns: 1.05fr 0.95fr; gap:18px; }}
     .card {{ background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px; box-shadow:0 18px 44px rgba(22,33,43,0.08); }}
     .metric-grid {{ display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:14px; }}
+    .mini-grid {{ display:grid; grid-template-columns: repeat(2, 1fr); gap:12px; margin-top:14px; }}
     .metric {{ border:1px solid var(--line); border-radius:16px; padding:14px; background:rgba(255,255,255,0.5); }}
     .metric .label {{ color:var(--muted); }}
     .metric .value {{ font-size:1.55rem; margin-top:6px; }}
@@ -1767,7 +1843,7 @@ def _render_openclaw_execution_surface(
     button {{ background:#bb5524; color:white; border:none; border-radius:14px; padding:13px 18px; cursor:pointer; font:inherit; }}
     a {{ color:var(--accent); }}
     ul {{ line-height:1.6; }}
-    @media (max-width: 920px) {{ .grid, .metric-grid {{ grid-template-columns: 1fr; }} .hero {{ display:grid; }} }}
+    @media (max-width: 920px) {{ .grid, .metric-grid, .mini-grid {{ grid-template-columns: 1fr; }} .hero {{ display:grid; }} }}
   </style>
 </head>
 <body>
@@ -1803,7 +1879,7 @@ def _render_openclaw_execution_surface(
         <form method="post" action="/api/reset" style="margin-top:12px;">
           <input type="hidden" name="scenario_id" value="retry_death_spiral">
           <input type="hidden" name="return_to" value="/openclaw-execution">
-          <button style="background:#405f7f;">Reset to Retry Spiral Demo (2300ms)</button>
+          <button style="background:#405f7f;">Reset to Healthy Baseline</button>
         </form>
         <p style="margin-top:12px; color:var(--muted);">Manual ops controls: <a href="/feature-flags">/feature-flags</a></p>
       </div>
@@ -1815,6 +1891,12 @@ def _render_openclaw_execution_surface(
           <li>Booking completion: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
           <li>Scheduling abandonment: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
         </ul>
+        <div class="mini-grid">
+          <div class="metric"><div class="label">External arrivals</div><div class="value">{constraints['lambda_external']:.2f}</div></div>
+          <div class="metric"><div class="label">Retry arrivals</div><div class="value">{constraints['lambda_retry']:.2f}</div></div>
+          <div class="metric"><div class="label">Queue depth</div><div class="value">{constraints['queue_depth']:.0f}</div></div>
+          <div class="metric"><div class="label">Secondary headroom</div><div class="value">{constraints['regional_headroom_secondary']:.2f}</div></div>
+        </div>
         <strong>Guardrail notes</strong>
         <ul>{notes or '<li>No notes recorded yet.</li>'}</ul>
       </div>

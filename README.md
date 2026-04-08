@@ -29,7 +29,7 @@ What it does not do yet:
 1. Start the local services and OpenClaw gateway.
 2. In OpenClaw chat, paste the prompt from `docs/openclaw_demo_prompt.md` to arm the watcher once.
 3. OpenClaw runs `run.py --phase await-demo` and waits for a new webhook incident while preparing the demo artifacts automatically when one arrives.
-4. Trigger the incident from the Telehealth Scheduling Stability Board using `Trigger Current Incident` or one of the prepared case buttons.
+4. Trigger a business event from the Telehealth Scheduling Stability Board, such as `Open Flu Surge Telehealth Window` or one of the prepared case buttons.
 5. When the incident is latched, the blocking `await-demo` command returns with the generated artifacts, and OpenClaw opens `/openclaw-execution`, clicks the single remediation button, runs verify, then opens `/openclaw-execution?stage=verdict`.
 6. If browser control fails, OpenClaw runs `run.py --phase fallback` and still finishes the report.
 
@@ -197,7 +197,7 @@ Use the incident_guardrail skill in this workspace and stay in the same task unt
 Primary demo path:
 
 - open `http://127.0.0.1:8010/operations`
-- click `Trigger Current Incident` or one of the prepared incident-case buttons
+- click a business-event trigger such as `Open Flu Surge Telehealth Window` or one of the prepared incident-case buttons
 
 CLI fallback:
 

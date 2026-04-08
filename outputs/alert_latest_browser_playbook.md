@@ -6,10 +6,10 @@ Open the dedicated OpenClaw execution page, apply the selected remediation with 
 
 ## Chosen Action
 
-- Action: `enable_payment_circuit_breaker`
-- Button label: `Enable Eligibility Circuit Breaker`
+- Action: `rate_limit_retries`
+- Button label: `Throttle Booking Retries`
 - Button selector: `#openclaw-demo-run`
-- Manual fallback selector: `#action-enable_payment_circuit_breaker`
+- Manual fallback selector: `#action-rate_limit_retries`
 
 ## URLs
 

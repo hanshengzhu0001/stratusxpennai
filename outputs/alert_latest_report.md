@@ -12,14 +12,14 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 
 ## Incident
 
-- Summary: Retry pressure above baseline
+- Summary: Scheduling retry pressure above baseline
 - Services: portal, scheduling, eligibility
-- Pattern matches: payment_degradation
+- Pattern matches: 
 
 ## Action Strategy
 
-- Planner strategy: `broader_healthcare_access_action_library -> scenario_shortlist -> stratus_ranking`
-- Library size: `12`
+- Planner strategy: `broader_healthcare_access_action_library -> constraint_aware_shortlist -> stratus_ranking`
+- Library size: `15`
 - Shortlist size: `6`
 
 ## Action Library
@@ -27,6 +27,9 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 - `rate_limit_retries`: retry_overload_control (browser)
 - `enable_payment_circuit_breaker`: retry_overload_control (browser)
 - `increase_retry_backoff`: retry_overload_control (browser)
+- `shorten_slot_hold_ttl`: fairness_and_inventory_control (browser)
+- `route_to_callback_queue`: graceful_access_fallback (browser)
+- `reserve_priority_slots`: fairness_and_inventory_control (browser)
 - `restart_payment`: service_recovery (browser)
 - `shift_traffic`: traffic_management (browser)
 - `disable_flag`: graceful_degradation (browser)
@@ -42,18 +45,18 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 - `rate_limit_retries`: Throttle appointment-booking retries to break retry amplification.
 - `enable_payment_circuit_breaker`: Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.
 - `increase_retry_backoff`: Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.
-- `restart_payment`: Restart eligibility workers after backlog pressure is reduced.
+- `route_to_callback_queue`: Route a controlled slice of demand to staffed callback instead of letting repeated online attempts starve access.
 - `shift_traffic`: Shift a slice of patient-portal scheduling traffic to the secondary region.
-- `disable_flag`: Disable online self-scheduling as a last-resort kill switch and route patients to staffed fallback.
+- `restart_payment`: Restart eligibility workers after backlog pressure is reduced.
 
 ## Stratus Ranking
 
-- Rank 1: `enable_payment_circuit_breaker` (0.88)
-- Rank 2: `rate_limit_retries` (0.82)
-- Rank 3: `increase_retry_backoff` (0.79)
-- Rank 4: `shift_traffic` (0.65)
-- Rank 5: `restart_payment` (0.58)
-- Rank 6: `disable_flag` (0.45)
+- Rank 1: `rate_limit_retries` (0.95)
+- Rank 2: `increase_retry_backoff` (0.72)
+- Rank 3: `enable_payment_circuit_breaker` (0.68)
+- Rank 4: `route_to_callback_queue` (0.55)
+- Rank 5: `shift_traffic` (0.55)
+- Rank 6: `restart_payment` (0.38)
 
 ## Browser Workflow
 
@@ -70,15 +73,15 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 
 ## Decision
 
-- Guardrail choice: `enable_payment_circuit_breaker`
-- Executed action: `enable_payment_circuit_breaker`
+- Guardrail choice: `rate_limit_retries`
+- Executed action: `rate_limit_retries`
 - Plan/execution match: `True`
-- Confidence: `0.88`
+- Confidence: `0.95`
 - Dashboard: `http://127.0.0.1:8010/`
 - Feature flags: `http://127.0.0.1:8010/feature-flags`
 
 ## Predicted vs Actual
 
-- Predicted: `{"blast_radius": "low", "error_direction": "down", "latency_direction": "down", "retry_storm_risk": "low"}`
-- Actual: `{"action_id": "enable_payment_circuit_breaker", "blast_radius": "low", "error_direction": "down", "error_rate": 0.13, "impact": "medium_high", "latency_direction": "down", "latency_p95_ms": 1780, "notes": "Observed live metrics after enable_payment_circuit_breaker via Prometheus-backed verification.", "recovery": "strong", "retry_rate": 0.11, "retry_storm_risk": "low", "risk_level": "low", "time_to_effect_seconds": 30}`
-- Drift score: `1.00`
+- Predicted: `{"blast_radius": "low", "error_direction": "mixed", "latency_direction": "down", "retry_storm_risk": "low"}`
+- Actual: `{"action_id": "rate_limit_retries", "blast_radius": "medium", "error_direction": "up", "error_rate": 0.12, "fairness_skew": 0.15, "impact": "medium_high", "latency_direction": "up", "latency_p95_ms": 1735, "manual_callback_queue_depth": 2.8, "notes": "Observed live metrics after rate_limit_retries via Prometheus-backed verification.", "queue_abandonment_rate": 0.28, "recovery": "partial", "retry_rate": 0.19, "retry_storm_risk": "medium", "risk_level": "high", "seat_hold_utilization": 0.3, "secondary_headroom": 0.31, "time_to_effect_seconds": 30}`
+- Drift score: `0.22`

@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>final_implementation_plan</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<h1 id="final-implementation-plan">Final Implementation Plan</h1>
+<h2
+id="openclaw-stratus-counterfactual-guardrail-for-telehealth-scheduling-surges">OpenClaw
++ Stratus: Counterfactual Guardrail for Telehealth Scheduling
+Surges</h2>
+<h3 id="track">Track</h3>
+<p>Stratus X1 Hackathon<br />
+Track: <code>Multi-Agent Systems</code></p>
+<h2 id="final-objective">1. Final Objective</h2>
+<p>We are building a multi-agent guardrail for telehealth scheduling
+incidents caused by public-health surges such as COVID, flu, RSV, or
+sudden specialist-slot releases.</p>
+<p>The product goal is <strong>not</strong> to mathematically optimize
+the entire healthcare access system. The simulator is only a realistic
+operational sandbox. The actual product goal is:</p>
+<ul>
+<li>detect a real-looking access incident</li>
+<li>reject the dangerous local reflex</li>
+<li>plan the safest next one to three actions</li>
+<li>execute only what is needed</li>
+<li>verify recovery over time</li>
+<li>beat a naive baseline on both quality and speed</li>
+</ul>
+<p>Product claim:</p>
+<blockquote>
+<p>OpenClaw gives the system hands. Stratus gives it foresight. Together
+they form a counterfactual remediation guardrail for telehealth
+scheduling operations.</p>
+</blockquote>
+<h2 id="final-story">2. Final Story</h2>
+<p>At 9:00 AM, a health system opens a limited release of telehealth and
+same-week specialist appointments during a surge event.</p>
+<p>Patient demand spikes. The patient portal remains reachable, but the
+scheduling service depends on eligibility / benefits verification, and
+that dependency becomes slow or flaky. Patients retry. The system
+retries. Slot holds remain open while booking is unresolved. What begins
+as a mild dependency issue becomes an access incident:</p>
+<ul>
+<li>scheduling latency rises</li>
+<li>retries amplify load</li>
+<li>slot holds clog limited capacity</li>
+<li>abandonment rises</li>
+<li>booking completion falls</li>
+<li>fairness degrades because some users repeatedly occupy scarce slots
+while others never get through</li>
+</ul>
+<p>The obvious reflex is to restart the degraded dependency. That reflex
+is intuitive but dangerous. During a retry storm, restarting the
+dependency can worsen backlog pressure and extend recovery.</p>
+<p>The demo must show that:</p>
+<ol type="1">
+<li>the incident appears to happen naturally</li>
+<li>OpenClaw wakes up from the background</li>
+<li>Stratus rejects the dangerous reflex</li>
+<li>the system executes a safer action or short guarded sequence</li>
+<li>verification proves whether recovery happened</li>
+<li>the result is written back to a compact case library for future
+retrieval</li>
+</ol>
+<h2 id="non-negotiable-final-demo-principles">3. Non-Negotiable
+Final-Demo Principles</h2>
+<ol type="1">
+<li><strong>One startup prompt</strong>
+<ul>
+<li>OpenClaw is armed once and stays in the same task.</li>
+<li>It waits for incidents in the background and wakes
+automatically.</li>
+</ul></li>
+<li><strong>Business-event trigger</strong>
+<ul>
+<li>Do not surface a fake <code>Trigger Incident</code> button in the
+main story.</li>
+<li>The UI should expose business triggers such as
+<code>Open Flu Surge Telehealth Window</code>.</li>
+</ul></li>
+<li><strong>Single-action flow must be stable</strong>
+<ul>
+<li>Multi-step is an extension over a solid one-action workflow.</li>
+<li>Step 1 must work every time.</li>
+</ul></li>
+<li><strong>Multi-step is visible even if only step 1 executes</strong>
+<ul>
+<li>The plan must display
+<code>stabilize -&gt; recover -&gt; normalize</code>.</li>
+</ul></li>
+<li><strong>Comparison must include time</strong>
+<ul>
+<li>Do not compare only final effect.</li>
+<li>Compare speed to first action, speed to safe state, and action
+efficiency over time.</li>
+</ul></li>
+</ol>
+<h2 id="reference-stack">4. Reference Stack</h2>
+<ul>
+<li><code>Python + FastAPI</code> for local services and orchestration
+glue</li>
+<li><code>OpenClaw</code> for browser execution and agent
+orchestration</li>
+<li><code>Stratus</code> for shortlist ranking and guarded sequence
+planning</li>
+<li><code>Prometheus + Alertmanager</code> for alerts and
+verification</li>
+<li><code>SimPy</code> for discrete-event simulation</li>
+<li><code>DuckDB + Parquet</code> for compact case summaries + raw
+traces</li>
+<li><code>SQLite</code> is acceptable instead of DuckDB if needed, but
+DuckDB is preferred for analytics</li>
+</ul>
+<h2 id="core-system-architecture">5. Core System Architecture</h2>
+<h3 id="surfaces">5.1 Surfaces</h3>
+<ul>
+<li><code>/operations</code>
+<ul>
+<li>business-facing telehealth scheduling stability board</li>
+</ul></li>
+<li><code>/</code>
+<ul>
+<li>Guardrail Console with Incident / Decision / Execution / Verdict
+views</li>
+</ul></li>
+<li><code>/openclaw-execution</code>
+<ul>
+<li>dedicated browser surface for OpenClaw</li>
+</ul></li>
+<li><code>/feature-flags</code>
+<ul>
+<li>manual fallback controls only</li>
+</ul></li>
+</ul>
+<h3 id="background-activation">5.2 Background Activation</h3>
+<ul>
+<li>Alertmanager writes the latest incident payload to
+<code>alerts/latest.json</code></li>
+<li>OpenClaw is armed with:
+<ul>
+<li><code>.venv/bin/python run.py alerts/latest.json --phase await-demo</code></li>
+</ul></li>
+<li>The watcher:
+<ul>
+<li>observes the alert file</li>
+<li>latches <code>pending_incident</code></li>
+<li>acknowledges it</li>
+<li>prepares demo artifacts</li>
+</ul></li>
+<li>OpenClaw then continues immediately through browser execution,
+verify or fallback, summary, and returns to <code>await-demo</code></li>
+</ul>
+<h3 id="multi-agent-roles">5.3 Multi-Agent Roles</h3>
+<ul>
+<li><code>Sentinel Agents</code>
+<ul>
+<li>parallel observation</li>
+</ul></li>
+<li><code>Case Retrieval Agent</code>
+<ul>
+<li>retrieves similar abstracted cases</li>
+</ul></li>
+<li><code>Guardrail Planner Agent</code>
+<ul>
+<li>shortlist + 1-3 step guarded sequence</li>
+</ul></li>
+<li><code>Operator Agent</code>
+<ul>
+<li>OpenClaw execution</li>
+</ul></li>
+<li><code>Evaluation Agent</code>
+<ul>
+<li>verify, compare baseline, write back compact case summary</li>
+</ul></li>
+</ul>
+<h2 id="simulation-design">6. Simulation Design</h2>
+<h3 id="modeling-philosophy">6.1 Modeling Philosophy</h3>
+<p>Do <strong>not</strong> use a black-box ML simulator as the main
+engine.</p>
+<p>Use:</p>
+<ul>
+<li>discrete-event simulation</li>
+<li>queueing dynamics</li>
+<li>explicit retry amplification</li>
+<li>finite slot-hold inventory</li>
+<li>light stochasticity for robustness</li>
+</ul>
+<p>That makes the simulator causal, interpretable, and suitable for
+counterfactual planning.</p>
+<h3 id="base-dynamics">6.2 Base Dynamics</h3>
+<p>The simulator should use the following base layer:</p>
+<ul>
+<li>arrivals: <code>non-homogeneous Poisson process</code></li>
+<li>service time: <code>log-normal</code></li>
+<li>queue: simplified <code>M/G/k</code></li>
+<li>retry amplification: explicit retry multiplier or retrial queue</li>
+<li>abandonment: hazard increases with wait time</li>
+<li>slot holds: finite-capacity inventory pool with TTL</li>
+</ul>
+<h3 id="important-modeling-correction">6.3 Important Modeling
+Correction</h3>
+<p>Actions do <strong>not</strong> only change the Poisson arrival
+process.</p>
+<p>Instead, actions can change:</p>
+<ul>
+<li><code>lambda_ext(t)</code> external arrivals</li>
+<li><code>lambda_retry(t)</code> retry-generated arrivals</li>
+<li><code>lambda_gated(t)</code> traffic sent to manual fallback /
+callback</li>
+<li><code>mu_service(t)</code> service speed</li>
+<li><code>k(t)</code> concurrency or capacity</li>
+<li><code>ttl_hold(t)</code> slot hold duration</li>
+<li><code>r_region(t)</code> traffic-routing split</li>
+<li><code>h_abandon(t)</code> abandonment hazard</li>
+</ul>
+<p>Use:</p>
+<p><code>lambda_eff(t) = lambda_ext(t) + lambda_retry(t) + lambda_reroute_in(t) - lambda_gated(t)</code></p>
+<h3 id="randomness-robustness">6.4 Randomness / Robustness</h3>
+<p>Use small controlled noise, not unstable randomness:</p>
+<ul>
+<li><code>lambda_ext(t) = lambda_base(t) * exp(epsilon_t)</code></li>
+<li><code>epsilon_t</code> can be Gaussian or AR(1) noise with small
+variance</li>
+<li>keep shared random seeds across methods for fair comparison</li>
+<li>use common random numbers so baseline and guardrail see the same
+underlying demand trace</li>
+</ul>
+<h3 id="checkpoint-sampling">6.5 Checkpoint Sampling</h3>
+<p>Sample state every <code>5s</code> for observability.</p>
+<p>Decision checkpoints:</p>
+<ul>
+<li><code>T+15s</code></li>
+<li><code>T+30s</code></li>
+<li><code>T+60s</code></li>
+</ul>
+<p>Checkpoint outcome labels:</p>
+<ul>
+<li><code>strong_recovery</code></li>
+<li><code>partial_recovery</code></li>
+<li><code>severe_failure</code></li>
+</ul>
+<p>Behavior:</p>
+<ul>
+<li><code>strong_recovery</code> -&gt; stop</li>
+<li><code>partial_recovery</code> -&gt; execute step 2 if available</li>
+<li><code>severe_failure</code> -&gt; replan with Stratus</li>
+</ul>
+<h2 id="scenario-portfolio">7. Scenario Portfolio</h2>
+<p>The final demo should support four realistic scenarios.</p>
+<h3 id="scenario-a-surge-retry-spiral">Scenario A: Surge Retry
+Spiral</h3>
+<ul>
+<li>business trigger: <code>Open Flu Surge Telehealth Window</code></li>
+<li>mechanics:
+<ul>
+<li>external demand spike</li>
+<li>eligibility slows, but is not fully down</li>
+<li>scheduling retries amplify</li>
+<li>abandonment rises</li>
+</ul></li>
+<li>dangerous reflex:
+<ul>
+<li><code>restart_eligibility_service</code></li>
+</ul></li>
+<li>likely safer actions:
+<ul>
+<li><code>throttle_booking_retries</code></li>
+<li><code>enable_eligibility_circuit_breaker</code></li>
+<li><code>increase_retry_backoff</code></li>
+</ul></li>
+<li>guardrail rule:
+<ul>
+<li>if retry amplification is dominant and the action is still early,
+<code>throttle_booking_retries</code> should win</li>
+<li><code>enable_eligibility_circuit_breaker</code> should win only when
+dependency health is the dominant hidden bottleneck</li>
+</ul></li>
+</ul>
+<h3 id="scenario-b-fairness-breakdown-slot-hold-clog">Scenario B:
+Fairness Breakdown / Slot Hold Clog</h3>
+<ul>
+<li>business trigger:
+<code>Release High-Demand Specialist Slots</code></li>
+<li>mechanics:
+<ul>
+<li>repeated attempts hold scarce slots</li>
+<li>hold TTL is too long</li>
+<li>access fairness collapses</li>
+</ul></li>
+<li>dangerous reflex:
+<ul>
+<li>apply a generic dependency fix or traffic move without clearing
+trapped slot inventory</li>
+</ul></li>
+<li>likely safer actions:
+<ul>
+<li><code>shorten_slot_hold_ttl</code></li>
+<li><code>route_to_callback_queue</code></li>
+<li><code>reserve_priority_slots</code></li>
+</ul></li>
+<li>guardrail rule:
+<ul>
+<li><code>enable_eligibility_circuit_breaker</code> must not rank first
+here unless evidence shows dependency degradation truly dominates</li>
+<li>one of the inventory / fairness actions must rank above the generic
+dependency fix</li>
+<li>if staffed callback capacity is still available,
+<code>route_to_callback_queue</code> can outrank TTL-only relief as the
+first move</li>
+</ul></li>
+</ul>
+<h3 id="scenario-c-eligibility-verification-flap">Scenario C:
+Eligibility Verification Flap</h3>
+<ul>
+<li>business trigger:
+<code>Open Insurance-Verified Same-Day Visits</code></li>
+<li>mechanics:
+<ul>
+<li>dependency errors intermittently</li>
+<li>retry pressure moderate</li>
+<li>booking completion drops</li>
+</ul></li>
+<li>dangerous reflex:
+<ul>
+<li><code>restart_eligibility_service</code> before backlog is
+controlled</li>
+</ul></li>
+<li>likely safer actions:
+<ul>
+<li><code>enable_eligibility_circuit_breaker</code></li>
+<li><code>increase_retry_backoff</code></li>
+</ul></li>
+</ul>
+<h3 id="scenario-d-regional-access-saturation">Scenario D: Regional
+Access Saturation</h3>
+<ul>
+<li>business trigger:
+<code>Divert Regional Overflow to Primary Portal</code></li>
+<li>mechanics:
+<ul>
+<li>primary region saturates</li>
+<li>secondary region has limited headroom</li>
+</ul></li>
+<li>dangerous reflex:
+<ul>
+<li>full failover</li>
+</ul></li>
+<li>likely safer actions:
+<ul>
+<li><code>shift_scheduling_traffic_10_percent</code></li>
+<li><code>pause_low_priority_intake</code></li>
+<li><code>route_to_callback_queue</code></li>
+</ul></li>
+<li>guardrail rule:
+<ul>
+<li>traffic shift is safe only if projected post-shift
+<code>secondary_region_headroom &gt; threshold</code></li>
+<li>even when projected headroom is safe, traffic shift should usually
+be a step-2 recovery move unless retry pressure and queue depth are
+already contained</li>
+<li>if projected headroom is below threshold,
+<code>route_to_callback_queue</code> or retry shaping should outrank
+traffic shift</li>
+</ul></li>
+</ul>
+<h2 id="action-library">8. Action Library</h2>
+<p>Base library:</p>
+<ul>
+<li><code>throttle_booking_retries</code></li>
+<li><code>enable_eligibility_circuit_breaker</code></li>
+<li><code>increase_retry_backoff</code></li>
+<li><code>shorten_slot_hold_ttl</code></li>
+<li><code>route_to_callback_queue</code></li>
+<li><code>reserve_priority_slots</code></li>
+<li><code>shift_scheduling_traffic_10_percent</code></li>
+<li><code>shift_scheduling_traffic_25_percent</code></li>
+<li><code>pause_low_priority_intake</code></li>
+<li><code>enable_bot_challenge</code></li>
+<li><code>disable_online_scheduling</code></li>
+<li><code>restart_eligibility_service</code></li>
+</ul>
+<p>Each action must define:</p>
+<ul>
+<li><code>id</code></li>
+<li><code>label</code></li>
+<li><code>category</code></li>
+<li><code>description</code></li>
+<li><code>expected_parameter_delta</code></li>
+<li><code>execution_surface</code></li>
+<li><code>business_cost</code></li>
+<li><code>reversibility</code></li>
+<li><code>unsafe_if</code></li>
+</ul>
+<h3 id="action-definition-contract">8.1 Action Definition Contract</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;enable_eligibility_circuit_breaker&quot;</span><span class="fu">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;label&quot;</span><span class="fu">:</span> <span class="st">&quot;Enable Eligibility Circuit Breaker&quot;</span><span class="fu">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;category&quot;</span><span class="fu">:</span> <span class="st">&quot;retry_overload_control&quot;</span><span class="fu">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;description&quot;</span><span class="fu">:</span> <span class="st">&quot;Fail fast on degraded eligibility checks to break retry amplification.&quot;</span><span class="fu">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;execution_surface&quot;</span><span class="fu">:</span> <span class="st">&quot;browser&quot;</span><span class="fu">,</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;business_cost&quot;</span><span class="fu">:</span> <span class="st">&quot;low&quot;</span><span class="fu">,</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;reversibility&quot;</span><span class="fu">:</span> <span class="st">&quot;high&quot;</span><span class="fu">,</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;expected_parameter_delta&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;lambda_retry_multiplier&quot;</span><span class="fu">:</span> <span class="fl">-0.65</span><span class="fu">,</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;mu_eligibility_effective&quot;</span><span class="fu">:</span> <span class="fl">0.0</span><span class="fu">,</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;h_abandon&quot;</span><span class="fu">:</span> <span class="fl">-0.20</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;unsafe_if&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;eligibility dependency fully healthy&quot;</span><span class="ot">,</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;error budget already exhausted by fail-fast policy&quot;</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h2 id="shortlist-mechanism">9. Shortlist Mechanism</h2>
+<p>Start from the full action library and reduce to <code>4-6</code>
+actions.</p>
+<h3 id="shortlist-inputs">9.1 Shortlist Inputs</h3>
+<ul>
+<li>current incident state</li>
+<li>scenario family</li>
+<li>hard constraints</li>
+<li>retrieved similar cases</li>
+<li>action library</li>
+</ul>
+<h3 id="shortlist-scoring-factors">9.2 Shortlist Scoring Factors</h3>
+<ul>
+<li>symptom relevance</li>
+<li>scenario compatibility</li>
+<li>fairness compatibility</li>
+<li>regional compatibility</li>
+<li>historical usefulness from case library</li>
+<li>estimated blast radius</li>
+<li>timing sensitivity</li>
+<li>hidden constraint compatibility</li>
+</ul>
+<h3 id="tonys-required-shortlist-logic">9.3 Tony’s Required Shortlist
+Logic</h3>
+<p>Tony’s shortlist mechanism must explicitly account for:</p>
+<ul>
+<li><code>retry_death_spiral</code>
+<ul>
+<li><code>throttle_booking_retries</code> outranks circuit breaker when
+retry pressure is dominant and the action is early enough to matter</li>
+</ul></li>
+<li><code>payment_gateway_flap</code>
+<ul>
+<li><code>enable_eligibility_circuit_breaker</code> outranks throttle
+because dependency degradation is dominant</li>
+</ul></li>
+<li><code>seat_hold_clog</code>
+<ul>
+<li>at least two of <code>shorten_slot_hold_ttl</code>,
+<code>route_to_callback_queue</code>,
+<code>reserve_priority_slots</code> must enter the shortlist</li>
+<li><code>enable_eligibility_circuit_breaker</code> must be penalized
+unless hidden evidence says dependency health is the primary cause</li>
+<li>if callback capacity is available,
+<code>route_to_callback_queue</code> can outrank TTL-only relief as the
+first move</li>
+</ul></li>
+<li><code>regional_saturation</code>
+<ul>
+<li><code>shift_scheduling_traffic_10_percent</code> only enters as a
+top first-step action when projected post-shift secondary headroom stays
+above threshold and retry pressure is already contained</li>
+<li>otherwise diversion / callback actions or retry shaping must outrank
+it</li>
+</ul></li>
+<li><code>restart_eligibility_service</code>
+<ul>
+<li>keep it visible as the tempting local reflex</li>
+<li>penalize it unless queue depth and retry share are already below
+stabilization thresholds</li>
+</ul></li>
+</ul>
+<h3 id="shortlist-output-contract">9.4 Shortlist Output Contract</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;shortlist_id&quot;</span><span class="fu">:</span> <span class="st">&quot;uuid&quot;</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;scenario_family&quot;</span><span class="fu">:</span> <span class="st">&quot;surge_retry_spiral&quot;</span><span class="fu">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;scoring_version&quot;</span><span class="fu">:</span> <span class="st">&quot;v1&quot;</span><span class="fu">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;selected_actions&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;enable_eligibility_circuit_breaker&quot;</span><span class="ot">,</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;throttle_booking_retries&quot;</span><span class="ot">,</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;increase_retry_backoff&quot;</span><span class="ot">,</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;shift_scheduling_traffic_10_percent&quot;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;selection_rationale&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;eligibility degradation is primary bottleneck&quot;</span><span class="ot">,</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;retry amplification is high&quot;</span><span class="ot">,</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;secondary region headroom is limited&quot;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h2 id="sequence-planning">10. Sequence Planning</h2>
+<p>Sequence planning is Tony’s core innovation area.</p>
+<h3 id="rule">10.1 Rule</h3>
+<p>Plan <code>1-3</code> actions.</p>
+<ul>
+<li>always produce a sequence artifact</li>
+<li>only execute step 2 or step 3 if needed</li>
+<li>replan only after a failed checkpoint</li>
+</ul>
+<h3 id="sequence-template">10.2 Sequence Template</h3>
+<ul>
+<li><code>Step 1: Stabilize</code></li>
+<li><code>Step 2: Recover</code></li>
+<li><code>Step 3: Normalize</code></li>
+</ul>
+<h3 id="tonys-sequence-rules">10.3 Tony’s Sequence Rules</h3>
+<p>Tony’s sequence planner must follow these rules:</p>
+<ul>
+<li><code>retry_death_spiral</code>
+<ul>
+<li><code>Step 1</code> should usually be
+<code>throttle_booking_retries</code></li>
+<li><code>Step 2</code> can be
+<code>enable_eligibility_circuit_breaker</code> only if dependency
+health remains the dominant blocker at checkpoint</li>
+</ul></li>
+<li><code>payment_gateway_flap</code>
+<ul>
+<li><code>Step 1</code> should usually be
+<code>enable_eligibility_circuit_breaker</code></li>
+<li><code>Step 2</code> can be <code>increase_retry_backoff</code></li>
+</ul></li>
+<li><code>seat_hold_clog</code>
+<ul>
+<li><code>Step 1</code> should be one of the inventory / fairness
+actions</li>
+<li><code>Step 2</code> should add diversion or fairness protection if
+slot utilization remains high</li>
+</ul></li>
+<li><code>regional_saturation</code>
+<ul>
+<li><code>Step 1</code> should usually reduce retry pressure or divert
+overflow without consuming secondary-region margin</li>
+<li><code>Step 2</code> can apply cautious traffic shift once projected
+post-shift secondary headroom remains above threshold and retry pressure
+is already reduced</li>
+</ul></li>
+<li><code>restart_eligibility_service</code>
+<ul>
+<li>can appear only as a later recovery step</li>
+<li>must never be step 1 while retry share or queue depth is above
+threshold</li>
+</ul></li>
+<li>replan only after a checkpoint returns <code>partial_recovery</code>
+or <code>severe_failure</code></li>
+</ul>
+<h3 id="sequence-output-contract">10.4 Sequence Output Contract</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;plan_id&quot;</span><span class="fu">:</span> <span class="st">&quot;uuid&quot;</span><span class="fu">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;shortlist_id&quot;</span><span class="fu">:</span> <span class="st">&quot;uuid&quot;</span><span class="fu">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;steps&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;step&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;action_id&quot;</span><span class="fu">:</span> <span class="st">&quot;enable_eligibility_circuit_breaker&quot;</span><span class="fu">,</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;objective&quot;</span><span class="fu">:</span> <span class="st">&quot;stabilize&quot;</span><span class="fu">,</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;why_now&quot;</span><span class="fu">:</span> <span class="st">&quot;immediately breaks retry amplification&quot;</span><span class="fu">,</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;expected_parameter_delta&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;lambda_retry_multiplier&quot;</span><span class="fu">:</span> <span class="fl">-0.65</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>      <span class="fu">},</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;expected_metric_delta&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;retry_amplification_factor&quot;</span><span class="fu">:</span> <span class="st">&quot;down&quot;</span><span class="fu">,</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;scheduling_latency_p95_ms&quot;</span><span class="fu">:</span> <span class="st">&quot;down&quot;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>      <span class="fu">},</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;stop_if&quot;</span><span class="fu">:</span> <span class="st">&quot;risk_level == low&quot;</span><span class="fu">,</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;continue_if&quot;</span><span class="fu">:</span> <span class="st">&quot;partial_recovery&quot;</span><span class="fu">,</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;replan_if&quot;</span><span class="fu">:</span> <span class="st">&quot;severe_failure&quot;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;step&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;action_id&quot;</span><span class="fu">:</span> <span class="st">&quot;increase_retry_backoff&quot;</span><span class="fu">,</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;objective&quot;</span><span class="fu">:</span> <span class="st">&quot;recover&quot;</span><span class="fu">,</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;why_now&quot;</span><span class="fu">:</span> <span class="st">&quot;smooths residual pressure after stabilization&quot;</span><span class="fu">,</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;stop_if&quot;</span><span class="fu">:</span> <span class="st">&quot;latency_p95_ms &lt; 1200&quot;</span><span class="fu">,</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;continue_if&quot;</span><span class="fu">:</span> <span class="st">&quot;partial_recovery&quot;</span><span class="fu">,</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;replan_if&quot;</span><span class="fu">:</span> <span class="st">&quot;blast_radius rises&quot;</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;checkpoints_sec&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="dv">15</span><span class="ot">,</span> <span class="dv">30</span><span class="ot">,</span> <span class="dv">60</span><span class="ot">]</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h2 id="observability">11. Observability</h2>
+<p>Tony and Hansen must make action effects visible over time.</p>
+<h3 id="prometheus-metrics">11.1 Prometheus Metrics</h3>
+<p>Technical:</p>
+<ul>
+<li><code>scheduling_latency_ms_bucket</code></li>
+<li><code>eligibility_latency_ms_bucket</code></li>
+<li><code>scheduling_error_rate</code></li>
+<li><code>booking_retry_rate</code></li>
+<li><code>retry_amplification_factor</code></li>
+<li><code>scheduling_queue_depth</code></li>
+<li><code>eligibility_utilization</code></li>
+</ul>
+<p>Business:</p>
+<ul>
+<li><code>booking_completion_rate</code></li>
+<li><code>scheduling_abandonment_rate</code></li>
+<li><code>slot_hold_utilization</code></li>
+<li><code>slot_hold_expiration_rate</code></li>
+<li><code>manual_callback_queue_depth</code></li>
+<li><code>priority_slot_fill_rate</code></li>
+</ul>
+<p>Fairness:</p>
+<ul>
+<li><code>cohort_wait_gap_sec</code></li>
+<li><code>hold_concentration_hhi</code></li>
+<li><code>duplicate_request_share</code></li>
+</ul>
+<p>Recovery:</p>
+<ul>
+<li><code>time_to_first_action_sec</code></li>
+<li><code>time_to_low_risk_state_sec</code></li>
+<li><code>actions_taken_total</code></li>
+<li><code>replans_total</code></li>
+</ul>
+<h3 id="what-the-final-demo-should-show">11.2 What the Final Demo Should
+Show</h3>
+<p>Do not show every metric.</p>
+<p>Recommended visible metrics:</p>
+<ul>
+<li><code>scheduling_latency_p95_ms</code></li>
+<li><code>retry_amplification_factor</code></li>
+<li><code>booking_completion_rate</code></li>
+<li><code>scheduling_abandonment_rate</code></li>
+<li><code>slot_hold_utilization</code></li>
+<li>one fairness metric, preferably
+<code>cohort_wait_gap_sec</code></li>
+<li><code>time_to_low_risk_state_sec</code></li>
+<li>baseline vs guardrail first action</li>
+</ul>
+<h3 id="health-score-layer">11.3 Health Score Layer</h3>
+<p>To unify improvement across heterogeneous metrics, the system should
+compute normalized pressure values and then convert them into health
+scores.</p>
+<p>For a metric where higher is worse:</p>
+<pre class="text"><code>pressure_i = clip((current_i - normal_i) / (stress_i - normal_i), 0, 1)</code></pre>
+<p>For a metric where lower is worse, invert the direction:</p>
+<pre class="text"><code>pressure_i = clip((normal_i - current_i) / (normal_i - stress_i), 0, 1)</code></pre>
+<p>Then compute weighted pressure and health:</p>
+<pre class="text"><code>weighted_pressure = sum(weight_i * pressure_i)
+health = 1 - weighted_pressure</code></pre>
+<p>This is compatible with Tony and Eason’s current plan:</p>
+<ul>
+<li>Charlie defines the <code>normal</code>, <code>stress</code>, and
+<code>weight</code> tables per scenario.</li>
+<li>Tony uses health deltas at each checkpoint to decide
+<code>stop</code>, <code>continue</code>, or <code>replan</code>.</li>
+<li>Eason compares baseline vs guardrail on health trajectories over
+time, not just endpoint metrics.</li>
+</ul>
+<h3 id="required-health-scores">11.4 Required Health Scores</h3>
+<p>The system should compute four health scores:</p>
+<ul>
+<li><code>reliability_health</code>
+<ul>
+<li>latency, error rate, retry factor, queue depth, dependency
+utilization</li>
+</ul></li>
+<li><code>access_health</code>
+<ul>
+<li>booking completion, abandonment, slot availability, callback queue
+depth</li>
+</ul></li>
+<li><code>fairness_health</code>
+<ul>
+<li>cohort wait gap, hold concentration, duplicate request share,
+priority-slot skew</li>
+</ul></li>
+<li><code>overall_health</code>
+<ul>
+<li>scenario-weighted combination of reliability, access, and
+fairness</li>
+</ul></li>
+</ul>
+<p>Recommended default aggregation:</p>
+<pre class="text"><code>overall_pressure = 0.45 * reliability_pressure
+                 + 0.35 * access_pressure
+                 + 0.20 * fairness_pressure
+overall_health = 1 - overall_pressure</code></pre>
+<p>Charlie should tune these weights per scenario family. For
+example:</p>
+<ul>
+<li><code>surge_retry_spiral</code>
+<ul>
+<li>emphasize reliability and access</li>
+</ul></li>
+<li><code>seat_hold_clog</code>
+<ul>
+<li>emphasize access and fairness</li>
+</ul></li>
+<li><code>regional_saturation</code>
+<ul>
+<li>emphasize reliability and blast-radius prevention</li>
+</ul></li>
+</ul>
+<h3 id="tony-and-eason-health-score-usage">11.5 Tony and Eason
+Health-Score Usage</h3>
+<p>Tony should use health scores in the sequence planner:</p>
+<ul>
+<li><code>stop</code> if <code>overall_health &gt;= 0.80</code> and no
+sub-health is below <code>0.65</code></li>
+<li><code>continue</code> if <code>overall_health</code> is improving
+materially but still below stop threshold</li>
+<li><code>replan</code> if:
+<ul>
+<li><code>overall_health</code> improvement is too small at
+checkpoint</li>
+<li><code>fairness_health</code> or <code>access_health</code> worsens
+while <code>reliability_health</code> improves</li>
+<li>projected step 2 would violate regional or callback constraints</li>
+</ul></li>
+</ul>
+<p>Eason should use health scores in the comparison pipeline:</p>
+<ul>
+<li>compare <code>overall_health(t)</code> between baseline and
+guardrail</li>
+<li>compare <code>reliability_health(t)</code>,
+<code>access_health(t)</code>, and <code>fairness_health(t)</code></li>
+<li>compute:
+<ul>
+<li><code>time_to_overall_health_0_75</code></li>
+<li><code>time_to_overall_health_0_85</code></li>
+<li><code>health_auc</code></li>
+<li><code>min_fairness_health</code></li>
+<li><code>min_access_health</code></li>
+</ul></li>
+</ul>
+<p>The final demo should preferably show one simple health card and one
+sparkline over time, not all raw metrics at once.</p>
+<h2 id="triggers">12. Triggers</h2>
+<p>The main story should use business-event triggers.</p>
+<h3 id="trigger-contract">12.1 Trigger Contract</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;trigger_id&quot;</span><span class="fu">:</span> <span class="st">&quot;open_flu_window&quot;</span><span class="fu">,</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;label&quot;</span><span class="fu">:</span> <span class="st">&quot;Open Flu Surge Telehealth Window&quot;</span><span class="fu">,</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;scenario_id&quot;</span><span class="fu">:</span> <span class="st">&quot;surge_retry_spiral&quot;</span><span class="fu">,</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;alert_profile&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;alertname&quot;</span><span class="fu">:</span> <span class="st">&quot;SchedulingRetrySpiral&quot;</span><span class="fu">,</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;service&quot;</span><span class="fu">:</span> <span class="st">&quot;scheduling&quot;</span><span class="fu">,</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;dependency&quot;</span><span class="fu">:</span> <span class="st">&quot;eligibility&quot;</span><span class="fu">,</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;summary&quot;</span><span class="fu">:</span> <span class="st">&quot;Scheduling retry pressure above safe baseline&quot;</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h3 id="ui-buttons">12.2 UI Buttons</h3>
+<p>Expose:</p>
+<ul>
+<li><code>Open Flu Surge Telehealth Window</code></li>
+<li><code>Release High-Demand Specialist Slots</code></li>
+<li><code>Open Insurance-Verified Same-Day Visits</code></li>
+<li><code>Divert Regional Overflow to Primary Portal</code></li>
+</ul>
+<h2 id="prompt-contract">13. Prompt Contract</h2>
+<h3 id="startup-prompt">13.1 Startup Prompt</h3>
+<pre class="text"><code>Use the incident_guardrail skill in this workspace and stay in the same task until each incident workflow is complete. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo`, let that command block until the next incident is latched and the demo artifacts are prepared, then continue immediately through browser execution, verification or fallback, summary, and return to await-demo mode. Do not stop after `await-demo` returns.</code></pre>
+<h3 id="resume-prompt">13.2 Resume Prompt</h3>
+<pre class="text"><code>Use the incident_guardrail skill in this workspace. An incident is already acknowledged and the demo artifacts are prepared. Resume now by reading `outputs/alert_latest_openclaw_demo.json` and `outputs/alert_latest_browser_playbook.json`, executing the browser step in `/openclaw-execution`, then running verify or fallback. If fallback is used, still open `/openclaw-execution?stage=verdict` before summarizing the verdict and returning to await-demo mode.</code></pre>
+<h2 id="case-library">14. Case Library</h2>
+<h3 id="goal">14.1 Goal</h3>
+<p>The case library must support:</p>
+<ul>
+<li>retrieval for shortlist and planning</li>
+<li>post-run writeback</li>
+<li>baseline comparison</li>
+<li>compact context usage</li>
+</ul>
+<h3 id="storage-layout">14.2 Storage Layout</h3>
+<ul>
+<li><code>cases/raw/*.parquet</code>
+<ul>
+<li>full time series and checkpoints</li>
+</ul></li>
+<li><code>cases/index.duckdb</code>
+<ul>
+<li>queryable compact summaries</li>
+</ul></li>
+<li><code>cases/summaries/*.json</code>
+<ul>
+<li>lightweight portable summaries</li>
+</ul></li>
+</ul>
+<h3 id="two-layer-writeback">14.3 Two-Layer Writeback</h3>
+<p>Never write full raw traces into prompt-facing memory.</p>
+<p>Write:</p>
+<ol type="1">
+<li><code>raw_trace.parquet</code></li>
+<li><code>case_summary.json</code></li>
+</ol>
+<h3 id="summary-contract">14.4 Summary Contract</h3>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;case_id&quot;</span><span class="fu">:</span> <span class="st">&quot;uuid&quot;</span><span class="fu">,</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;scenario_family&quot;</span><span class="fu">:</span> <span class="st">&quot;surge_retry_spiral&quot;</span><span class="fu">,</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;seed&quot;</span><span class="fu">:</span> <span class="dv">42</span><span class="fu">,</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;pre_features&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;latency_p95_ms&quot;</span><span class="fu">:</span> <span class="dv">2300</span><span class="fu">,</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;retry_factor&quot;</span><span class="fu">:</span> <span class="fl">4.1</span><span class="fu">,</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;abandonment_rate&quot;</span><span class="fu">:</span> <span class="fl">0.29</span><span class="fu">,</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;slot_hold_utilization&quot;</span><span class="fu">:</span> <span class="fl">0.91</span><span class="fu">,</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;regional_headroom&quot;</span><span class="fu">:</span> <span class="fl">0.18</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;retrieved_case_ids&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;case_001&quot;</span><span class="ot">,</span> <span class="st">&quot;case_017&quot;</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;shortlist&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;enable_eligibility_circuit_breaker&quot;</span><span class="ot">,</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;throttle_booking_retries&quot;</span><span class="ot">,</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;increase_retry_backoff&quot;</span></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;planned_sequence&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;enable_eligibility_circuit_breaker&quot;</span><span class="ot">,</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;increase_retry_backoff&quot;</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;executed_steps&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;enable_eligibility_circuit_breaker&quot;</span></span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;checkpoint_decisions&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;t_sec&quot;</span><span class="fu">:</span> <span class="dv">15</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;partial_recovery&quot;</span><span class="fu">,</span> <span class="dt">&quot;decision&quot;</span><span class="fu">:</span> <span class="st">&quot;continue&quot;</span><span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;t_sec&quot;</span><span class="fu">:</span> <span class="dv">30</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;strong_recovery&quot;</span><span class="fu">,</span> <span class="dt">&quot;decision&quot;</span><span class="fu">:</span> <span class="st">&quot;stop&quot;</span><span class="fu">}</span></span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;guardrail_outcome&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_low_risk_state_sec&quot;</span><span class="fu">:</span> <span class="dv">35</span><span class="fu">,</span></span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;blast_radius&quot;</span><span class="fu">:</span> <span class="st">&quot;low&quot;</span><span class="fu">,</span></span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;fairness_score&quot;</span><span class="fu">:</span> <span class="fl">0.86</span><span class="fu">,</span></span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;overall_health&quot;</span><span class="fu">:</span> <span class="fl">0.83</span><span class="fu">,</span></span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;reliability_health&quot;</span><span class="fu">:</span> <span class="fl">0.88</span><span class="fu">,</span></span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;access_health&quot;</span><span class="fu">:</span> <span class="fl">0.79</span><span class="fu">,</span></span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;fairness_health&quot;</span><span class="fu">:</span> <span class="fl">0.76</span><span class="fu">,</span></span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;actions_taken&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;replans&quot;</span><span class="fu">:</span> <span class="dv">0</span></span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;baseline_outcome&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;first_action&quot;</span><span class="fu">:</span> <span class="st">&quot;restart_eligibility_service&quot;</span><span class="fu">,</span></span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_low_risk_state_sec&quot;</span><span class="fu">:</span> <span class="dv">120</span><span class="fu">,</span></span>
+<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;overall_health&quot;</span><span class="fu">:</span> <span class="fl">0.58</span><span class="fu">,</span></span>
+<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;actions_taken&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;replans&quot;</span><span class="fu">:</span> <span class="dv">1</span></span>
+<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h3 id="retrieval-policy">14.5 Retrieval Policy</h3>
+<p>Use only compact summaries for online retrieval.</p>
+<p>Similarity should use:</p>
+<ul>
+<li>exact or near-exact scenario family</li>
+<li>normalized pre-incident feature vector</li>
+<li>optional action-family overlap</li>
+</ul>
+<p>Retrieve at most <code>3</code> similar cases into prompt
+context.</p>
+<h2 id="comparison-pipeline">15. Comparison Pipeline</h2>
+<p>Eason owns this.</p>
+<h3 id="comparison-principles">15.1 Comparison Principles</h3>
+<ul>
+<li>baseline and guardrail must use the same seed</li>
+<li>compare over time, not just final state</li>
+<li>run in parallel when possible</li>
+</ul>
+<h3 id="required-metrics">15.2 Required Metrics</h3>
+<ul>
+<li><code>baseline_first_action</code></li>
+<li><code>guardrail_first_action</code></li>
+<li><code>time_to_first_action_sec</code></li>
+<li><code>time_to_low_risk_state_sec</code></li>
+<li><code>time_to_overall_health_0_75_sec</code></li>
+<li><code>time_to_overall_health_0_85_sec</code></li>
+<li><code>health_auc</code></li>
+<li><code>latency_auc</code></li>
+<li><code>abandonment_auc</code></li>
+<li><code>fairness_auc</code></li>
+<li><code>actions_taken</code></li>
+<li><code>replans</code></li>
+<li><code>final_risk_level</code></li>
+<li><code>decision_fidelity</code></li>
+</ul>
+<h3 id="comparison-output-contract">15.3 Comparison Output Contract</h3>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;comparison_id&quot;</span><span class="fu">:</span> <span class="st">&quot;uuid&quot;</span><span class="fu">,</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;scenario_family&quot;</span><span class="fu">:</span> <span class="st">&quot;surge_retry_spiral&quot;</span><span class="fu">,</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;shared_seed&quot;</span><span class="fu">:</span> <span class="dv">42</span><span class="fu">,</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;baseline&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;first_action&quot;</span><span class="fu">:</span> <span class="st">&quot;restart_eligibility_service&quot;</span><span class="fu">,</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_first_action_sec&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_low_risk_state_sec&quot;</span><span class="fu">:</span> <span class="dv">120</span><span class="fu">,</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_overall_health_0_75_sec&quot;</span><span class="fu">:</span> <span class="dv">95</span><span class="fu">,</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_overall_health_0_85_sec&quot;</span><span class="fu">:</span> <span class="dv">140</span><span class="fu">,</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;health_auc&quot;</span><span class="fu">:</span> <span class="fl">37.2</span><span class="fu">,</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;latency_auc&quot;</span><span class="fu">:</span> <span class="dv">81200</span><span class="fu">,</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;abandonment_auc&quot;</span><span class="fu">:</span> <span class="fl">14.6</span><span class="fu">,</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;actions_taken&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;replans&quot;</span><span class="fu">:</span> <span class="dv">1</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;guardrail&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;first_action&quot;</span><span class="fu">:</span> <span class="st">&quot;enable_eligibility_circuit_breaker&quot;</span><span class="fu">,</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_first_action_sec&quot;</span><span class="fu">:</span> <span class="dv">3</span><span class="fu">,</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_low_risk_state_sec&quot;</span><span class="fu">:</span> <span class="dv">35</span><span class="fu">,</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_overall_health_0_75_sec&quot;</span><span class="fu">:</span> <span class="dv">24</span><span class="fu">,</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;time_to_overall_health_0_85_sec&quot;</span><span class="fu">:</span> <span class="dv">41</span><span class="fu">,</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;health_auc&quot;</span><span class="fu">:</span> <span class="fl">21.4</span><span class="fu">,</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;latency_auc&quot;</span><span class="fu">:</span> <span class="dv">42100</span><span class="fu">,</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;abandonment_auc&quot;</span><span class="fu">:</span> <span class="fl">6.3</span><span class="fu">,</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;actions_taken&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;replans&quot;</span><span class="fu">:</span> <span class="dv">0</span></span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;winner&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;speed&quot;</span><span class="fu">:</span> <span class="st">&quot;guardrail&quot;</span><span class="fu">,</span></span>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;fairness&quot;</span><span class="fu">:</span> <span class="st">&quot;guardrail&quot;</span><span class="fu">,</span></span>
+<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;efficiency&quot;</span><span class="fu">:</span> <span class="st">&quot;guardrail&quot;</span><span class="fu">,</span></span>
+<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;final_verdict&quot;</span><span class="fu">:</span> <span class="st">&quot;guardrail&quot;</span></span>
+<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h2 id="final-communication-contracts">16. Final Communication
+Contracts</h2>
+<h3 id="incident-state">16.1 Incident State</h3>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;event_id&quot;</span><span class="fu">:</span> <span class="st">&quot;uuid&quot;</span><span class="fu">,</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;scenario_id&quot;</span><span class="fu">:</span> <span class="st">&quot;surge_retry_spiral&quot;</span><span class="fu">,</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;seed&quot;</span><span class="fu">:</span> <span class="dv">42</span><span class="fu">,</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;detected_at_utc&quot;</span><span class="fu">:</span> <span class="st">&quot;timestamp&quot;</span><span class="fu">,</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;metrics&quot;</span><span class="fu">:</span> <span class="fu">{},</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;state_params&quot;</span><span class="fu">:</span> <span class="fu">{},</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;constraints&quot;</span><span class="fu">:</span> <span class="fu">{},</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;retrieved_case_ids&quot;</span><span class="fu">:</span> <span class="ot">[]</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h3 id="checkpoint-log">16.2 Checkpoint Log</h3>
+<p>Use JSONL:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;t_sec&quot;</span><span class="fu">:</span><span class="dv">0</span><span class="fu">,</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span><span class="st">&quot;before&quot;</span><span class="fu">,</span><span class="dt">&quot;metrics&quot;</span><span class="fu">:{},</span><span class="dt">&quot;params&quot;</span><span class="fu">:{}}</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;t_sec&quot;</span><span class="fu">:</span><span class="dv">15</span><span class="fu">,</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span><span class="st">&quot;checkpoint&quot;</span><span class="fu">,</span><span class="dt">&quot;step&quot;</span><span class="fu">:</span><span class="dv">1</span><span class="fu">,</span><span class="dt">&quot;decision&quot;</span><span class="fu">:</span><span class="st">&quot;continue&quot;</span><span class="fu">,</span><span class="dt">&quot;metrics&quot;</span><span class="fu">:{},</span><span class="dt">&quot;params&quot;</span><span class="fu">:{}}</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;t_sec&quot;</span><span class="fu">:</span><span class="dv">30</span><span class="fu">,</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span><span class="st">&quot;checkpoint&quot;</span><span class="fu">,</span><span class="dt">&quot;step&quot;</span><span class="fu">:</span><span class="dv">1</span><span class="fu">,</span><span class="dt">&quot;decision&quot;</span><span class="fu">:</span><span class="st">&quot;stop&quot;</span><span class="fu">,</span><span class="dt">&quot;metrics&quot;</span><span class="fu">:{},</span><span class="dt">&quot;params&quot;</span><span class="fu">:{}}</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;t_sec&quot;</span><span class="fu">:</span><span class="dv">35</span><span class="fu">,</span><span class="dt">&quot;type&quot;</span><span class="fu">:</span><span class="st">&quot;final&quot;</span><span class="fu">,</span><span class="dt">&quot;status&quot;</span><span class="fu">:</span><span class="st">&quot;low_risk_state&quot;</span><span class="fu">,</span><span class="dt">&quot;metrics&quot;</span><span class="fu">:{}}</span></span></code></pre></div>
+<h3 id="final-verdict">16.3 Final Verdict</h3>
+<p>Must always include:</p>
+<ul>
+<li>incident summary</li>
+<li>dangerous reflex rejected</li>
+<li>chosen safer action</li>
+<li>whether fallback was used</li>
+<li>predicted vs actual</li>
+<li>time to low-risk state</li>
+<li>baseline vs guardrail</li>
+</ul>
+<h2 id="responsibilities">17. Responsibilities</h2>
+<p>Responsibilities below are intentionally specific enough that an AI
+agent with no extra context should be able to implement them.</p>
+<h3 id="hansen">Hansen</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>OpenClaw wake / wait / resume loop</li>
+<li>Guardrail Console shell</li>
+<li>business trigger surface</li>
+<li>final verdict surface</li>
+<li>cross-module contracts</li>
+</ul>
+<p>Implement:</p>
+<ol type="1">
+<li>Update <code>/operations</code> so the visible triggers are business
+events, not raw incident buttons.</li>
+<li>Keep <code>/openclaw-execution</code> as the single browser
+surface.</li>
+<li>Make sure fallback always returns the browser to
+<code>/openclaw-execution?stage=verdict</code>.</li>
+<li>Add sequence visibility to the UI:
+<ul>
+<li>show planned step 1/2/3</li>
+<li>show current checkpoint</li>
+<li>show whether step 2 is needed</li>
+</ul></li>
+<li>Add final comparison cards:
+<ul>
+<li>baseline first action</li>
+<li>guardrail first action</li>
+<li>time to low-risk state</li>
+<li>actions taken</li>
+</ul></li>
+<li>Keep prompt docs and <code>SKILL.md</code> aligned with actual repo
+behavior.</li>
+<li>Lock schemas in <code>docs/</code> and ensure all teams code to
+those schemas.</li>
+</ol>
+<p>Files Hansen should own:</p>
+<ul>
+<li><code>tools/visual_control_plane.py</code></li>
+<li><code>docs/openclaw_demo_prompt.md</code></li>
+<li><code>docs/final_demo_script.md</code></li>
+<li>integration parts of <code>run.py</code></li>
+</ul>
+<p>Hansen acceptance tests:</p>
+<ul>
+<li>one startup prompt arms OpenClaw</li>
+<li>one business event triggers the incident</li>
+<li>browser or fallback always lands on final verdict</li>
+<li>all four views stay coherent</li>
+</ul>
+<h3 id="charlie">Charlie</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>scenario realism</li>
+<li>simulation parameter realism</li>
+<li>fairness / access definitions</li>
+<li>demo-facing scenario story</li>
+</ul>
+<p>Implement:</p>
+<ol type="1">
+<li>Create scenario configs for all four scenarios with:
+<ul>
+<li>baseline external arrival curve</li>
+<li>service distributions</li>
+<li>queue capacity</li>
+<li>retry multipliers</li>
+<li>slot hold TTL and capacity</li>
+<li>fairness-sensitive metrics</li>
+</ul></li>
+<li>Define which metrics matter most for each scenario.</li>
+<li>Specify dangerous reflex and acceptable safer actions per
+scenario.</li>
+<li>Define business triggers and UI labels.</li>
+<li>Define the fairness story:
+<ul>
+<li>what counts as unfairness</li>
+<li>how it is measured</li>
+<li>what actions improve or worsen it</li>
+</ul></li>
+<li>Work with Hansen to make the visible board feel like real telehealth
+access ops.</li>
+</ol>
+<p>Files Charlie should own:</p>
+<ul>
+<li><code>scenarios/*.json</code></li>
+<li><code>tools/scenario_catalog.py</code></li>
+<li>scenario docs under <code>docs/</code></li>
+</ul>
+<p>Charlie acceptance tests:</p>
+<ul>
+<li>scenarios are believable</li>
+<li>fairness metric changes match the story</li>
+<li>the demo can be narrated without hand-waving</li>
+</ul>
+<h3 id="tony">Tony</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>shortlist generation</li>
+<li>guarded sequence planning</li>
+<li>checkpoint logic</li>
+<li>replan behavior</li>
+<li>action-effect observability</li>
+</ul>
+<p>Implement:</p>
+<ol type="1">
+<li>Build the shortlist scorer from the full library to <code>4-6</code>
+actions.</li>
+<li>Build <code>sequence_plan.json</code> output with <code>1-3</code>
+steps.</li>
+<li>Add explicit per-action parameter deltas:
+<ul>
+<li>retry multiplier</li>
+<li>routing fraction</li>
+<li>service speed</li>
+<li>hold TTL</li>
+<li>gating to callback/manual fallback</li>
+</ul></li>
+<li>At every checkpoint, compute:
+<ul>
+<li>current status</li>
+<li>continue / stop / replan decision</li>
+</ul></li>
+<li>Log checkpoint reasoning and action effects for case writeback.</li>
+<li>If step 1 fails partially, decide whether to:
+<ul>
+<li>execute planned step 2</li>
+<li>or replan with Stratus</li>
+</ul></li>
+<li>Keep sequence planning compatible with current one-action stable
+flow.</li>
+<li>Implement scenario-sensitive threshold rules:
+<ul>
+<li><code>retry_death_spiral</code>: early throttle beats circuit
+breaker unless dependency health is the dominant blocker</li>
+<li><code>seat_hold_clog</code>: inventory / fairness actions outrank
+generic dependency actions, with callback diversion preferred when
+staffed overflow capacity is still available</li>
+<li><code>regional_saturation</code>: traffic shift is permitted only
+when projected post-shift headroom clears threshold and should usually
+be a step-2 move after stabilization</li>
+<li><code>restart_eligibility_service</code>: only promote it after
+stabilization</li>
+</ul></li>
+<li>Log how each executed step changed:
+<ul>
+<li>retry multiplier</li>
+<li>effective service rate</li>
+<li>slot-hold pressure</li>
+<li>callback diversion</li>
+<li>secondary-region headroom</li>
+</ul></li>
+<li>Make checkpoint output readable enough that Hansen can show it
+directly in the console and verdict UI.</li>
+<li>Use the health-score layer directly in decision logic:</li>
+</ol>
+<ul>
+<li>compute projected <code>reliability_health</code>,
+<code>access_health</code>, <code>fairness_health</code>, and
+<code>overall_health</code></li>
+<li>use those scores for <code>stop</code>, <code>continue</code>, and
+<code>replan</code></li>
+<li>log projected and observed health deltas at each checkpoint</li>
+</ul>
+<ol start="12" type="1">
+<li>For multi-action planning, ensure step 2 and step 3 are justified by
+constraint/health transitions rather than static templates.</li>
+</ol>
+<p>Files Tony should own:</p>
+<ul>
+<li><code>tools/stratus_guardrail.py</code></li>
+<li>new <code>agents/sequence_planner.py</code> if needed</li>
+<li>shortlist logic in <code>agents/candidate_actions.py</code> or a
+dedicated scorer module</li>
+</ul>
+<p>Tony acceptance tests:</p>
+<ul>
+<li>every scenario produces a sensible shortlist</li>
+<li>every scenario produces a valid sequence plan</li>
+<li>checkpoints are logged</li>
+<li>replan only occurs on defined failure conditions</li>
+<li><code>retry_death_spiral</code>: throttle ranks above circuit
+breaker when retry dominance is primary</li>
+<li><code>payment_gateway_flap</code>: circuit breaker ranks above
+throttle</li>
+<li><code>seat_hold_clog</code>: slot-hold/fairness action or callback
+diversion ranks above circuit breaker</li>
+<li><code>regional_saturation</code>: shift is penalized whenever
+projected post-shift headroom is below threshold or retry pressure is
+still too high for a first-step move</li>
+<li><code>restart_eligibility_service</code> never appears as step 1
+before stabilization</li>
+</ul>
+<h3 id="eason">Eason</h3>
+<p>Primary ownership:</p>
+<ul>
+<li>case-library retrieval</li>
+<li>baseline policy</li>
+<li>comparison engine</li>
+<li>final performance stats over time</li>
+</ul>
+<p>Implement:</p>
+<ol type="1">
+<li>Build retrieval over compact case summaries only.</li>
+<li>Run baseline and guardrail on the same seed and demand trace.</li>
+<li>Compare:
+<ul>
+<li>first action</li>
+<li>time to first action</li>
+<li>time to low-risk state</li>
+<li>time to health threshold</li>
+<li>latency / abandonment / fairness over time</li>
+<li>actions taken</li>
+<li>replans</li>
+</ul></li>
+<li>Write both:
+<ul>
+<li>raw trace</li>
+<li>compact case summary</li>
+</ul></li>
+<li>Design summary abstraction so prompt context stays small:
+<ul>
+<li>pre-features</li>
+<li>shortlist</li>
+<li>planned sequence</li>
+<li>executed steps</li>
+<li>checkpoint decisions</li>
+<li>final compact outcome</li>
+</ul></li>
+<li>Expose baseline-vs-guardrail metrics in a single final artifact for
+Hansen to render.</li>
+<li>Add health-score comparison over time:
+<ul>
+<li><code>overall_health(t)</code></li>
+<li><code>reliability_health(t)</code></li>
+<li><code>access_health(t)</code></li>
+<li><code>fairness_health(t)</code></li>
+</ul></li>
+<li>Write compact abstractions to the case library so prompt context
+does not explode:
+<ul>
+<li>pre-state health</li>
+<li>peak stress</li>
+<li>checkpoint health deltas</li>
+<li>final health</li>
+<li>threshold crossing times</li>
+</ul></li>
+</ol>
+<p>Files Eason should own:</p>
+<ul>
+<li><code>agents/baseline.py</code></li>
+<li><code>agents/evaluator.py</code></li>
+<li><code>tools/case_library.py</code></li>
+<li><code>run_baseline.py</code> if kept</li>
+</ul>
+<p>Eason acceptance tests:</p>
+<ul>
+<li>retrieval works without loading full raw traces into prompt
+context</li>
+<li>baseline and guardrail compare on the same seed</li>
+<li>final comparison is time-based, not only single-point</li>
+</ul>
+<h2 id="implementation-order">18. Implementation Order</h2>
+<ol type="1">
+<li>Lock schemas in code and docs.</li>
+<li>Charlie finalizes scenario configs and realism tables.</li>
+<li>Tony implements shortlist + sequence + checkpoint logic.</li>
+<li>Eason implements retrieval + baseline + comparison over time.</li>
+<li>Hansen integrates the surfaces and final verdict cards.</li>
+<li>End-to-end rehearse:
+<ul>
+<li>browser path</li>
+<li>fallback path</li>
+<li>comparison path</li>
+</ul></li>
+</ol>
+<h2 id="final-demo-acceptance-criteria">19. Final Demo Acceptance
+Criteria</h2>
+<p>The final product is ready only if:</p>
+<ul>
+<li>one startup prompt arms OpenClaw</li>
+<li>one business-event trigger starts the incident</li>
+<li>OpenClaw wakes without a second long prompt</li>
+<li>Stratus outputs a shortlist and guarded sequence</li>
+<li>the dangerous reflex is explicitly rejected</li>
+<li>step 1 executes successfully</li>
+<li>the system shows whether step 2 is needed</li>
+<li>final verdict includes baseline vs guardrail over time</li>
+<li>case writeback is compact and retrievable</li>
+</ul>
+<h2 id="sources">20. Sources</h2>
+<ul>
+<li>HL7 FHIR Slot: https://hl7.org/fhir/r4/slot.html</li>
+<li>HL7 FHIR Appointment: https://hl7.org/fhir/r4/appointment.html</li>
+<li>HL7 FHIR Schedule: https://www.hl7.org/fhir/schedule.html</li>
+<li>HHS telehealth workflow planning:
+https://telehealth.hhs.gov/providers/planning-your-telehealth-workflow</li>
+<li>Prometheus histograms and quantiles:
+https://prometheus.io/docs/practices/histograms/</li>
+<li>Prometheus query functions:
+https://prometheus.io/docs/prometheus/latest/querying/functions/</li>
+<li>Alertmanager concepts:
+https://prometheus.io/docs/alerting/latest/alertmanager/</li>
+<li>SimPy basic concepts:
+https://simpy.readthedocs.io/en/stable/simpy_intro/basic_concepts.html</li>
+<li>DuckDB Parquet overview:
+https://duckdb.org/docs/current/data/parquet/overview.html</li>
+</ul>
+</body>
+</html>

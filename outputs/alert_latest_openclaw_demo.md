@@ -2,20 +2,29 @@
 
 ## Goal
 
-Start from OpenClaw chat, generate the guardrail plan, execute the browser remediation from one dedicated execution page, run verify, and summarize the final verdict without using the console shortcut buttons.
+Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, summarize the final verdict, and return to watch mode.
 
 ## Starter Prompt
 
 ```text
-Use the incident_guardrail skill on the latest alert in OpenClaw Demo Mode. Run `.venv/bin/python run.py alerts/latest.json --phase demo`, read `outputs/alert_latest_openclaw_demo.json` and `outputs/alert_latest_browser_playbook.json`, then use the browser to open the dedicated OpenClaw execution page, inspect the before-action incident card, click the single execution button for the chosen remediation, run verify, inspect the verdict page, and summarize the final verdict with the dangerous reflex that was avoided. If the browser tool fails or times out, do not stop and do not replan. Instead run `.venv/bin/python run.py alerts/latest.json --phase fallback`, then read `outputs/alert_latest_report.json` and summarize the final verdict while explicitly noting that execution used the saved-plan fallback because browser control was unavailable.
+Monitor this workspace in background mode for new webhook incidents. Follow the local workflow described in AGENTS.md and `skills/incident_guardrail/SKILL.md` in this repo. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` so the workflow waits for the next incident and immediately prepares demo artifacts when it arrives.
 ```
 
 ## Demo Contract
 
-- Run first: `.venv/bin/python run.py alerts/latest.json --phase demo`
+- Arm watcher first: `.venv/bin/python run.py alerts/latest.json --phase watch`
+- Preferred blocking arm command: `.venv/bin/python run.py alerts/latest.json --phase await-demo`
+- When incident is latched, run: `.venv/bin/python run.py alerts/latest.json --phase demo`
 - Verify after browser action: `.venv/bin/python run.py alerts/latest.json --phase verify`
 - Fallback if browser control fails: `.venv/bin/python run.py alerts/latest.json --phase fallback`
+- Return to watch after summary: `True`
 - Console buttons are fallback only: `True`
+
+## Watch State
+
+- Status: `idle`
+- Armed: `False`
+- Pending incident latched: `False`
 
 ## Browser Sequence
 

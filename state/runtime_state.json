@@ -1,11 +1,79 @@
 {
   "active_scenario": "retry_death_spiral",
-  "payment_service_unreachable": true,
-  "loadgenerator_flood_homepage": true,
+  "payment_service_unreachable": false,
+  "loadgenerator_flood_homepage": false,
   "retry_rate_limit_enabled": false,
   "payment_circuit_breaker_enabled": false,
   "retry_backoff_enabled": false,
   "traffic_shift_enabled": false,
   "payment_feature_disabled": false,
-  "last_action": null
+  "last_action": null,
+  "simulation": {
+    "active": false,
+    "resolved": false,
+    "scenario_family": "surge_retry_spiral",
+    "seed": 0,
+    "step_seconds": 5,
+    "started_at_utc": null,
+    "last_updated_at_utc": null,
+    "time_sec": 0,
+    "queue_depth": 8.0,
+    "slot_holds": 18.0,
+    "slot_hold_expired_recent": 0.0,
+    "external_arrivals_recent": 3.8,
+    "retry_arrivals_recent": 0.12,
+    "gated_arrivals_recent": 0.0,
+    "completions_recent": 3.6,
+    "abandoned_recent": 0.05,
+    "effective_service_rate": 5.0,
+    "eligibility_health": 0.98,
+    "manual_callback_queue": 0.0,
+    "regional_headroom_primary": 0.38,
+    "regional_headroom_secondary": 0.31,
+    "fairness_pressure": 0.05,
+    "latent": {
+      "dependency_pressure": 0.54,
+      "retry_pressure": 0.94,
+      "hold_pressure": 0.28,
+      "regional_pressure": 0.12
+    },
+    "thresholds": {
+      "early_retry_window_sec": 20,
+      "late_retry_queue_depth": 42,
+      "restart_safe_queue_depth": 12,
+      "restart_safe_retry_rate": 0.16,
+      "shift_secondary_floor": 0.24
+    },
+    "controls": {
+      "retry_throttle_factor": 1.0,
+      "circuit_breaker_enabled": false,
+      "retry_backoff_factor": 1.0,
+      "traffic_shift_fraction": 0.0,
+      "online_scheduling_enabled": true,
+      "slot_hold_ttl_factor": 1.0,
+      "callback_routing_fraction": 0.0,
+      "priority_slot_reserve_fraction": 0.0,
+      "restart_outage_remaining_sec": 0,
+      "restart_recovery_credit": 0.0,
+      "force_dependency_degraded": false,
+      "force_portal_surge": false,
+      "activation_times": {}
+    },
+    "history": [],
+    "derived_metrics": {
+      "latency_p95_ms": 859,
+      "error_rate": 0.03,
+      "retry_rate": 0.03
+    },
+    "derived_business_metrics": {
+      "queue_abandonment_rate": 0.02,
+      "payment_success_rate": 0.95,
+      "retry_amplification_factor": 1.0,
+      "fairness_skew": 0.05,
+      "seat_hold_utilization": 0.15,
+      "seat_hold_expiration_rate": 0.01,
+      "manual_callback_queue_depth": 0.0,
+      "secondary_headroom": 0.31
+    }
+  }
 }

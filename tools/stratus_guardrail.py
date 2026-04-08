@@ -9,11 +9,14 @@ from contextlib import contextmanager
 
 from openai import OpenAI
 
+from tools.simulation import projected_secondary_headroom_from_state
+
 
 def rank_actions(state: dict, actions: list[dict]) -> dict:
     api_key = os.environ.get("STRATUS_API_KEY")
     if not api_key:
         return _mock_ranking(
+            state,
             actions,
             notes=[
                 "Using deterministic local ranking because STRATUS_API_KEY is not configured."
@@ -58,6 +61,11 @@ Rules:
 - Keep rationale under 18 words.
 - Every shortlisted action must appear in ranked_actions and predicted_effects_by_action.
 - best_action.id must be one shortlisted action id.
+- Use the hidden operational constraints in the incident state. In particular:
+  - slot-hold and fairness pathologies can make inventory actions safer than dependency actions.
+  - restart is only safe after backlog and retry pressure are already controlled.
+  - traffic shift is threshold-sensitive to secondary-region headroom.
+  - rate limiting is strongest when applied early in retry-driven incidents.
 - Output JSON only.
 """.strip()
 
@@ -77,6 +85,7 @@ Rules:
         return payload
     except Exception as exc:
         return _mock_ranking(
+            state,
             actions,
             notes=[
                 f"Live Stratus call failed; using deterministic fallback: {exc.__class__.__name__}"
@@ -84,50 +93,98 @@ Rules:
         )
 
 
-def _mock_ranking(actions: list[dict], notes: list[str] | None = None) -> dict:
+def _mock_ranking(state: dict, actions: list[dict], notes: list[str] | None = None) -> dict:
+    action_ids = {action["id"] for action in actions}
+    labels = state.get("labels", {})
+    scenario_id = str(labels.get("scenario_id") or state.get("scenario_id") or "")
+    metrics = state.get("metrics", {})
+    business = state.get("business_metrics", {})
+    constraints = state.get("constraints", {})
+
+    retry_rate = float(metrics.get("retry_rate", 0.0))
+    eligibility_health = float(constraints.get("eligibility_health", 1.0))
+    queue_depth = float(constraints.get("queue_depth", 0.0))
+    secondary_headroom = float(constraints.get("regional_headroom_secondary", 1.0))
+    projected_secondary_headroom = float(
+        constraints.get("projected_secondary_headroom_after_shift", projected_secondary_headroom_from_state(state, shift_fraction=0.10))
+    )
+    hold_util = float(business.get("seat_hold_utilization", 0.0))
+    fairness = float(business.get("fairness_skew", 0.0))
+    time_sec = float(constraints.get("time_sec", 0.0))
+    dependency_pressure = float(constraints.get("dependency_pressure", 0.0))
+    retry_pressure = float(constraints.get("retry_pressure", 0.0))
+    hold_pressure = float(constraints.get("hold_pressure", 0.0))
+
+    scorecard = {
+        action_id: {"score": 0.0, "reason": "Retained for comparison against safer futures."}
+        for action_id in action_ids
+    }
+
+    def score(action_id: str, points: float, reason: str) -> None:
+        if action_id not in scorecard:
+            return
+        scorecard[action_id]["score"] += points
+        scorecard[action_id]["reason"] = reason
+
+    if retry_rate >= 0.22:
+        score("rate_limit_retries", 4.8, "Breaks retry amplification while access remains online.")
+        score("increase_retry_backoff", 3.4, "Smooths retry pressure but acts more gradually.")
+        score("enable_payment_circuit_breaker", 2.6, "Contains dependency retries when eligibility is a real bottleneck.")
+
+    if scenario_id == "retry_death_spiral":
+        if eligibility_health <= 0.46 and dependency_pressure >= retry_pressure + 0.18:
+            score("enable_payment_circuit_breaker", 3.4, "Dependency health is bad enough that fail-fast protection matters most.")
+        else:
+            score("rate_limit_retries", 3.2, "Retry amplification dominates more than dependency degradation right now.")
+        if time_sec <= 20:
+            score("rate_limit_retries", 1.4, "Early throttle timing still has enough leverage to win.")
+
+    if scenario_id == "payment_gateway_flap":
+        score("enable_payment_circuit_breaker", 5.2, "Eligibility instability is the primary root cause here.")
+        score("increase_retry_backoff", 2.4, "Backoff is useful after dependency isolation, not before it.")
+
+    if scenario_id == "seat_hold_clog" or hold_util >= 0.78 or fairness >= 0.18:
+        score("shorten_slot_hold_ttl", 5.8, "Inventory is trapped in holds, so TTL relief directly restores access.")
+        score("route_to_callback_queue", 4.6, "Overflow diversion reduces repeated online contention for scarce slots.")
+        score("reserve_priority_slots", 4.1, "Fairness controls matter when hold concentration is the real pathology.")
+        score("enable_payment_circuit_breaker", -3.0, "Dependency isolation does not clear the slot-hold clog.")
+        if hold_pressure >= max(0.55, dependency_pressure + 0.12):
+            score("shorten_slot_hold_ttl", 1.3, "Hidden hold pressure confirms that releasing inventory should happen before dependency isolation.")
+        if float(constraints.get("manual_callback_queue", 0.0)) <= 8:
+            score("route_to_callback_queue", 3.2, "Staffed callback still has room, so controlled diversion can relieve live contention immediately.")
+
+    if scenario_id == "regional_saturation":
+        first_step_safe = projected_secondary_headroom > 0.30 and retry_pressure <= 0.36 and queue_depth <= 18
+        if first_step_safe:
+            score("shift_traffic", 4.8, "Projected post-shift secondary headroom stays comfortably safe enough for a cautious diversion.")
+        elif projected_secondary_headroom > 0.24:
+            score("shift_traffic", 0.8, "Traffic shift may become viable after stabilization, but it is risky as the first move.")
+            score("route_to_callback_queue", 3.8, "Callback diversion preserves headroom while the first move reduces retry-driven stress.")
+            score("rate_limit_retries", 3.0, "Retry shaping is the safer first move when headroom is only moderately safe.")
+        else:
+            score("shift_traffic", -4.4, "Projected post-shift headroom falls below the safety floor, so shift becomes dangerous.")
+            score("route_to_callback_queue", 4.7, "Demand diversion is safer than consuming unsafe secondary headroom.")
+            score("rate_limit_retries", 2.6, "Retry shaping reduces primary stress without exporting overload into the secondary region.")
+
+    if queue_depth <= 12 and retry_rate <= 0.16:
+        score("restart_payment", 2.2, "Restart becomes safer after backlog and retry pressure are already contained.")
+    else:
+        score("restart_payment", -3.5, "Tempting local fix, but unsafe while backlog and retry pressure remain high.")
+
+    score("disable_flag", -2.4, "Last-resort kill switch protects systems but harms patient access.")
     ranked_actions = [
         {
-            "id": "rate_limit_retries",
-            "rank": 1,
-            "confidence": 0.84,
-            "rationale": "Controls booking retry amplification directly with low blast radius.",
-        },
-        {
-            "id": "enable_payment_circuit_breaker",
-            "rank": 2,
-            "confidence": 0.78,
-            "rationale": "Fails fast at the eligibility edge and contains retry pressure, but may defer some bookings.",
-        },
-        {
-            "id": "increase_retry_backoff",
-            "rank": 3,
-            "confidence": 0.72,
-            "rationale": "Reduces retry pressure more gently, but takes longer to stabilize the booking feedback loop.",
-        },
-        {
-            "id": "restart_payment",
-            "rank": 4,
-            "confidence": 0.43,
-            "rationale": "Tempting local fix, but it can amplify retries while eligibility is unstable.",
-        },
-        {
-            "id": "shift_traffic",
-            "rank": 5,
-            "confidence": 0.30,
-            "rationale": "Widens exposure without directly reducing the retry spiral.",
-        },
-        {
-            "id": "disable_flag",
-            "rank": 6,
-            "confidence": 0.24,
-            "rationale": "Stops online pain quickly, but is too destructive to be the first safe move.",
-        },
+            "id": action_id,
+            "rank": index,
+            "confidence": round(max(0.24, min(0.95, 0.55 + scorecard[action_id]["score"] * 0.05)), 2),
+            "rationale": scorecard[action_id]["reason"],
+        }
+        for index, action_id in enumerate(
+            sorted(action_ids, key=lambda action_id: scorecard[action_id]["score"], reverse=True),
+            start=1,
+        )
     ]
     action_ids = {action["id"] for action in actions}
-    ranked_actions = [item for item in ranked_actions if item["id"] in action_ids]
-    ranked_actions.sort(key=lambda item: item["rank"])
-    for index, item in enumerate(ranked_actions, start=1):
-        item["rank"] = index
     predicted_effects_by_action = {
         "restart_payment": {
             "latency_direction": "mixed",
@@ -143,6 +200,24 @@ def _mock_ranking(actions: list[dict], notes: list[str] | None = None) -> dict:
         },
         "increase_retry_backoff": {
             "latency_direction": "down",
+            "error_direction": "mixed",
+            "blast_radius": "low",
+            "retry_storm_risk": "medium",
+        },
+        "shorten_slot_hold_ttl": {
+            "latency_direction": "mixed",
+            "error_direction": "mixed",
+            "blast_radius": "low",
+            "retry_storm_risk": "medium",
+        },
+        "route_to_callback_queue": {
+            "latency_direction": "down",
+            "error_direction": "mixed",
+            "blast_radius": "low",
+            "retry_storm_risk": "low",
+        },
+        "reserve_priority_slots": {
+            "latency_direction": "mixed",
             "error_direction": "mixed",
             "blast_radius": "low",
             "retry_storm_risk": "medium",
@@ -171,6 +246,20 @@ def _mock_ranking(actions: list[dict], notes: list[str] | None = None) -> dict:
         for action_id, effect in predicted_effects_by_action.items()
         if action_id in action_ids
     }
+    if scenario_id == "seat_hold_clog":
+        predicted_effects_by_action["shorten_slot_hold_ttl"] = {
+            "latency_direction": "down",
+            "error_direction": "mixed",
+            "blast_radius": "low",
+            "retry_storm_risk": "low",
+        }
+    if scenario_id == "regional_saturation" and projected_secondary_headroom <= 0.24 and "shift_traffic" in predicted_effects_by_action:
+        predicted_effects_by_action["shift_traffic"] = {
+            "latency_direction": "up",
+            "error_direction": "up",
+            "blast_radius": "high",
+            "retry_storm_risk": "medium",
+        }
     best_action = next((action for action in actions if action["id"] == ranked_actions[0]["id"]), actions[0])
     return {
         "ranked_actions": ranked_actions,

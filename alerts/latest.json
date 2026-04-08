@@ -10,15 +10,17 @@
         "instance": "host.docker.internal:9101",
         "job": "synthetic_incident_target",
         "service": "scheduling",
-        "severity": "critical"
+        "severity": "critical",
+        "scenario_id": "retry_death_spiral"
       },
       "annotations": {
-        "summary": "Scheduling retry pressure above baseline"
+        "summary": "Scheduling retry pressure above baseline",
+        "description": "A batch of high-demand telehealth and specialist slots opens, eligibility verification slows down, and patient-portal booking retries amplify the failure until access fairness and booking completion both collapse. Current latency p95 1617 ms, retry rate 0.4, abandonment 0.02, slot hold utilization 0.25, fairness skew 0.12, secondary headroom 0.33."
       },
-      "startsAt": "2026-04-07T10:00:00Z",
+      "startsAt": "2026-04-08T20:41:40Z",
       "endsAt": "0001-01-01T00:00:00Z",
-      "generatorURL": "http://localhost:9091/graph?g0.expr=checkout_retry_rate+%3E+0.25&g0.tab=1",
-      "fingerprint": "healthcare-access-retry-spiral"
+      "generatorURL": "http://127.0.0.1:9091/alerts",
+      "fingerprint": "fd3f54c296bb4d04"
     }
   ],
   "groupLabels": {
@@ -31,13 +33,16 @@
     "instance": "host.docker.internal:9101",
     "job": "synthetic_incident_target",
     "service": "scheduling",
-    "severity": "critical"
+    "severity": "critical",
+    "scenario_id": "retry_death_spiral"
   },
   "commonAnnotations": {
-    "summary": "Scheduling retry pressure above baseline"
+    "summary": "Scheduling retry pressure above baseline",
+    "description": "A batch of high-demand telehealth and specialist slots opens, eligibility verification slows down, and patient-portal booking retries amplify the failure until access fairness and booking completion both collapse. Current latency p95 1617 ms, retry rate 0.4, abandonment 0.02, slot hold utilization 0.25, fairness skew 0.12, secondary headroom 0.33."
   },
-  "externalURL": "http://localhost:9093",
+  "externalURL": "http://127.0.0.1:9091",
   "version": "4",
   "groupKey": "{}:{alertname=\"SchedulingRetrySpiral\", service=\"scheduling\"}",
-  "truncatedAlerts": 0
+  "truncatedAlerts": 0,
+  "id": "alert_latest"
 }
