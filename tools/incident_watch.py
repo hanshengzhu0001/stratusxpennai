@@ -147,7 +147,7 @@ def _pending_incident_from_path(path: Path) -> dict | None:
         return None
     mtime_ns = path.stat().st_mtime_ns
     summary = _incident_summary(payload, firing_alerts)
-    fingerprint = _incident_fingerprint(payload, mtime_ns)
+    fingerprint = _incident_fingerprint(payload)
     return {
         "fingerprint": fingerprint,
         "summary": summary,
@@ -174,7 +174,17 @@ def _pending_incident_from_path(path: Path) -> dict | None:
 
 def _is_new_incident(pending: dict, state: dict) -> bool:
     pending_mtime = int(pending.get("alert_mtime_ns", 0))
+    pending_fingerprint = str(pending.get("fingerprint") or "")
     existing_pending = state.get("pending_incident") or {}
+    active_incident = state.get("active_incident") or {}
+    last_completed = state.get("last_completed_incident") or {}
+    if pending_fingerprint:
+        if existing_pending.get("fingerprint") == pending_fingerprint:
+            return False
+        if active_incident.get("fingerprint") == pending_fingerprint:
+            return False
+        if last_completed.get("fingerprint") == pending_fingerprint:
+            return False
     if existing_pending.get("alert_mtime_ns") == pending_mtime:
         return False
     if pending_mtime <= int(state.get("last_acknowledged_alert_mtime_ns", 0)):
@@ -191,10 +201,32 @@ def _incident_summary(payload: dict, alerts: list[dict]) -> str:
     return str(payload.get("commonAnnotations", {}).get("summary") or payload.get("status", "Firing incident"))
 
 
-def _incident_fingerprint(payload: dict, mtime_ns: int) -> str:
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True).encode("utf-8") + str(mtime_ns).encode("utf-8")
-    ).hexdigest()
+def _incident_fingerprint(payload: dict) -> str:
+    alerts = payload.get("alerts", [])
+    explicit_id = payload.get("incident_id") or payload.get("event_id")
+    if explicit_id:
+        source = str(explicit_id)
+    else:
+        alert_keys = []
+        for alert in alerts:
+            alert_keys.append(
+                {
+                    "fingerprint": alert.get("fingerprint"),
+                    "startsAt": alert.get("startsAt"),
+                    "alertname": alert.get("labels", {}).get("alertname"),
+                    "service": alert.get("labels", {}).get("service"),
+                    "scenario_id": alert.get("labels", {}).get("scenario_id"),
+                }
+            )
+        source = json.dumps(
+            {
+                "groupKey": payload.get("groupKey"),
+                "commonLabels": payload.get("commonLabels", {}),
+                "alerts": alert_keys,
+            },
+            sort_keys=True,
+        )
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
     return digest[:16]
 
 

@@ -79,7 +79,7 @@ Rules:
             request_timeout_seconds=request_timeout_seconds,
             max_attempts=max_attempts,
         )
-        payload = _normalize_live_payload(payload, actions)
+        payload = _normalize_live_payload(payload, state, actions)
         payload.setdefault("notes", [])
         payload["notes"].append("Used live Stratus ranking.")
         return payload
@@ -328,7 +328,7 @@ def _hard_timeout(seconds: float):
         signal.signal(signal.SIGALRM, previous_handler)
 
 
-def _normalize_live_payload(payload: dict, actions: list[dict]) -> dict:
+def _normalize_live_payload(payload: dict, state: dict, actions: list[dict]) -> dict:
     action_by_id = {action["id"]: action for action in actions}
     ranked = []
     for index, item in enumerate(payload.get("ranked_actions", []), start=1):
@@ -346,13 +346,13 @@ def _normalize_live_payload(payload: dict, actions: list[dict]) -> dict:
     ranked.sort(key=lambda item: item["rank"])
     for index, item in enumerate(ranked, start=1):
         item["rank"] = index
-    fallback = _mock_ranking(actions)
+    fallback = _mock_ranking(state, actions)
     ranked_or_fallback = ranked or fallback["ranked_actions"]
 
     predicted = {}
     raw_predicted = payload.get("predicted_effects_by_action", {})
     for action_id in action_by_id:
-        source = raw_predicted.get(action_id, {})
+        source = raw_predicted.get(action_id, {}) or fallback["predicted_effects_by_action"].get(action_id, {})
         predicted[action_id] = {
             "latency_direction": _enum_or_default(source.get("latency_direction"), "mixed"),
             "error_direction": _enum_or_default(source.get("error_direction"), "mixed"),

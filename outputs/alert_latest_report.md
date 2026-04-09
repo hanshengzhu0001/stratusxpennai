@@ -14,7 +14,7 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 
 - Summary: Scheduling retry pressure above baseline
 - Services: portal, scheduling, eligibility
-- Pattern matches: 
+- Pattern matches: retry_amplification, payment_degradation, high_checkout_latency, fairness_breakdown
 
 ## Action Strategy
 
@@ -42,20 +42,20 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 
 ## Candidate Actions
 
-- `rate_limit_retries`: Throttle appointment-booking retries to break retry amplification.
-- `enable_payment_circuit_breaker`: Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.
-- `increase_retry_backoff`: Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.
 - `route_to_callback_queue`: Route a controlled slice of demand to staffed callback instead of letting repeated online attempts starve access.
-- `shift_traffic`: Shift a slice of patient-portal scheduling traffic to the secondary region.
+- `rate_limit_retries`: Throttle appointment-booking retries to break retry amplification.
+- `reserve_priority_slots`: Reserve a protected slice of scarce appointment capacity for higher-priority patients and reduce hold concentration.
+- `enable_payment_circuit_breaker`: Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.
+- `shorten_slot_hold_ttl`: Shorten slot-hold TTL so trapped appointment inventory is released back to real patients faster.
 - `restart_payment`: Restart eligibility workers after backlog pressure is reduced.
 
 ## Stratus Ranking
 
 - Rank 1: `rate_limit_retries` (0.95)
-- Rank 2: `increase_retry_backoff` (0.72)
-- Rank 3: `enable_payment_circuit_breaker` (0.68)
-- Rank 4: `route_to_callback_queue` (0.55)
-- Rank 5: `shift_traffic` (0.55)
+- Rank 2: `route_to_callback_queue` (0.94)
+- Rank 3: `shorten_slot_hold_ttl` (0.84)
+- Rank 4: `reserve_priority_slots` (0.76)
+- Rank 5: `enable_payment_circuit_breaker` (0.53)
 - Rank 6: `restart_payment` (0.38)
 
 ## Browser Workflow
@@ -63,7 +63,7 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 - Open the dedicated OpenClaw execution page.
 - Inspect the before-action incident card and chosen remediation.
 - Click the single OpenClaw execution button to apply the chosen remediation.
-- Run verify and inspect the dedicated verdict page.
+- Run verify and inspect the live verdict on that same page.
 
 ## Automation Handoff
 
@@ -83,5 +83,5 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 ## Predicted vs Actual
 
 - Predicted: `{"blast_radius": "low", "error_direction": "mixed", "latency_direction": "down", "retry_storm_risk": "low"}`
-- Actual: `{"action_id": "rate_limit_retries", "blast_radius": "medium", "error_direction": "up", "error_rate": 0.12, "fairness_skew": 0.15, "impact": "medium_high", "latency_direction": "up", "latency_p95_ms": 1735, "manual_callback_queue_depth": 2.8, "notes": "Observed live metrics after rate_limit_retries via Prometheus-backed verification.", "queue_abandonment_rate": 0.28, "recovery": "partial", "retry_rate": 0.19, "retry_storm_risk": "medium", "risk_level": "high", "seat_hold_utilization": 0.3, "secondary_headroom": 0.31, "time_to_effect_seconds": 30}`
-- Drift score: `0.22`
+- Actual: `{"action_id": "rate_limit_retries", "blast_radius": "medium", "error_direction": "mixed", "error_rate": 0.13, "fairness_skew": 0.18, "impact": "medium_high", "latency_direction": "down", "latency_p95_ms": 2188, "manual_callback_queue_depth": 0.0, "notes": "Observed live metrics after rate_limit_retries via Prometheus-backed verification.", "queue_abandonment_rate": 0.35, "recovery": "partial", "retry_rate": 0.29, "retry_storm_risk": "medium", "risk_level": "medium", "seat_hold_utilization": 0.32, "secondary_headroom": 0.31, "time_to_effect_seconds": 30}`
+- Drift score: `0.72`

@@ -1,22 +1,22 @@
 {
-  "plan_id": "alert_latest-8a49c144",
+  "plan_id": "alert_latest-9311d5b3",
   "workflow": {
     "orchestrator": "openclaw",
     "phase": "demo_mode",
     "workspace_skill": "incident_guardrail",
     "launch_style": "armed_background_watch"
   },
-  "scenario_id": "alert_latest",
-  "goal": "Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, summarize the final verdict, and return to watch mode.",
-  "starter_prompt": "Monitor this workspace in background mode for new webhook incidents. Follow the local workflow described in AGENTS.md and `skills/incident_guardrail/SKILL.md` in this repo. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` so the workflow waits for the next incident and immediately prepares demo artifacts when it arrives.",
+  "scenario_id": "retry_death_spiral",
+  "goal": "Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, inspect the live verdict on that same page, summarize, and return to watch mode.",
+  "starter_prompt": "Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Do not resume stale artifacts before `await-demo` returns.",
   "artifacts": {
     "plan": "outputs/alert_latest_plan.json",
     "browser_playbook": "outputs/alert_latest_browser_playbook.json",
     "report": "outputs/alert_latest_report.json"
   },
   "watch_state": {
-    "status": "idle",
-    "armed": false,
+    "status": "armed",
+    "armed": true,
     "pending_incident": null,
     "active_incident": null
   },
@@ -59,15 +59,9 @@
     },
     {
       "step": 5,
-      "kind": "open",
-      "target": "http://127.0.0.1:8010/openclaw-execution?stage=verdict",
-      "purpose": "inspect_final_verdict_surface"
-    },
-    {
-      "step": 6,
       "kind": "inspect",
-      "target": "http://127.0.0.1:8010/api/state",
-      "purpose": "confirm_shared_state_after_action"
+      "target": "http://127.0.0.1:8010/openclaw-execution",
+      "purpose": "inspect_same_page_for_live_verdict_after_verify"
     }
   ],
   "summary_contract": {
@@ -85,7 +79,7 @@
     "trigger": "browser tool times out, fails to load the dashboard, or loses browser control",
     "command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
     "must_say": "execution used the saved-plan fallback because browser control was unavailable",
-    "must_open_verdict_surface_after_fallback": true,
-    "verdict_url": "http://127.0.0.1:8010/openclaw-execution?stage=verdict"
+    "must_stay_on_execution_surface_after_fallback": true,
+    "verdict_url": "http://127.0.0.1:8010/openclaw-execution"
   }
 }

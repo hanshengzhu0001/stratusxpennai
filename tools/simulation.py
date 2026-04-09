@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import random
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 STEP_SECONDS = 5
@@ -364,6 +364,16 @@ def start_incident_simulation(state: dict, scenario_id: str, seed: int = 0) -> d
             "regional_headroom_secondary": secondary_headroom,
         }
     )
+    warmup_seconds = {
+        "retry_death_spiral": 15,
+        "payment_gateway_flap": 10,
+        "seat_hold_clog": 15,
+        "regional_saturation": 10,
+    }.get(scenario_id, 10)
+    while simulation["time_sec"] < warmup_seconds:
+        _step_simulation(scenario_id, simulation, STEP_SECONDS)
+    simulation["started_at_utc"] = (datetime.fromisoformat(now) - timedelta(seconds=warmup_seconds)).astimezone(timezone.utc).isoformat()
+    simulation["last_updated_at_utc"] = now
     state["active_scenario"] = scenario_id
     state["simulation"] = simulation
     return _sync_legacy_flags(_recompute_derived_metrics(state))
@@ -406,9 +416,14 @@ def apply_action_to_simulation(state: dict, action_id: str) -> dict:
     if canonical_action == "rate_limit_retries":
         controls["retry_throttle_factor"] = 0.34
         simulation["retry_arrivals_recent"] = max(0.02, simulation.get("retry_arrivals_recent", 0.0) * 0.18)
-        simulation["queue_depth"] = max(0.0, simulation.get("queue_depth", 0.0) * 0.55)
-        simulation["slot_holds"] = max(0.0, simulation.get("slot_holds", 0.0) * 0.78)
-        simulation["fairness_pressure"] = max(0.02, simulation.get("fairness_pressure", 0.05) * 0.88)
+        if state.get("active_scenario") == "retry_death_spiral":
+            simulation["queue_depth"] = max(0.0, simulation.get("queue_depth", 0.0) * 0.22)
+            simulation["slot_holds"] = max(0.0, simulation.get("slot_holds", 0.0) * 0.46)
+            simulation["fairness_pressure"] = max(0.02, simulation.get("fairness_pressure", 0.05) * 0.60)
+        else:
+            simulation["queue_depth"] = max(0.0, simulation.get("queue_depth", 0.0) * 0.55)
+            simulation["slot_holds"] = max(0.0, simulation.get("slot_holds", 0.0) * 0.78)
+            simulation["fairness_pressure"] = max(0.02, simulation.get("fairness_pressure", 0.05) * 0.88)
     elif canonical_action == "enable_payment_circuit_breaker":
         controls["circuit_breaker_enabled"] = True
     elif canonical_action == "increase_retry_backoff":
@@ -591,15 +606,19 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     )
     throttle_factor = float(controls["retry_throttle_factor"])
     early_throttle_active = False
+    timely_retry_control = False
     if throttle_factor < 1.0:
         throttle_applied_at = int(activation_times.get("rate_limit_retries", simulation["time_sec"]))
         if throttle_applied_at <= int(thresholds.get("early_retry_window_sec", 20)):
             throttle_factor *= 0.58
             early_throttle_active = True
+        elif scenario_id == "retry_death_spiral" and throttle_applied_at <= 90:
+            throttle_factor *= 0.48
+            timely_retry_control = True
         if simulation["queue_depth"] >= float(thresholds.get("late_retry_queue_depth", 40)):
-            throttle_factor *= 1.22
+            throttle_factor *= 1.10 if scenario_id == "retry_death_spiral" else 1.22
         if scenario_id == "retry_death_spiral":
-            throttle_factor *= 0.84
+            throttle_factor *= 0.62 if timely_retry_control else 0.84
     retry_multiplier *= throttle_factor
     backoff_factor = float(controls["retry_backoff_factor"])
     if backoff_factor < 1.0:
@@ -627,6 +646,8 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     if controls["retry_throttle_factor"] < 1.0:
         throttle_applied_at = int(activation_times.get("rate_limit_retries", simulation["time_sec"]))
         blocked_retry_fraction += 0.38 if throttle_applied_at <= int(thresholds.get("early_retry_window_sec", 20)) else 0.12
+        if scenario_id == "retry_death_spiral" and throttle_applied_at <= 90:
+            blocked_retry_fraction += 0.28
     if callback_fraction > 0.0:
         blocked_retry_fraction += min(0.32, callback_fraction * 0.75)
     if blocked_retry_fraction > 0.0:
@@ -651,6 +672,8 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
         base_health = min(1.0, base_health + 0.05)
     if early_throttle_active and scenario_id == "retry_death_spiral":
         base_health = min(1.0, base_health + 0.12)
+    elif timely_retry_control and scenario_id == "retry_death_spiral":
+        base_health = min(1.0, base_health + 0.11)
 
     overload_coeff = profile["services"]["backlog_overload_coeff"] * (
         1.0
@@ -661,7 +684,12 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
         overload_coeff *= max(0.24, 0.52 - 0.24 * latent.get("dependency_pressure", 0.5))
     if controls["retry_throttle_factor"] < 1.0:
         throttle_applied_at = int(activation_times.get("rate_limit_retries", simulation["time_sec"]))
-        overload_coeff *= 0.22 if throttle_applied_at <= int(thresholds.get("early_retry_window_sec", 20)) else 0.48
+        if throttle_applied_at <= int(thresholds.get("early_retry_window_sec", 20)):
+            overload_coeff *= 0.22
+        elif scenario_id == "retry_death_spiral" and throttle_applied_at <= 90:
+            overload_coeff *= 0.22
+        else:
+            overload_coeff *= 0.48
     if controls["retry_backoff_factor"] < 1.0:
         backoff_applied_at = int(activation_times.get("increase_retry_backoff", simulation["time_sec"]))
         overload_coeff *= 0.78 if simulation["time_sec"] - backoff_applied_at < 15 else 0.55
@@ -679,6 +707,11 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     overload_penalty = 1.0 / (1.0 + overload_coeff * simulation["queue_depth"])
     effective_eligibility_rate = profile["services"]["eligibility_capacity"] * max(profile["services"]["eligibility_health_floor"], base_health) * overload_penalty
     if early_throttle_active and scenario_id == "retry_death_spiral":
+        effective_eligibility_rate = max(
+            effective_eligibility_rate,
+            profile["services"]["eligibility_capacity"] * 0.72,
+        )
+    elif timely_retry_control and scenario_id == "retry_death_spiral":
         effective_eligibility_rate = max(
             effective_eligibility_rate,
             profile["services"]["eligibility_capacity"] * 0.72,
@@ -701,6 +734,8 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
         inventory_penalty += min(0.14, callback_fraction * 0.22)
     if early_throttle_active and scenario_id == "retry_death_spiral":
         inventory_penalty += 0.08
+    elif timely_retry_control and scenario_id == "retry_death_spiral":
+        inventory_penalty += 0.18
     effective_scheduling_rate *= max(0.18, inventory_penalty)
     if controls.get("slot_hold_ttl_factor", 1.0) < 1.0:
         effective_scheduling_rate *= 1.62
@@ -710,6 +745,8 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
         effective_scheduling_rate *= 1.0 + min(0.16, controls["priority_slot_reserve_fraction"] * 0.55)
     if early_throttle_active and scenario_id == "retry_death_spiral":
         effective_scheduling_rate *= 1.12
+    elif timely_retry_control and scenario_id == "retry_death_spiral":
+        effective_scheduling_rate *= 1.26
 
     overflow_penalty = 0.0
     if controls["traffic_shift_fraction"] > 0:
@@ -740,6 +777,8 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
         abandon_hazard *= 0.40
     if controls.get("priority_slot_reserve_fraction", 0.0) > 0.0:
         abandon_hazard *= 0.74
+    if timely_retry_control and scenario_id == "retry_death_spiral":
+        abandon_hazard *= 0.32
     if overflow_penalty > 0.0:
         abandon_hazard += 0.008 * overflow_penalty
     abandoned = min(queue_before_service * abandon_hazard * dt * 0.18, queue_before_service * 0.24)
@@ -754,6 +793,8 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     hold_fraction *= max(0.62, 1.0 - controls.get("priority_slot_reserve_fraction", 0.0) * 0.32)
     if early_throttle_active and scenario_id == "retry_death_spiral":
         hold_fraction *= 0.80
+    elif timely_retry_control and scenario_id == "retry_death_spiral":
+        hold_fraction *= 0.56
     hold_inflow = min(
         max(0.0, profile["holds"]["capacity"] - simulation["slot_holds"]),
         lambda_external_local * hold_fraction * dt,

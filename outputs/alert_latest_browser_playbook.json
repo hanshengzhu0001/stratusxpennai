@@ -1,12 +1,13 @@
 {
-  "plan_id": "alert_latest-8a49c144",
+  "plan_id": "alert_latest-9311d5b3",
+  "artifact_id": "alert_latest",
   "workflow": {
     "orchestrator": "openclaw",
     "level": "level_3_browser_k8s_scaffold",
     "phase": "browser_playbook"
   },
-  "scenario_id": "alert_latest",
-  "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the verdict page.",
+  "scenario_id": "retry_death_spiral",
+  "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the same page for the live verdict.",
   "chosen_action": {
     "id": "rate_limit_retries",
     "label": "Throttle Booking Retries",
@@ -43,14 +44,9 @@
       "purpose": "run_post_action_verification"
     },
     {
-      "kind": "open",
-      "target": "http://127.0.0.1:8010/openclaw-execution?stage=verdict",
-      "purpose": "open_dedicated_verdict_surface"
-    },
-    {
       "kind": "inspect",
-      "target": "http://127.0.0.1:8010/api/state",
-      "purpose": "confirm_state_after_action"
+      "target": "http://127.0.0.1:8010/openclaw-execution",
+      "purpose": "inspect_same_page_for_live_verdict_after_verify"
     },
     {
       "kind": "read",
@@ -59,9 +55,9 @@
     }
   ],
   "expected_before": {
-    "latency_p95_ms": 1617,
-    "error_rate": 0.11,
-    "retry_rate": 0.4
+    "latency_p95_ms": 2937,
+    "error_rate": 0.13,
+    "retry_rate": 0.69
   },
   "predicted_after": {
     "latency_direction": "down",

@@ -2,12 +2,12 @@
 
 ## Goal
 
-Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, summarize the final verdict, and return to watch mode.
+Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, inspect the live verdict on that same page, summarize, and return to watch mode.
 
 ## Starter Prompt
 
 ```text
-Monitor this workspace in background mode for new webhook incidents. Follow the local workflow described in AGENTS.md and `skills/incident_guardrail/SKILL.md` in this repo. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` so the workflow waits for the next incident and immediately prepares demo artifacts when it arrives.
+Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Do not resume stale artifacts before `await-demo` returns.
 ```
 
 ## Demo Contract
@@ -22,8 +22,8 @@ Monitor this workspace in background mode for new webhook incidents. Follow the 
 
 ## Watch State
 
-- Status: `idle`
-- Armed: `False`
+- Status: `armed`
+- Armed: `True`
 - Pending incident latched: `False`
 
 ## Browser Sequence
@@ -32,8 +32,7 @@ Monitor this workspace in background mode for new webhook incidents. Follow the 
 - Step 2: `inspect` `http://127.0.0.1:8010/openclaw-execution` (read_before_metrics_and_chosen_action)
 - Step 3: `click` `#openclaw-demo-run` (apply_guardrail_choice)
 - Step 4: `exec` `.venv/bin/python run.py alerts/latest.json --phase verify` (write_final_verdict)
-- Step 5: `open` `http://127.0.0.1:8010/openclaw-execution?stage=verdict` (inspect_final_verdict_surface)
-- Step 6: `inspect` `http://127.0.0.1:8010/api/state` (confirm_shared_state_after_action)
+- Step 5: `inspect` `http://127.0.0.1:8010/openclaw-execution` (inspect_same_page_for_live_verdict_after_verify)
 
 ## Fallback Contract
 

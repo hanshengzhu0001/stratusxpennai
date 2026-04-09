@@ -11,6 +11,7 @@ from pathlib import Path
 from agents.candidate_actions import build_scenario_shortlist
 from agents.incident_classifier import classify_incident
 from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
+from tools.scenario_catalog import derive_business_metrics
 from tools.execute_action import execute_action
 from tools.incident_watch import (
     acknowledge_pending_incident,
@@ -20,7 +21,7 @@ from tools.incident_watch import (
     watch_for_pending_incident,
 )
 from tools.prometheus_client import collect_evidence
-from tools.runtime_state import control_plane_urls, derive_metrics, load_state, reset_state
+from tools.runtime_state import control_plane_urls, current_constraints, derive_metrics, load_state, reset_state
 from tools.stratus_guardrail import rank_actions
 
 
@@ -35,6 +36,17 @@ def load_local_env(path: str = ".env") -> None:
             continue
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip())
+
+
+def resolve_scenario_context_id(payload: dict, state: dict, fallback: str = "alert_latest") -> str:
+    return str(
+        payload.get("commonLabels", {}).get("scenario_id")
+        or (payload.get("alerts") or [{}])[0].get("labels", {}).get("scenario_id")
+        or state.get("scenario_id")
+        or state.get("labels", {}).get("scenario_id")
+        or state.get("active_scenario")
+        or fallback
+    )
 
 
 def main() -> None:
@@ -85,14 +97,23 @@ def main() -> None:
         payload = load_json_path(input_path)
         acknowledge_pending_incident("openclaw_await_demo")
         state, evidence = prepare_demo_state(payload)
-        scenario_id = payload.get("id", "alert_latest")
-        plan = build_plan_report(payload, scenario_id, "alertmanager_webhook", input_path, state, evidence)
-        write_outputs(plan, scenario_id, "plan")
-        write_browser_playbook(plan, scenario_id)
+        artifact_id = payload.get("id", "alert_latest")
+        scenario_id = resolve_scenario_context_id(payload, state, artifact_id)
+        plan = build_plan_report(
+            payload,
+            scenario_id,
+            artifact_id,
+            "alertmanager_webhook",
+            input_path,
+            state,
+            evidence,
+        )
+        write_outputs(plan, artifact_id, "plan")
+        write_browser_playbook(plan, artifact_id)
         demo_mode = build_openclaw_demo_mode(plan)
-        write_openclaw_demo_mode(plan, scenario_id)
+        write_openclaw_demo_mode(plan, artifact_id)
         print(json.dumps(demo_mode, indent=2))
-        print(f"Wrote OpenClaw demo mode artifact to outputs/{scenario_id}_openclaw_demo.json")
+        print(f"Wrote OpenClaw demo mode artifact to outputs/{artifact_id}_openclaw_demo.json")
         return
 
     payload = load_json_path(input_path)
@@ -104,29 +125,30 @@ def main() -> None:
     else:
         source_type, state, evidence = load_incident_input(payload)
 
-    scenario_id = payload.get("id", "alert_latest")
+    artifact_id = payload.get("id", "alert_latest")
+    scenario_id = resolve_scenario_context_id(payload, state, artifact_id)
 
     if args.phase == "plan":
-        plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
-        write_outputs(plan, scenario_id, "plan")
-        write_browser_playbook(plan, scenario_id)
-        write_openclaw_demo_mode(plan, scenario_id)
+        plan = build_plan_report(payload, scenario_id, artifact_id, source_type, input_path, state, evidence)
+        write_outputs(plan, artifact_id, "plan")
+        write_browser_playbook(plan, artifact_id)
+        write_openclaw_demo_mode(plan, artifact_id)
         print(json.dumps(plan, indent=2))
-        print(f"Wrote plan to outputs/{scenario_id}_plan.json")
+        print(f"Wrote plan to outputs/{artifact_id}_plan.json")
         return
 
     if args.phase == "demo":
-        plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
-        write_outputs(plan, scenario_id, "plan")
-        write_browser_playbook(plan, scenario_id)
+        plan = build_plan_report(payload, scenario_id, artifact_id, source_type, input_path, state, evidence)
+        write_outputs(plan, artifact_id, "plan")
+        write_browser_playbook(plan, artifact_id)
         demo_mode = build_openclaw_demo_mode(plan)
-        write_openclaw_demo_mode(plan, scenario_id)
+        write_openclaw_demo_mode(plan, artifact_id)
         print(json.dumps(demo_mode, indent=2))
-        print(f"Wrote OpenClaw demo mode artifact to outputs/{scenario_id}_openclaw_demo.json")
+        print(f"Wrote OpenClaw demo mode artifact to outputs/{artifact_id}_openclaw_demo.json")
         return
 
     if args.phase == "fallback":
-        plan = load_saved_plan(scenario_id)
+        plan = load_saved_plan(artifact_id)
         chosen = plan["best_action"]
         execution = execute_action(chosen)
         execution["executor"] = "openclaw_saved_plan_fallback"
@@ -155,14 +177,14 @@ def main() -> None:
             execution=execution,
             mode="openclaw_browser_fallback",
         )
-        write_outputs(report, scenario_id, "report")
-        complete_active_incident("fallback_verified", f"outputs/{scenario_id}_report.json")
+        write_outputs(report, artifact_id, "report")
+        complete_active_incident("fallback_verified", f"outputs/{artifact_id}_report.json")
         print(json.dumps(report, indent=2))
-        print(f"Wrote fallback report to outputs/{scenario_id}_report.json")
+        print(f"Wrote fallback report to outputs/{artifact_id}_report.json")
         return
 
     if args.phase == "verify":
-        plan = load_saved_plan(scenario_id)
+        plan = load_saved_plan(artifact_id)
         verify = build_verify_report(
             payload=payload,
             scenario_id=scenario_id,
@@ -174,13 +196,13 @@ def main() -> None:
             execution=None,
             mode="browser_verify",
         )
-        write_outputs(verify, scenario_id, "report")
-        complete_active_incident("verified", f"outputs/{scenario_id}_report.json")
+        write_outputs(verify, artifact_id, "report")
+        complete_active_incident("verified", f"outputs/{artifact_id}_report.json")
         print(json.dumps(verify, indent=2))
-        print(f"Wrote report to outputs/{scenario_id}_report.json")
+        print(f"Wrote report to outputs/{artifact_id}_report.json")
         return
 
-    plan = build_plan_report(payload, scenario_id, source_type, input_path, state, evidence)
+    plan = build_plan_report(payload, scenario_id, artifact_id, source_type, input_path, state, evidence)
     chosen = plan["best_action"]
     execution = execute_action(chosen)
     refreshed_evidence = wait_for_updated_evidence(
@@ -203,18 +225,19 @@ def main() -> None:
         execution=execution,
         mode="auto_apply",
     )
-    write_outputs(plan, scenario_id, "plan")
-    write_browser_playbook(plan, scenario_id)
-    write_openclaw_demo_mode(plan, scenario_id)
-    write_outputs(report, scenario_id, "report")
-    complete_active_incident("auto_verified", f"outputs/{scenario_id}_report.json")
+    write_outputs(plan, artifact_id, "plan")
+    write_browser_playbook(plan, artifact_id)
+    write_openclaw_demo_mode(plan, artifact_id)
+    write_outputs(report, artifact_id, "report")
+    complete_active_incident("auto_verified", f"outputs/{artifact_id}_report.json")
     print(json.dumps(report, indent=2))
-    print(f"Wrote report to outputs/{scenario_id}_report.json")
+    print(f"Wrote report to outputs/{artifact_id}_report.json")
 
 
 def build_plan_report(
     payload: dict,
     scenario_id: str,
+    artifact_id: str,
     source_type: str,
     input_path: Path,
     state: dict,
@@ -224,11 +247,12 @@ def build_plan_report(
     shortlist = planner["shortlist"]
     ranking = rank_actions(state, shortlist)
     chosen = normalize_best_action(ranking["best_action"], shortlist)
-    plan_id = f"{scenario_id}-{uuid.uuid4().hex[:8]}"
-    playbook_path = f"outputs/{scenario_id}_browser_playbook.json"
-    demo_path = f"outputs/{scenario_id}_openclaw_demo.json"
+    plan_id = f"{artifact_id}-{uuid.uuid4().hex[:8]}"
+    playbook_path = f"outputs/{artifact_id}_browser_playbook.json"
+    demo_path = f"outputs/{artifact_id}_openclaw_demo.json"
     return {
         "plan_id": plan_id,
+        "artifact_id": artifact_id,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "workflow": {
             "orchestrator": "openclaw",
@@ -266,7 +290,7 @@ def build_plan_report(
         "stratus_ranking": ranking["ranked_actions"],
         "best_action": chosen,
         "dangerous_reflex": dangerous_reflex_for_scenario(
-            scenario_id=scenario_id,
+            scenario_id=str(scenario_id),
             candidate_actions=shortlist,
             chosen_action_id=chosen["id"],
             constraints=state.get("constraints", {}),
@@ -297,6 +321,12 @@ def build_verify_report(
 ) -> dict:
     planned_action = plan["best_action"]
     executed_action = resolve_executed_action(plan, execution)
+    scenario_context_id = (
+        current_state.get("scenario_id")
+        or current_state.get("labels", {}).get("scenario_id")
+        or plan.get("scenario_id")
+        or scenario_id
+    )
     predicted = plan["predicted_effects_by_action"].get(executed_action["id"], {})
     actual = actual_outcome_from_evidence(
         before_metrics=plan["observed_condition"]["metrics"],
@@ -325,7 +355,7 @@ def build_verify_report(
         },
         "source_type": source_type,
         "input_path": str(input_path),
-        "scenario_id": scenario_id,
+        "scenario_id": scenario_context_id,
         "incident_summary": current_state["summary"],
         "planner": plan.get("planner", {}),
         "observed_condition": {
@@ -527,11 +557,14 @@ def prepare_demo_state(payload: dict, timeout_seconds: float = 6.0) -> tuple[dic
 
 def evidence_from_expected_state(latest: dict, expected_metrics: dict) -> dict:
     refreshed = json.loads(json.dumps(latest))
+    state = load_state()
     refreshed["metrics"] = {
         "latency_p95_ms": int(expected_metrics["latency_p95_ms"]),
         "error_rate": round(float(expected_metrics["error_rate"]), 4),
         "retry_rate": round(float(expected_metrics["retry_rate"]), 4),
     }
+    refreshed["business_metrics"] = derive_business_metrics(state, refreshed["metrics"])
+    refreshed["constraints"] = current_constraints(state)
     refreshed["prometheus"] = {
         "source": "expected_state_fallback",
         "queries": {
@@ -572,27 +605,61 @@ def actual_outcome_from_evidence(
     before_business = before_business or {}
     after_business = after_business or {}
     after_constraints = after_constraints or {}
+    before_latency = int(before_metrics.get("latency_p95_ms", after_metrics.get("latency_p95_ms", 0)))
+    before_retry = float(before_metrics.get("retry_rate", 0.0))
+    before_abandonment = float(before_business.get("queue_abandonment_rate", 0.0))
     retry_rate = float(after_metrics.get("retry_rate", 0.0))
     error_rate = float(after_metrics.get("error_rate", 0.0))
     latency = int(after_metrics.get("latency_p95_ms", 0))
     abandonment = float(after_business.get("queue_abandonment_rate", 0.0))
     fairness = float(after_business.get("fairness_skew", 0.0))
     hold_util = float(after_business.get("seat_hold_utilization", 0.0))
+    queue_depth = float(after_constraints.get("queue_depth", 0.0))
     secondary_headroom = float(
         after_business.get("secondary_headroom", after_constraints.get("regional_headroom_secondary", 1.0))
     )
     callback_queue = float(
         after_business.get("manual_callback_queue_depth", after_constraints.get("manual_callback_queue", 0.0))
     )
-    if retry_rate <= 0.12 and abandonment <= 0.18 and fairness <= 0.16 and secondary_headroom >= 0.14:
+    latency_improvement = (
+        max(0.0, (before_latency - latency) / max(before_latency, 1))
+        if before_latency
+        else 0.0
+    )
+    retry_improvement = max(0.0, before_retry - retry_rate)
+    abandonment_improvement = max(0.0, before_abandonment - abandonment)
+    stabilized_state = (
+        retry_rate <= 0.20
+        and fairness <= 0.18
+        and hold_util <= 0.25
+        and queue_depth <= 20
+        and secondary_headroom >= 0.14
+    )
+    if (
+        stabilized_state
+        and (latency_improvement >= 0.20 or latency <= 1600)
+        and abandonment <= 0.35
+    ):
         risk_level = "low"
-    elif retry_rate <= 0.25 and abandonment <= 0.24 and fairness <= 0.24:
+    elif (
+        retry_rate <= 0.35
+        and latency_improvement >= 0.18
+        and fairness <= 0.26
+        and secondary_headroom >= 0.12
+        and queue_depth <= 60
+    ):
         risk_level = "medium"
     else:
         risk_level = "high"
     if secondary_headroom < 0.12 or callback_queue > 24 or hold_util > 0.9:
         blast_radius = "high"
-    elif risk_level == "low":
+    elif risk_level == "low" or stabilized_state or (
+        risk_level == "medium"
+        and retry_rate <= 0.20
+        and fairness <= 0.16
+        and hold_util <= 0.55
+        and secondary_headroom >= 0.14
+    ):
         blast_radius = "low"
     else:
         blast_radius = "medium"
@@ -611,7 +678,16 @@ def actual_outcome_from_evidence(
         "blast_radius": blast_radius,
         "recovery": (
             "strong"
-            if risk_level == "low" and latency < before_metrics.get("latency_p95_ms", latency)
+            if (
+                risk_level in {"low", "medium"}
+                and (latency_improvement >= 0.20 or latency <= 1600)
+                and retry_improvement >= 0.10
+                and (
+                    abandonment_improvement >= 0.04
+                    or abandonment <= 0.28
+                    or queue_depth <= 20
+                )
+            )
             else "partial"
         ),
         "notes": f"Observed live metrics after {action_id} via Prometheus-backed verification.",
@@ -633,9 +709,9 @@ def direction(before: float | int | None, after: float | int | None) -> str:
 
 
 def retry_risk(retry_rate: float) -> str:
-    if retry_rate <= 0.12:
+    if retry_rate <= 0.20:
         return "low"
-    if retry_rate <= 0.25:
+    if retry_rate <= 0.35:
         return "medium"
     return "high"
 
@@ -677,7 +753,7 @@ def browser_workflow(chosen: dict) -> dict:
             "Open the dedicated OpenClaw execution page.",
             "Inspect the before-action incident card and chosen remediation.",
             "Click the single OpenClaw execution button to apply the chosen remediation.",
-            "Run verify and inspect the dedicated verdict page.",
+            "Run verify and inspect the live verdict on that same page.",
         ],
     }
 
@@ -724,13 +800,14 @@ def build_browser_playbook(plan: dict) -> dict:
     chosen = plan["best_action"]
     return {
         "plan_id": plan.get("plan_id"),
+        "artifact_id": plan.get("artifact_id"),
         "workflow": {
             "orchestrator": "openclaw",
             "level": plan["workflow"]["level"],
             "phase": "browser_playbook",
         },
         "scenario_id": plan["scenario_id"],
-        "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the verdict page.",
+        "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the same page for the live verdict.",
         "chosen_action": {
             "id": chosen["id"],
             "label": browser["button_label"],
@@ -758,8 +835,11 @@ def build_browser_playbook(plan: dict) -> dict:
                 "command": ".venv/bin/python run.py alerts/latest.json --phase verify",
                 "purpose": "run_post_action_verification",
             },
-            {"kind": "open", "target": browser["openclaw_verdict_url"], "purpose": "open_dedicated_verdict_surface"},
-            {"kind": "inspect", "target": browser["state_api_url"], "purpose": "confirm_state_after_action"},
+            {
+                "kind": "inspect",
+                "target": browser["openclaw_execution_url"],
+                "purpose": "inspect_same_page_for_live_verdict_after_verify",
+            },
             {"kind": "read", "target": "outputs/alert_latest_report.json", "purpose": "summarize_final_report"},
         ],
         "expected_before": plan["observed_condition"]["metrics"],
@@ -771,8 +851,7 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
     chosen = plan["best_action"]
     playbook = build_browser_playbook(plan)
     execution_surface = playbook["urls"]["openclaw_execution"]
-    verdict_surface = playbook["urls"]["openclaw_verdict"]
-    state_api = playbook["urls"]["state_api"]
+    artifact_id = str(plan.get("artifact_id", plan["scenario_id"]))
     watch_state = load_watch_state()
     return {
         "plan_id": plan.get("plan_id"),
@@ -783,12 +862,12 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
             "launch_style": "armed_background_watch",
         },
         "scenario_id": plan["scenario_id"],
-        "goal": "Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, summarize the final verdict, and return to watch mode.",
+        "goal": "Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, inspect the live verdict on that same page, summarize, and return to watch mode.",
         "starter_prompt": default_openclaw_demo_prompt(),
         "artifacts": {
-            "plan": f"outputs/{plan['scenario_id']}_plan.json",
-            "browser_playbook": f"outputs/{plan['scenario_id']}_browser_playbook.json",
-            "report": f"outputs/{plan['scenario_id']}_report.json",
+            "plan": f"outputs/{artifact_id}_plan.json",
+            "browser_playbook": f"outputs/{artifact_id}_browser_playbook.json",
+            "report": f"outputs/{artifact_id}_report.json",
         },
         "watch_state": {
             "status": watch_state.get("status", "idle"),
@@ -835,15 +914,9 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
             },
             {
                 "step": 5,
-                "kind": "open",
-                "target": verdict_surface,
-                "purpose": "inspect_final_verdict_surface",
-            },
-            {
-                "step": 6,
                 "kind": "inspect",
-                "target": state_api,
-                "purpose": "confirm_shared_state_after_action",
+                "target": execution_surface,
+                "purpose": "inspect_same_page_for_live_verdict_after_verify",
             },
         ],
         "summary_contract": {
@@ -861,8 +934,8 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
             "trigger": "browser tool times out, fails to load the dashboard, or loses browser control",
             "command": ".venv/bin/python run.py alerts/latest.json --phase fallback",
             "must_say": "execution used the saved-plan fallback because browser control was unavailable",
-            "must_open_verdict_surface_after_fallback": True,
-            "verdict_url": verdict_surface,
+            "must_stay_on_execution_surface_after_fallback": True,
+            "verdict_url": execution_surface,
         },
     }
 
@@ -906,11 +979,11 @@ def dangerous_reflex_for_scenario(
 
 def default_openclaw_demo_prompt() -> str:
     return (
-        "Monitor this workspace in background mode for new webhook incidents. "
-        "Follow the local workflow described in AGENTS.md and "
-        "`skills/incident_guardrail/SKILL.md` in this repo. "
-        "Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` "
-        "so the workflow waits for the next incident and immediately prepares demo artifacts when it arrives."
+        "Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. "
+        "Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. "
+        "Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, "
+        "and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. "
+        "Do not resume stale artifacts before `await-demo` returns."
     )
 
 
@@ -1030,8 +1103,13 @@ def wait_for_updated_evidence(
     timeout_seconds: float | None = None,
     poll_interval_seconds: float = 2.0,
 ) -> dict:
+    def _with_expected_fallback(latest: dict) -> dict:
+        if expected_metrics and latest.get("metrics", {}) != expected_metrics:
+            return evidence_from_expected_state(latest, expected_metrics)
+        return latest
+
     if before_evidence.get("prometheus", {}).get("source") != "live":
-        return collect_evidence(payload)
+        return _with_expected_fallback(collect_evidence(payload))
 
     timeout = (
         float(os.environ.get("AUTO_VERIFY_SETTLE_SECONDS", "20"))
@@ -1039,7 +1117,7 @@ def wait_for_updated_evidence(
         else timeout_seconds
     )
     if timeout <= 0:
-        return collect_evidence(payload)
+        return _with_expected_fallback(collect_evidence(payload))
 
     before_metrics = before_evidence.get("metrics", {})
     before_alerts = before_evidence.get("prometheus", {}).get("active_alerts", [])
@@ -1048,7 +1126,7 @@ def wait_for_updated_evidence(
 
     while True:
         if latest.get("prometheus", {}).get("source") != "live":
-            return latest
+            return _with_expected_fallback(latest)
         latest_metrics = latest.get("metrics", {})
         if expected_metrics and latest_metrics == expected_metrics:
             return latest
@@ -1058,7 +1136,7 @@ def wait_for_updated_evidence(
             return latest
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return latest
+            return _with_expected_fallback(latest)
         time.sleep(min(poll_interval_seconds, remaining))
         latest = collect_evidence(payload)
 

@@ -14,7 +14,7 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 
 - Summary: Scheduling retry pressure above baseline
 - Services: portal, scheduling, eligibility
-- Pattern matches: retry_amplification, payment_degradation
+- Pattern matches: retry_amplification, payment_degradation, high_checkout_latency, fairness_breakdown
 
 ## Action Strategy
 
@@ -42,20 +42,20 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 
 ## Candidate Actions
 
-- `rate_limit_retries`: Throttle appointment-booking retries to break retry amplification.
-- `enable_payment_circuit_breaker`: Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.
-- `increase_retry_backoff`: Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.
 - `route_to_callback_queue`: Route a controlled slice of demand to staffed callback instead of letting repeated online attempts starve access.
-- `shift_traffic`: Shift a slice of patient-portal scheduling traffic to the secondary region.
+- `rate_limit_retries`: Throttle appointment-booking retries to break retry amplification.
+- `reserve_priority_slots`: Reserve a protected slice of scarce appointment capacity for higher-priority patients and reduce hold concentration.
+- `enable_payment_circuit_breaker`: Enable an eligibility fail-fast circuit breaker instead of retrying into a degraded dependency.
+- `shorten_slot_hold_ttl`: Shorten slot-hold TTL so trapped appointment inventory is released back to real patients faster.
 - `restart_payment`: Restart eligibility workers after backlog pressure is reduced.
 
 ## Stratus Ranking
 
 - Rank 1: `rate_limit_retries` (0.95)
-- Rank 2: `increase_retry_backoff` (0.72)
-- Rank 3: `enable_payment_circuit_breaker` (0.68)
-- Rank 4: `route_to_callback_queue` (0.55)
-- Rank 5: `shift_traffic` (0.55)
+- Rank 2: `route_to_callback_queue` (0.94)
+- Rank 3: `shorten_slot_hold_ttl` (0.84)
+- Rank 4: `reserve_priority_slots` (0.76)
+- Rank 5: `enable_payment_circuit_breaker` (0.53)
 - Rank 6: `restart_payment` (0.38)
 
 ## Browser Workflow
@@ -63,7 +63,7 @@ Given a healthcare scheduling latency incident with retry amplification, which o
 - Open the dedicated OpenClaw execution page.
 - Inspect the before-action incident card and chosen remediation.
 - Click the single OpenClaw execution button to apply the chosen remediation.
-- Run verify and inspect the dedicated verdict page.
+- Run verify and inspect the live verdict on that same page.
 
 ## Automation Handoff
 

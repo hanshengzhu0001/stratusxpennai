@@ -16,7 +16,8 @@ def build_alert_payload_for_scenario(scenario_id: str) -> dict:
     business = derive_business_metrics(state, technical)
     now = datetime.now(timezone.utc).replace(microsecond=0)
     starts_at = now.isoformat().replace("+00:00", "Z")
-    fingerprint = uuid.uuid4().hex[:16]
+    incident_id = uuid.uuid4().hex
+    fingerprint = incident_id[:16]
     alertname = alert_profile.get("alertname", "SchedulingIncident")
     service = alert_profile.get("service", "scheduling")
     dependency = alert_profile.get("dependency", "eligibility")
@@ -29,6 +30,7 @@ def build_alert_payload_for_scenario(scenario_id: str) -> dict:
         f"fairness skew {business['fairness_skew']}, secondary headroom {business.get('secondary_headroom', 'n/a')}."
     ).strip()
     return {
+        "incident_id": incident_id,
         "receiver": "openclaw-webhook",
         "status": "firing",
         "alerts": [

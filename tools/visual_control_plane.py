@@ -15,6 +15,7 @@ from run import (
     load_json_path,
     load_local_env,
     load_saved_plan,
+    resolve_scenario_context_id,
     wait_for_updated_evidence,
     write_browser_playbook,
     write_openclaw_demo_mode,
@@ -272,6 +273,8 @@ def state_api() -> dict:
     state = load_state()
     watch_state = load_watch_state()
     technical_metrics = derive_metrics(state)
+    plan = _load_artifact("plan")
+    report = _load_artifact("report")
     return {
         "scenario": get_scenario(state.get("active_scenario")),
         "state": state,
@@ -279,6 +282,9 @@ def state_api() -> dict:
         "metrics": technical_metrics,
         "business_metrics": derive_business_metrics(state, technical_metrics),
         "constraints": current_constraints(state),
+        "plan": plan,
+        "report": report,
+        "updated_at": time.time(),
         "artifacts": {
             name: path.exists()
             for name, path in ARTIFACT_PATHS.items()
@@ -307,11 +313,12 @@ def api_plan(
 ) -> RedirectResponse:
     payload, resolved_path = _load_alert_payload(input_path)
     source_type, state, evidence = _load_incident_snapshot(payload)
-    scenario_id = payload.get("id", "alert_latest")
-    plan = build_plan_report(payload, scenario_id, source_type, resolved_path, state, evidence)
-    write_outputs(plan, scenario_id, "plan")
-    write_browser_playbook(plan, scenario_id)
-    write_openclaw_demo_mode(plan, scenario_id)
+    artifact_id = payload.get("id", "alert_latest")
+    scenario_id = resolve_scenario_context_id(payload, state, artifact_id)
+    plan = build_plan_report(payload, scenario_id, artifact_id, source_type, resolved_path, state, evidence)
+    write_outputs(plan, artifact_id, "plan")
+    write_browser_playbook(plan, artifact_id)
+    write_openclaw_demo_mode(plan, artifact_id)
     _clear_report_artifacts()
     return RedirectResponse(_return_path(return_to), status_code=303)
 
@@ -333,8 +340,9 @@ def api_verify(
     return_to: str = Form("verdict"),
 ) -> RedirectResponse:
     payload, resolved_path = _load_alert_payload(input_path)
-    scenario_id = payload.get("id", "alert_latest")
-    plan = load_saved_plan(scenario_id)
+    artifact_id = payload.get("id", "alert_latest")
+    plan = load_saved_plan(artifact_id)
+    scenario_id = resolve_scenario_context_id(payload, plan, artifact_id)
     current_evidence = wait_for_updated_evidence(
         payload,
         before_evidence={
@@ -356,7 +364,7 @@ def api_verify(
         execution=None,
         mode="browser_verify",
     )
-    write_outputs(report, scenario_id, "report")
+    write_outputs(report, artifact_id, "report")
     return RedirectResponse(_return_path(return_to), status_code=303)
 
 
@@ -367,11 +375,12 @@ def api_autorun(
 ) -> RedirectResponse:
     payload, resolved_path = _load_alert_payload(input_path)
     source_type, state, evidence = _load_incident_snapshot(payload)
-    scenario_id = payload.get("id", "alert_latest")
-    plan = build_plan_report(payload, scenario_id, source_type, resolved_path, state, evidence)
-    write_outputs(plan, scenario_id, "plan")
-    write_browser_playbook(plan, scenario_id)
-    write_openclaw_demo_mode(plan, scenario_id)
+    artifact_id = payload.get("id", "alert_latest")
+    scenario_id = resolve_scenario_context_id(payload, state, artifact_id)
+    plan = build_plan_report(payload, scenario_id, artifact_id, source_type, resolved_path, state, evidence)
+    write_outputs(plan, artifact_id, "plan")
+    write_browser_playbook(plan, artifact_id)
+    write_openclaw_demo_mode(plan, artifact_id)
     execution = execute_action(plan["best_action"])
     current_evidence = wait_for_updated_evidence(
         payload,
@@ -393,7 +402,7 @@ def api_autorun(
         execution=execution,
         mode="console_autorun",
     )
-    write_outputs(report, scenario_id, "report")
+    write_outputs(report, artifact_id, "report")
     return RedirectResponse(_return_path(return_to), status_code=303)
 
 
@@ -471,15 +480,15 @@ def _render_shell(
         for view in VIEW_ORDER
     )
     pills = "".join(
-        f'<span class="pill">{escape(label)}</span>'
-        for label in [
-            f"Scenario: {active_scenario['label']}",
-            f"OpenClaw: {_watch_label(watch_state)}",
-            f"Last action: {last_action}",
-            f"Retry factor: {business_metrics['retry_amplification_factor']}x",
-            f"Booking completion: {business_metrics['payment_success_rate']:.2f}",
+        [
+            f'<span class="pill" id="pill-scenario">Scenario: {escape(active_scenario["label"])}</span>',
+            f'<span class="pill" id="pill-watch">OpenClaw: {escape(_watch_label(watch_state))}</span>',
+            f'<span class="pill" id="pill-last-action">Last action: {escape(last_action)}</span>',
+            f'<span class="pill" id="pill-retry-factor">Retry factor: {business_metrics["retry_amplification_factor"]}x</span>',
+            f'<span class="pill" id="pill-booking-completion">Booking completion: {business_metrics["payment_success_rate"]:.2f}</span>',
         ]
     )
+    action_labels_json = json.dumps(ACTION_LABELS)
     return f"""<!doctype html>
 <html>
 <head>
@@ -675,6 +684,74 @@ def _render_shell(
       document.querySelectorAll('form[data-loading-label]').forEach((form) => {{
         form.addEventListener('submit', () => showLoading(form));
       }});
+
+      const actionLabels = {action_labels_json};
+      function actionLabel(actionId) {{
+        if (!actionId) return 'none';
+        return actionLabels[actionId] || actionId;
+      }}
+      function watchLabel(watchState) {{
+        if (!watchState) return 'Idle';
+        const status = watchState.status || 'idle';
+        if (status === 'pending' && watchState.pending_incident) return 'Pending incident latched';
+        if (status === 'acknowledged' && watchState.active_incident) return 'Investigating active incident';
+        if (watchState.armed) return 'Armed and waiting';
+        return 'Idle';
+      }}
+      function setText(id, value) {{
+        const node = document.getElementById(id);
+        if (node && value !== undefined && value !== null) node.textContent = value;
+      }}
+      async function refreshShell() {{
+        try {{
+          const response = await fetch('/api/state', {{ cache: 'no-store' }});
+          if (!response.ok) return;
+          const data = await response.json();
+          const metrics = data.metrics || {{}};
+          const business = data.business_metrics || {{}};
+          const state = data.state || {{}};
+          const scenario = data.scenario || {{}};
+          setText('pill-scenario', `Scenario: ${{scenario.label || 'Unknown'}}`);
+          setText('pill-watch', `OpenClaw: ${{watchLabel(data.watch_state)}}`);
+          setText('pill-last-action', `Last action: ${{actionLabel(state.last_action)}}`);
+          if (business.retry_amplification_factor !== undefined) {{
+            setText('pill-retry-factor', `Retry factor: ${{business.retry_amplification_factor}}x`);
+          }}
+          if (business.payment_success_rate !== undefined) {{
+            setText('pill-booking-completion', `Booking completion: ${{Number(business.payment_success_rate).toFixed(2)}}`);
+          }}
+          if (metrics.latency_p95_ms !== undefined) {{
+            setText('incident-latency', `${{metrics.latency_p95_ms}} ms`);
+          }}
+          if (metrics.error_rate !== undefined) {{
+            setText('incident-error', Number(metrics.error_rate).toFixed(2));
+          }}
+          if (metrics.retry_rate !== undefined) {{
+            setText('incident-retry', Number(metrics.retry_rate).toFixed(2));
+          }}
+          if (business.queue_abandonment_rate !== undefined) {{
+            setText('incident-abandonment', Number(business.queue_abandonment_rate).toFixed(2));
+          }}
+          if (business.payment_success_rate !== undefined) {{
+            setText('incident-completion', Number(business.payment_success_rate).toFixed(2));
+          }}
+          if (business.seat_hold_utilization !== undefined) {{
+            setText('incident-slot-utilization', Number(business.seat_hold_utilization).toFixed(2));
+          }}
+          setText('execution-current-action', actionLabel((data.plan || {{}})?.best_action?.id));
+          setText('execution-last-action', actionLabel(state.last_action));
+          if (business.retry_amplification_factor !== undefined) {{
+            setText('execution-retry-factor', `${{business.retry_amplification_factor}}x`);
+          }}
+          if (business.payment_success_rate !== undefined) {{
+            setText('execution-booking-completion', Number(business.payment_success_rate).toFixed(2));
+          }}
+        }} catch (_error) {{
+          // Keep the current UI visible even if a poll fails.
+        }}
+      }}
+      refreshShell();
+      window.setInterval(refreshShell, 2000);
     }})();
   </script>
 </body>
@@ -689,18 +766,48 @@ def _render_incident_view(
     scenarios: list[dict],
     demo_mode: dict | None,
 ) -> str:
-    technical = _metric_cards(
+    technical = "".join(
         [
-            ("Scheduling Latency P95", f"{technical_metrics['latency_p95_ms']} ms"),
-            ("Scheduling Error Rate", f"{technical_metrics['error_rate']:.2f}"),
-            ("Booking Retry Rate", f"{technical_metrics['retry_rate']:.2f}"),
+            f"""
+            <div class="card">
+              <div class="muted">Scheduling Latency P95</div>
+              <div class="kpi" id="incident-latency">{technical_metrics['latency_p95_ms']} ms</div>
+            </div>
+            """,
+            f"""
+            <div class="card">
+              <div class="muted">Scheduling Error Rate</div>
+              <div class="kpi" id="incident-error">{technical_metrics['error_rate']:.2f}</div>
+            </div>
+            """,
+            f"""
+            <div class="card">
+              <div class="muted">Booking Retry Rate</div>
+              <div class="kpi" id="incident-retry">{technical_metrics['retry_rate']:.2f}</div>
+            </div>
+            """,
         ]
     )
-    business = _metric_cards(
+    business = "".join(
         [
-            ("Scheduling Abandonment", f"{business_metrics['queue_abandonment_rate']:.2f}"),
-            ("Booking Completion", f"{business_metrics['payment_success_rate']:.2f}"),
-            ("Slot Hold Utilization", f"{business_metrics['seat_hold_utilization']:.2f}"),
+            f"""
+            <div class="card">
+              <div class="muted">Scheduling Abandonment</div>
+              <div class="kpi" id="incident-abandonment">{business_metrics['queue_abandonment_rate']:.2f}</div>
+            </div>
+            """,
+            f"""
+            <div class="card">
+              <div class="muted">Booking Completion</div>
+              <div class="kpi" id="incident-completion">{business_metrics['payment_success_rate']:.2f}</div>
+            </div>
+            """,
+            f"""
+            <div class="card">
+              <div class="muted">Slot Hold Utilization</div>
+              <div class="kpi" id="incident-slot-utilization">{business_metrics['seat_hold_utilization']:.2f}</div>
+            </div>
+            """,
         ]
     )
     scenario_options = "".join(
@@ -882,6 +989,8 @@ def _render_execution_view(
     urls: dict,
     active_scenario: dict,
 ) -> str:
+    technical_metrics = derive_metrics(state)
+    business_metrics = derive_business_metrics(state, technical_metrics)
     statuses = _workflow_statuses(state, plan, playbook, report)
     timeline = "".join(
         f"""
@@ -971,7 +1080,10 @@ def _render_execution_view(
       <div class="card">
         <h3>Operator Actions</h3>
         <ul class="list">
-          <li>Chosen remediation: <strong>{escape(_action_label(chosen))}</strong>{f" <code>{escape(str(chosen))}</code>" if chosen else ""}</li>
+          <li>Chosen remediation: <strong id="execution-current-action">{escape(_action_label(chosen))}</strong>{f" <code>{escape(str(chosen))}</code>" if chosen else ""}</li>
+          <li>Last action in shared state: <strong id="execution-last-action">{escape(_action_label(state.get('last_action')))}</strong></li>
+          <li>Retry factor: <code id="execution-retry-factor">{business_metrics['retry_amplification_factor']}x</code></li>
+          <li>Booking completion: <code id="execution-booking-completion">{business_metrics['payment_success_rate']:.2f}</code></li>
           <li>Plan from the console or by command line.</li>
           <li>OpenClaw execution: <a href="/openclaw-execution">/openclaw-execution</a></li>
           <li>Manual ops controls: <a href="{urls['feature_flags']}">{urls['feature_flags']}</a></li>
@@ -1093,6 +1205,16 @@ def _render_operations_dashboard(
     report: dict | None,
     watch_state: dict,
 ) -> str:
+    action_labels_json = json.dumps(ACTION_LABELS)
+    action_summaries_json = json.dumps(ACTION_SUMMARIES)
+    care_lines_json = json.dumps(
+        [
+            ["Primary Care Virtual", "08:30", "10:00", "11:30", "14:00", "16:00"],
+            ["Behavioral Health", "09:00", "10:30", "13:00", "15:30", "18:00"],
+            ["Cardiology Follow-up", "08:45", "11:15", "12:45", "15:15", "17:30"],
+            ["Urgent Telehealth", "Now", "09:30", "12:00", "14:30", "17:00"],
+        ]
+    )
     scenario_options = "".join(
         f'<option value="{escape(item["id"])}"{" selected" if item["id"] == active_scenario["id"] else ""}>{escape(item["label"])}</option>'
         for item in scenarios
@@ -1120,45 +1242,57 @@ def _render_operations_dashboard(
                 f"{demand_index} / 100",
                 _ops_tone(demand_index / 100, 0.55, 0.78),
                 "Color-coded from surge pressure and retry amplification.",
+                card_id="ops-card-portal-demand",
+                value_id="ops-portal-demand-value",
             ),
             _ops_metric_card(
                 "Eligibility health",
                 _eligibility_status(state),
                 "critical" if state["payment_service_unreachable"] and not state["payment_circuit_breaker_enabled"] else "watch" if state["payment_circuit_breaker_enabled"] else "stable",
                 "Shows whether verification is degraded, protected, or recovered.",
+                card_id="ops-card-eligibility-health",
+                value_id="ops-eligibility-health-value",
             ),
             _ops_metric_card(
                 "Booking completion",
                 f"{business_metrics['payment_success_rate']:.0%}",
                 _ops_tone(1 - business_metrics["payment_success_rate"], 0.18, 0.28, inverse=True),
                 "Tracks how many patient booking attempts successfully complete.",
+                card_id="ops-card-booking-completion",
+                value_id="ops-booking-completion-value",
             ),
             _ops_metric_card(
                 "Scheduling abandonment",
                 f"{business_metrics['queue_abandonment_rate']:.0%}",
                 _ops_tone(business_metrics["queue_abandonment_rate"], 0.14, 0.24),
                 "Measures patient drop-off during active access pressure.",
+                card_id="ops-card-scheduling-abandonment",
+                value_id="ops-scheduling-abandonment-value",
             ),
             _ops_metric_card(
                 "Slot hold pressure",
                 f"{business_metrics['seat_hold_utilization']:.0%}",
                 _ops_tone(business_metrics["seat_hold_utilization"], 0.70, 0.84),
                 "High values mean inventory is getting trapped in pending holds.",
+                card_id="ops-card-slot-hold-pressure",
+                value_id="ops-slot-hold-pressure-value",
             ),
             _ops_metric_card(
                 "Retry amplification",
                 f"{business_metrics['retry_amplification_factor']}x",
                 _ops_tone((business_metrics["retry_amplification_factor"] - 1.0) / 4.0, 0.35, 0.62),
                 "Shows how strongly the system is self-amplifying load.",
+                card_id="ops-card-retry-amplification",
+                value_id="ops-retry-amplification-value",
             ),
         ]
     )
     flow_bars = "".join(
         [
-            _ops_progress_bar("Patient portal surge", demand_index / 100, _ops_tone(demand_index / 100, 0.55, 0.78)),
-            _ops_progress_bar("Eligibility delay", min(1.0, technical_metrics["latency_p95_ms"] / 2600), _ops_tone(technical_metrics["latency_p95_ms"] / 2600, 0.58, 0.82)),
-            _ops_progress_bar("Backlog pressure", backlog_index / 100, _ops_tone(backlog_index / 100, 0.48, 0.72)),
-            _ops_progress_bar("Booking recovery", business_metrics["payment_success_rate"], _ops_tone(1 - business_metrics["payment_success_rate"], 0.18, 0.28, inverse=True)),
+            _ops_progress_bar("Patient portal surge", demand_index / 100, _ops_tone(demand_index / 100, 0.55, 0.78), row_id="ops-flow-portal-demand", bar_id="ops-flow-portal-demand-bar", value_id="ops-flow-portal-demand-value"),
+            _ops_progress_bar("Eligibility delay", min(1.0, technical_metrics["latency_p95_ms"] / 2600), _ops_tone(technical_metrics["latency_p95_ms"] / 2600, 0.58, 0.82), row_id="ops-flow-eligibility-delay", bar_id="ops-flow-eligibility-delay-bar", value_id="ops-flow-eligibility-delay-value"),
+            _ops_progress_bar("Backlog pressure", backlog_index / 100, _ops_tone(backlog_index / 100, 0.48, 0.72), row_id="ops-flow-backlog-pressure", bar_id="ops-flow-backlog-pressure-bar", value_id="ops-flow-backlog-pressure-value"),
+            _ops_progress_bar("Booking recovery", business_metrics["payment_success_rate"], _ops_tone(1 - business_metrics["payment_success_rate"], 0.18, 0.28, inverse=True), row_id="ops-flow-booking-recovery", bar_id="ops-flow-booking-recovery-bar", value_id="ops-flow-booking-recovery-value"),
         ]
     )
     simulation_cards = "".join(
@@ -1168,36 +1302,48 @@ def _render_operations_dashboard(
                 f"{constraints['lambda_external']:.2f}/s",
                 _ops_tone(min(1.0, constraints["lambda_external"] / 8.5), 0.55, 0.82),
                 "Base demand entering the portal before retries or gating.",
+                card_id="ops-card-external-arrivals",
+                value_id="ops-external-arrivals-value",
             ),
             _ops_metric_card(
                 "Retry arrivals",
                 f"{constraints['lambda_retry']:.2f}/s",
                 _ops_tone(min(1.0, constraints["lambda_retry"] / 4.5), 0.42, 0.72),
                 "Self-amplified load generated by repeated booking attempts.",
+                card_id="ops-card-retry-arrivals",
+                value_id="ops-retry-arrivals-value",
             ),
             _ops_metric_card(
                 "Queue depth",
                 f"{constraints['queue_depth']:.0f}",
                 _ops_tone(min(1.0, constraints["queue_depth"] / 45.0), 0.48, 0.75),
                 "Backlog proxy inside the scheduling and eligibility path.",
+                card_id="ops-card-queue-depth",
+                value_id="ops-queue-depth-value",
             ),
             _ops_metric_card(
                 "Service rate",
                 f"{constraints['effective_service_rate']:.2f}/s",
                 _ops_tone(1 - min(1.0, constraints["effective_service_rate"] / 6.0), 0.36, 0.58, inverse=True),
                 "Effective throughput after degradation, overload, and action effects.",
+                card_id="ops-card-service-rate",
+                value_id="ops-service-rate-value",
             ),
             _ops_metric_card(
                 "Secondary headroom",
                 f"{constraints['regional_headroom_secondary']:.2f}",
                 _ops_tone(1 - constraints["regional_headroom_secondary"], 0.55, 0.75, inverse=True),
                 "This is the threshold-sensitive term that can make traffic shift safe or dangerous.",
+                card_id="ops-card-secondary-headroom",
+                value_id="ops-secondary-headroom-value",
             ),
             _ops_metric_card(
                 "Fairness pressure",
                 f"{constraints['fairness_pressure']:.2f}",
                 _ops_tone(min(1.0, constraints["fairness_pressure"] / 0.30), 0.45, 0.72),
                 "Tracks when online access starts starving patients unevenly.",
+                card_id="ops-card-fairness-pressure",
+                value_id="ops-fairness-pressure-value",
             ),
         ]
     )
@@ -1391,11 +1537,11 @@ def _render_operations_dashboard(
         </div>
       </div>
       <div class="hero-pills">
-        <span class="pill">Scenario: {escape(active_scenario['label'])}</span>
-        <span class="pill">System state: {escape(system_state.title())}</span>
-        <span class="pill">OpenClaw: {escape(_watch_label(watch_state))}</span>
-        <span class="pill">Recommended remediation: {escape(_action_label(chosen_action)) if chosen_action else 'Generate guardrail plan'}</span>
-        <span class="pill">Last executed: {escape(_action_label(executed_action))}</span>
+        <span class="pill" id="ops-pill-scenario">Scenario: {escape(active_scenario['label'])}</span>
+        <span class="pill" id="ops-pill-state">System state: {escape(system_state.title())}</span>
+        <span class="pill" id="ops-pill-watch">OpenClaw: {escape(_watch_label(watch_state))}</span>
+        <span class="pill" id="ops-pill-recommended">Recommended remediation: {escape(_action_label(chosen_action)) if chosen_action else 'Generate guardrail plan'}</span>
+        <span class="pill" id="ops-pill-executed">Last executed: {escape(_action_label(executed_action))}</span>
       </div>
     </section>
 
@@ -1407,7 +1553,7 @@ def _render_operations_dashboard(
               <h2>Access Health Overview</h2>
               <p class="muted">Color-coded operational indicators for demand, scheduling quality, and downstream verification stability.</p>
             </div>
-            <span class="badge {escape(system_state)}">{escape(system_state.title())} access posture</span>
+            <span class="badge {escape(system_state)}" id="ops-system-badge">{escape(system_state.title())} access posture</span>
           </div>
           <div class="kpi-grid">
             {status_cards}
@@ -1432,7 +1578,7 @@ def _render_operations_dashboard(
               <h2>Simulation Diagnostics</h2>
               <p class="muted">Underlying queue-and-constraint terms driving the telehealth incident. This is the causal state the guardrail is reasoning over, not just the final KPIs.</p>
             </div>
-            <span class="badge {escape(_ops_tone(min(1.0, constraints['time_sec'] / 180), 0.4, 0.75))}">t = {constraints['time_sec']}s</span>
+            <span class="badge {escape(_ops_tone(min(1.0, constraints['time_sec'] / 180), 0.4, 0.75))}" id="ops-time-badge">t = {constraints['time_sec']}s</span>
           </div>
           <div class="kpi-grid">
             {simulation_cards}
@@ -1445,9 +1591,9 @@ def _render_operations_dashboard(
               <h2>Scheduling Board</h2>
               <p class="muted">A realistic scheduling-grid view of virtual-care inventory. Warm colors indicate rising hold pressure and patient-access risk.</p>
             </div>
-            <div class="badge {escape(_ops_tone(business_metrics['seat_hold_utilization'], 0.70, 0.84))}">Slot pressure {business_metrics['seat_hold_utilization']:.0%}</div>
+            <div class="badge {escape(_ops_tone(business_metrics['seat_hold_utilization'], 0.70, 0.84))}" id="ops-slot-pressure-badge">Slot pressure {business_metrics['seat_hold_utilization']:.0%}</div>
           </div>
-          {provider_grid}
+          <div id="ops-provider-grid">{provider_grid}</div>
         </section>
       </div>
 
@@ -1496,11 +1642,11 @@ def _render_operations_dashboard(
             </div>
             <span class="badge {escape(_ops_tone((technical_metrics['latency_p95_ms'] - 900) / 1400, 0.45, 0.68))}">Stratus-backed</span>
           </div>
-          <div style="font-size:1.5rem; font-weight:700; color:var(--navy);">{escape(_action_label(chosen_action)) if chosen_action else 'Plan not generated yet'}</div>
-          <p class="muted" style="margin:10px 0 0;">{escape(recommendation)}</p>
+          <div style="font-size:1.5rem; font-weight:700; color:var(--navy);" id="ops-recommendation-action">{escape(_action_label(chosen_action)) if chosen_action else 'Plan not generated yet'}</div>
+          <p class="muted" style="margin:10px 0 0;" id="ops-recommendation-summary">{escape(recommendation)}</p>
           <ul class="summary-list" style="margin-top:14px;">
-            <li>Dangerous reflex: <strong>{escape(_action_label('restart_payment'))}</strong></li>
-            <li>{escape(verdict_summary)}</li>
+            <li>Dangerous reflex: <strong id="ops-dangerous-reflex">{escape(_action_label('restart_payment'))}</strong></li>
+            <li id="ops-verdict-summary">{escape(verdict_summary)}</li>
             <li>Primary operator surface remains the Guardrail Console.</li>
           </ul>
         </section>
@@ -1531,6 +1677,188 @@ def _render_operations_dashboard(
       </div>
     </div>
   </div>
+  <script>
+    (() => {{
+      const actionLabels = {action_labels_json};
+      const actionSummaries = {action_summaries_json};
+      const careLines = {care_lines_json};
+      function actionLabel(actionId) {{
+        if (!actionId) return 'none';
+        return actionLabels[actionId] || actionId;
+      }}
+      function watchLabel(watchState) {{
+        if (!watchState) return 'Idle';
+        const status = watchState.status || 'idle';
+        if (status === 'pending' && watchState.pending_incident) return 'Pending incident latched';
+        if (status === 'acknowledged' && watchState.active_incident) return 'Investigating active incident';
+        if (watchState.armed) return 'Armed and waiting';
+        return 'Idle';
+      }}
+      function opsTone(value, watch, critical, inverse = false) {{
+        const score = inverse ? 1 - value : value;
+        if (score >= critical) return 'critical';
+        if (score >= watch) return 'watch';
+        return 'stable';
+      }}
+      function opsSystemState(metrics, business) {{
+        const riskScore = Math.max(
+          (Number(metrics.latency_p95_ms || 0) - 900) / 1400,
+          Number(business.queue_abandonment_rate || 0) / 0.30,
+          (Number(business.retry_amplification_factor || 1) - 1.0) / 2.5
+        );
+        return opsTone(riskScore, 0.55, 0.82);
+      }}
+      function eligibilityStatus(state) {{
+        if (state.payment_feature_disabled) return 'Online scheduling disabled';
+        if (state.payment_service_unreachable && state.payment_circuit_breaker_enabled) return 'Protected by circuit breaker';
+        if (state.payment_service_unreachable) return 'Degraded';
+        return 'Healthy';
+      }}
+      function setText(id, value) {{
+        const node = document.getElementById(id);
+        if (node && value !== undefined && value !== null) node.textContent = value;
+      }}
+      function setTone(cardId, tone) {{
+        const node = document.getElementById(cardId);
+        if (!node) return;
+        node.classList.remove('tone-stable', 'tone-watch', 'tone-critical');
+        node.classList.add(`tone-${{tone}}`);
+      }}
+      function setBadge(id, tone, label) {{
+        const node = document.getElementById(id);
+        if (!node) return;
+        node.classList.remove('stable', 'watch', 'critical');
+        node.classList.add(tone);
+        node.textContent = label;
+      }}
+      function setBar(barId, valueId, pct, tone) {{
+        const bar = document.getElementById(barId);
+        const value = document.getElementById(valueId);
+        if (bar) {{
+          bar.classList.remove('stable', 'watch', 'critical');
+          bar.classList.add(tone);
+          bar.style.width = `${{pct}}%`;
+        }}
+        if (value) value.textContent = `${{pct}}%`;
+      }}
+      function renderProviderGrid(slotHoldUtilization, slotHoldExpiration, onlineDisabled) {{
+        const pressure = slotHoldUtilization + slotHoldExpiration * 0.35;
+        const header = `
+          <div class="schedule-header">
+            <div>Care line</div>
+            <div>Window 1</div>
+            <div>Window 2</div>
+            <div>Window 3</div>
+            <div>Window 4</div>
+            <div>Window 5</div>
+          </div>
+        `;
+        const rows = careLines.map((row, idx) => {{
+          const [name, ...times] = row;
+          const cells = times.map((timeLabel, tIndex) => {{
+            const phase = (pressure * 10 + idx + tIndex) % 5;
+            let cls = 'available';
+            let title = 'Bookable';
+            let sub = 'Normal access window';
+            if (onlineDisabled) {{
+              cls = 'manual';
+              title = 'Manual fallback';
+              sub = 'Routed to staff';
+            }} else if (phase >= 4.1 || pressure > 1.0) {{
+              cls = 'held';
+              title = 'At-risk hold';
+              sub = 'Awaiting verification';
+            }} else if (phase >= 2.4 || pressure > 0.82) {{
+              cls = 'at-risk';
+              title = 'Limited capacity';
+              sub = 'Longer confirmation path';
+            }}
+            return `<div class="slot ${{cls}}"><strong>${{title}}</strong><span>${{timeLabel}} • ${{sub}}</span></div>`;
+          }}).join('');
+          return `<div class="schedule-row"><div class="schedule-service">${{name}}</div>${{cells}}</div>`;
+        }}).join('');
+        return `<div class="schedule-grid">${{header}}${{rows}}</div>`;
+      }}
+      async function refreshOperations() {{
+        try {{
+          const response = await fetch('/api/state', {{ cache: 'no-store' }});
+          if (!response.ok) return;
+          const data = await response.json();
+          const metrics = data.metrics || {{}};
+          const business = data.business_metrics || {{}};
+          const constraints = data.constraints || {{}};
+          const state = data.state || {{}};
+          const scenario = data.scenario || {{}};
+          const plan = data.plan || {{}};
+          const report = data.report || {{}};
+          const chosenAction = (plan.best_action || {{}}).id;
+          const executedAction = ((report.executed_action || {{}}).id) || state.last_action;
+          const systemState = opsSystemState(metrics, business);
+          const demandIndex = Math.min(100, Math.round(45 + Number(business.retry_amplification_factor || 0) * 10 + Number(business.queue_abandonment_rate || 0) * 90));
+          const backlogIndex = Math.min(100, Math.round(Number(business.queue_abandonment_rate || 0) * 120 + Number(business.seat_hold_utilization || 0) * 48));
+
+          setText('ops-pill-scenario', `Scenario: ${{scenario.label || 'Unknown'}}`);
+          setText('ops-pill-state', `System state: ${{systemState.charAt(0).toUpperCase() + systemState.slice(1)}}`);
+          setText('ops-pill-watch', `OpenClaw: ${{watchLabel(data.watch_state)}}`);
+          setText('ops-pill-recommended', `Recommended remediation: ${{chosenAction ? actionLabel(chosenAction) : 'Generate guardrail plan'}}`);
+          setText('ops-pill-executed', `Last executed: ${{actionLabel(executedAction)}}`);
+          setBadge('ops-system-badge', systemState, `${{systemState.charAt(0).toUpperCase() + systemState.slice(1)}} access posture`);
+          setBadge('ops-time-badge', opsTone(Math.min(1.0, Number(constraints.time_sec || 0) / 180), 0.4, 0.75), `t = ${{Math.round(Number(constraints.time_sec || 0))}}s`);
+          setBadge('ops-slot-pressure-badge', opsTone(Number(business.seat_hold_utilization || 0), 0.70, 0.84), `Slot pressure ${{Math.round(Number(business.seat_hold_utilization || 0) * 100)}}%`);
+
+          setText('ops-portal-demand-value', `${{demandIndex}} / 100`);
+          setTone('ops-card-portal-demand', opsTone(demandIndex / 100, 0.55, 0.78));
+          setText('ops-eligibility-health-value', eligibilityStatus(state));
+          const eligibilityTone = state.payment_service_unreachable && !state.payment_circuit_breaker_enabled ? 'critical' : state.payment_circuit_breaker_enabled ? 'watch' : 'stable';
+          setTone('ops-card-eligibility-health', eligibilityTone);
+          setText('ops-booking-completion-value', `${{Math.round(Number(business.payment_success_rate || 0) * 100)}}%`);
+          setTone('ops-card-booking-completion', opsTone(1 - Number(business.payment_success_rate || 0), 0.18, 0.28, true));
+          setText('ops-scheduling-abandonment-value', `${{Math.round(Number(business.queue_abandonment_rate || 0) * 100)}}%`);
+          setTone('ops-card-scheduling-abandonment', opsTone(Number(business.queue_abandonment_rate || 0), 0.14, 0.24));
+          setText('ops-slot-hold-pressure-value', `${{Math.round(Number(business.seat_hold_utilization || 0) * 100)}}%`);
+          setTone('ops-card-slot-hold-pressure', opsTone(Number(business.seat_hold_utilization || 0), 0.70, 0.84));
+          setText('ops-retry-amplification-value', `${{Number(business.retry_amplification_factor || 0).toFixed(1)}}x`);
+          setTone('ops-card-retry-amplification', opsTone((Number(business.retry_amplification_factor || 1) - 1.0) / 4.0, 0.35, 0.62));
+
+          setBar('ops-flow-portal-demand-bar', 'ops-flow-portal-demand-value', Math.max(6, Math.min(100, demandIndex)), opsTone(demandIndex / 100, 0.55, 0.78));
+          setBar('ops-flow-eligibility-delay-bar', 'ops-flow-eligibility-delay-value', Math.max(6, Math.min(100, Math.round(Math.min(1.0, Number(metrics.latency_p95_ms || 0) / 2600) * 100))), opsTone(Number(metrics.latency_p95_ms || 0) / 2600, 0.58, 0.82));
+          setBar('ops-flow-backlog-pressure-bar', 'ops-flow-backlog-pressure-value', Math.max(6, Math.min(100, backlogIndex)), opsTone(backlogIndex / 100, 0.48, 0.72));
+          setBar('ops-flow-booking-recovery-bar', 'ops-flow-booking-recovery-value', Math.max(6, Math.min(100, Math.round(Number(business.payment_success_rate || 0) * 100))), opsTone(1 - Number(business.payment_success_rate || 0), 0.18, 0.28, true));
+
+          setText('ops-external-arrivals-value', `${{Number(constraints.lambda_external || 0).toFixed(2)}}/s`);
+          setTone('ops-card-external-arrivals', opsTone(Math.min(1.0, Number(constraints.lambda_external || 0) / 8.5), 0.55, 0.82));
+          setText('ops-retry-arrivals-value', `${{Number(constraints.lambda_retry || 0).toFixed(2)}}/s`);
+          setTone('ops-card-retry-arrivals', opsTone(Math.min(1.0, Number(constraints.lambda_retry || 0) / 4.5), 0.42, 0.72));
+          setText('ops-queue-depth-value', `${{Math.round(Number(constraints.queue_depth || 0))}}`);
+          setTone('ops-card-queue-depth', opsTone(Math.min(1.0, Number(constraints.queue_depth || 0) / 45.0), 0.48, 0.75));
+          setText('ops-service-rate-value', `${{Number(constraints.effective_service_rate || 0).toFixed(2)}}/s`);
+          setTone('ops-card-service-rate', opsTone(1 - Math.min(1.0, Number(constraints.effective_service_rate || 0) / 6.0), 0.36, 0.58, true));
+          setText('ops-secondary-headroom-value', Number(constraints.regional_headroom_secondary || 0).toFixed(2));
+          setTone('ops-card-secondary-headroom', opsTone(1 - Number(constraints.regional_headroom_secondary || 0), 0.55, 0.75, true));
+          setText('ops-fairness-pressure-value', Number(constraints.fairness_pressure || 0).toFixed(2));
+          setTone('ops-card-fairness-pressure', opsTone(Math.min(1.0, Number(constraints.fairness_pressure || 0) / 0.30), 0.45, 0.72));
+
+          setText('ops-recommendation-action', chosenAction ? actionLabel(chosenAction) : 'Plan not generated yet');
+          setText('ops-recommendation-summary', chosenAction ? (actionSummaries[chosenAction] || 'Guardrail plan is ready.') : 'Generate a guardrail plan to surface the recommended remediation.');
+          setText('ops-dangerous-reflex', actionLabel(plan.dangerous_reflex || 'restart_payment'));
+          setText('ops-verdict-summary', executedAction && executedAction !== 'none' ? `Last verified action: ${{actionLabel(executedAction)}}` : 'No remediation has been executed yet.');
+
+          const providerGrid = document.getElementById('ops-provider-grid');
+          if (providerGrid) {{
+            providerGrid.innerHTML = renderProviderGrid(
+              Number(business.seat_hold_utilization || 0),
+              Number(business.seat_hold_expiration_rate || 0),
+              Boolean(state.payment_feature_disabled)
+            );
+          }}
+        }} catch (_error) {{
+          // Leave the current board visible if polling fails.
+        }}
+      }}
+      refreshOperations();
+      window.setInterval(refreshOperations, 2000);
+    }})();
+  </script>
 </body>
 </html>"""
 
@@ -1585,23 +1913,42 @@ def _eligibility_status(state: dict) -> str:
     return "Healthy"
 
 
-def _ops_metric_card(label: str, value: str, tone: str, note: str) -> str:
+def _ops_metric_card(
+    label: str,
+    value: str,
+    tone: str,
+    note: str,
+    card_id: str = "",
+    value_id: str = "",
+) -> str:
+    card_attr = f' id="{escape(card_id)}"' if card_id else ""
+    value_attr = f' id="{escape(value_id)}"' if value_id else ""
     return f"""
-    <div class="kpi tone-{tone}">
+    <div class="kpi tone-{tone}"{card_attr}>
       <div class="label">{escape(label)}</div>
-      <div class="value">{escape(value)}</div>
+      <div class="value"{value_attr}>{escape(value)}</div>
       <div class="note">{escape(note)}</div>
     </div>
     """
 
 
-def _ops_progress_bar(label: str, value: float, tone: str) -> str:
+def _ops_progress_bar(
+    label: str,
+    value: float,
+    tone: str,
+    row_id: str = "",
+    bar_id: str = "",
+    value_id: str = "",
+) -> str:
     pct = max(6, min(100, int(value * 100)))
+    row_attr = f' id="{escape(row_id)}"' if row_id else ""
+    bar_attr = f' id="{escape(bar_id)}"' if bar_id else ""
+    value_attr = f' id="{escape(value_id)}"' if value_id else ""
     return f"""
-    <div class="flow-row">
+    <div class="flow-row"{row_attr}>
       <div>{escape(label)}</div>
-      <div class="track"><div class="bar {tone}" style="width:{pct}%"></div></div>
-      <div>{pct}%</div>
+      <div class="track"><div class="bar {tone}" style="width:{pct}%"{bar_attr}></div></div>
+      <div{value_attr}>{pct}%</div>
     </div>
     """
 
@@ -1779,43 +2126,41 @@ def _render_openclaw_execution_surface(
     baseline_metrics = _scenario_baseline_metrics(active_scenario["id"])
     notes = "".join(f"<li>{escape(note)}</li>" for note in plan.get("notes", []))
     stage = stage if stage in {"before", "after-action", "verdict"} else "before"
-    verdict_block = ""
-    if stage == "verdict" and report:
-        verdict_block = f"""
-        <div class="card">
-          <h2 style="margin-top:0;">Final Verdict</h2>
-          <ul>
-            <li>Executed remediation: <strong>{escape(_action_label(report.get('executed_action', {}).get('id', chosen_action)))}</strong></li>
-            <li>After latency: <code>{escape(str(report_actual.get('latency_p95_ms', technical_metrics['latency_p95_ms'])))}</code></li>
-            <li>Retry rate: <code>{escape(str(report_actual.get('retry_rate', technical_metrics['retry_rate'])))}</code></li>
-            <li>Risk level: <code>{escape(str(report_actual.get('risk_level', 'n/a')))}</code></li>
-            <li>Blast radius: <code>{escape(str(report_actual.get('blast_radius', 'n/a')))}</code></li>
-          </ul>
-          <p><a href="/">Open the full Guardrail Console</a></p>
-        </div>
-        """
-    elif stage == "verdict":
-        verdict_block = """
-        <div class="card">
-          <h2 style="margin-top:0;">Verdict Pending</h2>
-          <p>The report is not written yet. Run verify, then refresh this page.</p>
-          <p><a href="/">Return to Guardrail Console</a></p>
-        </div>
-        """
+    verdict_ready = bool(report and report.get("executed_action"))
+    verdict_title = "Live Final Verdict" if verdict_ready else "Awaiting Final Verdict"
+    verdict_status = (
+        "Verification complete. The execution surface is now showing the final report."
+        if verdict_ready
+        else "Stay on this page. Once verify or fallback finishes, the final verdict will appear here automatically."
+    )
+    verdict_block = f"""
+    <div class="card" id="openclaw-verdict-card">
+      <h2 style="margin-top:0;">{escape(verdict_title)}</h2>
+      <p id="openclaw-verdict-status" style="color:var(--muted);">{escape(verdict_status)}</p>
+      <ul>
+        <li>Executed remediation: <strong id="openclaw-verdict-action">{escape(_action_label(report.get('executed_action', {}).get('id', chosen_action) if report else chosen_action))}</strong></li>
+        <li>After latency: <code id="openclaw-verdict-latency">{escape(str(report_actual.get('latency_p95_ms', technical_metrics['latency_p95_ms'] if verdict_ready else 'pending')))}</code></li>
+        <li>Retry rate: <code id="openclaw-verdict-retry">{escape(str(report_actual.get('retry_rate', technical_metrics['retry_rate'] if verdict_ready else 'pending')))}</code></li>
+        <li>Risk level: <code id="openclaw-verdict-risk">{escape(str(report_actual.get('risk_level', 'pending')))}</code></li>
+        <li>Blast radius: <code id="openclaw-verdict-blast">{escape(str(report_actual.get('blast_radius', 'pending')))}</code></li>
+      </ul>
+      <p><a href="/">Open the full Guardrail Console</a></p>
+    </div>
+    """
 
     after_block = ""
     if stage == "after-action":
         after_block = f"""
-        <div class="card">
+        <div class="card" id="openclaw-after-card">
           <h2 style="margin-top:0;">Shared State Updated</h2>
           <ul>
-            <li>Last action: <strong>{escape(_action_label(state.get('last_action')))}</strong> <code>{escape(str(state.get('last_action') or 'none'))}</code></li>
-            <li>Retry factor now: <code>{business_metrics['retry_amplification_factor']}x</code></li>
-            <li>Booking completion now: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
+            <li>Last action: <strong id="openclaw-after-last-action">{escape(_action_label(state.get('last_action')))}</strong> <code>{escape(str(state.get('last_action') or 'none'))}</code></li>
+            <li>Retry factor now: <code id="openclaw-after-retry-factor">{business_metrics['retry_amplification_factor']}x</code></li>
+            <li>Booking completion now: <code id="openclaw-after-booking-completion">{business_metrics['payment_success_rate']:.2f}</code></li>
           </ul>
           <form method="post" action="/api/verify">
             <input type="hidden" name="input_path" value="{escape(str(DEFAULT_ALERT_PATH))}">
-            <input type="hidden" name="return_to" value="/openclaw-execution?stage=verdict">
+            <input type="hidden" name="return_to" value="/openclaw-execution">
             <button style="background:#bb5524; color:white; border:none; border-radius:12px; padding:11px 16px; cursor:pointer;">Run Verify</button>
           </form>
         </div>
@@ -1852,7 +2197,7 @@ def _render_openclaw_execution_surface(
       <div>
         <div class="eyebrow">OpenClaw Browser Path</div>
         <h1 style="margin:10px 0 6px;">Dedicated Execution Surface</h1>
-        <p style="margin:0; color:var(--muted); max-width:760px;">This page is optimized for the managed browser. Open here, inspect the before-state, click one stable remediation button, then run verify and reopen this page for the verdict.</p>
+        <p style="margin:0; color:var(--muted); max-width:760px;">This page is optimized for the managed browser. Open it once, inspect the before-state, click one stable remediation button, then stay here while verify or fallback writes the live verdict below.</p>
       </div>
       <div><a href="/">Return to Guardrail Console</a></div>
     </div>
@@ -1877,7 +2222,7 @@ def _render_openclaw_execution_surface(
           <button id="openclaw-demo-run">Execute Planned Action: {escape(chosen_label)}</button>
         </form>
         <form method="post" action="/api/reset" style="margin-top:12px;">
-          <input type="hidden" name="scenario_id" value="retry_death_spiral">
+          <input type="hidden" name="scenario_id" value="{escape(active_scenario['id'])}">
           <input type="hidden" name="return_to" value="/openclaw-execution">
           <button style="background:#405f7f;">Reset to Healthy Baseline</button>
         </form>
@@ -1886,16 +2231,16 @@ def _render_openclaw_execution_surface(
       <div class="card">
         <h2 style="margin-top:0;">Current Shared State</h2>
         <ul>
-          <li>Last action: <strong>{escape(_action_label(state.get('last_action')))}</strong></li>
-          <li>Retry factor: <code>{business_metrics['retry_amplification_factor']}x</code></li>
-          <li>Booking completion: <code>{business_metrics['payment_success_rate']:.2f}</code></li>
-          <li>Scheduling abandonment: <code>{business_metrics['queue_abandonment_rate']:.2f}</code></li>
+          <li>Last action: <strong id="openclaw-last-action">{escape(_action_label(state.get('last_action')))}</strong></li>
+          <li>Retry factor: <code id="openclaw-retry-factor">{business_metrics['retry_amplification_factor']}x</code></li>
+          <li>Booking completion: <code id="openclaw-booking-completion">{business_metrics['payment_success_rate']:.2f}</code></li>
+          <li>Scheduling abandonment: <code id="openclaw-abandonment">{business_metrics['queue_abandonment_rate']:.2f}</code></li>
         </ul>
         <div class="mini-grid">
-          <div class="metric"><div class="label">External arrivals</div><div class="value">{constraints['lambda_external']:.2f}</div></div>
-          <div class="metric"><div class="label">Retry arrivals</div><div class="value">{constraints['lambda_retry']:.2f}</div></div>
-          <div class="metric"><div class="label">Queue depth</div><div class="value">{constraints['queue_depth']:.0f}</div></div>
-          <div class="metric"><div class="label">Secondary headroom</div><div class="value">{constraints['regional_headroom_secondary']:.2f}</div></div>
+          <div class="metric"><div class="label">External arrivals</div><div class="value" id="openclaw-external-arrivals">{constraints['lambda_external']:.2f}</div></div>
+          <div class="metric"><div class="label">Retry arrivals</div><div class="value" id="openclaw-retry-arrivals">{constraints['lambda_retry']:.2f}</div></div>
+          <div class="metric"><div class="label">Queue depth</div><div class="value" id="openclaw-queue-depth">{constraints['queue_depth']:.0f}</div></div>
+          <div class="metric"><div class="label">Secondary headroom</div><div class="value" id="openclaw-secondary-headroom">{constraints['regional_headroom_secondary']:.2f}</div></div>
         </div>
         <strong>Guardrail notes</strong>
         <ul>{notes or '<li>No notes recorded yet.</li>'}</ul>
@@ -1903,6 +2248,54 @@ def _render_openclaw_execution_surface(
     </div>
     <div style="margin-top:18px;">{after_block}{verdict_block}</div>
   </div>
+  <script>
+    (() => {{
+      const actionLabels = {json.dumps(ACTION_LABELS)};
+      function actionLabel(actionId) {{
+        if (!actionId) return 'none';
+        return actionLabels[actionId] || actionId;
+      }}
+      function setText(id, value) {{
+        const node = document.getElementById(id);
+        if (node && value !== undefined && value !== null) node.textContent = value;
+      }}
+      async function refreshExecution() {{
+        try {{
+          const response = await fetch('/api/state', {{ cache: 'no-store' }});
+          if (!response.ok) return;
+          const data = await response.json();
+          const state = data.state || {{}};
+          const business = data.business_metrics || {{}};
+          const constraints = data.constraints || {{}};
+          const report = data.report || {{}};
+          const actual = report.actual_outcome || {{}};
+          setText('openclaw-last-action', actionLabel(state.last_action));
+          setText('openclaw-retry-factor', `${{Number(business.retry_amplification_factor || 0).toFixed(1)}}x`);
+          setText('openclaw-booking-completion', Number(business.payment_success_rate || 0).toFixed(2));
+          setText('openclaw-abandonment', Number(business.queue_abandonment_rate || 0).toFixed(2));
+          setText('openclaw-external-arrivals', Number(constraints.lambda_external || 0).toFixed(2));
+          setText('openclaw-retry-arrivals', Number(constraints.lambda_retry || 0).toFixed(2));
+          setText('openclaw-queue-depth', Math.round(Number(constraints.queue_depth || 0)));
+          setText('openclaw-secondary-headroom', Number(constraints.regional_headroom_secondary || 0).toFixed(2));
+          setText('openclaw-after-last-action', actionLabel(state.last_action));
+          setText('openclaw-after-retry-factor', `${{Number(business.retry_amplification_factor || 0).toFixed(1)}}x`);
+          setText('openclaw-after-booking-completion', Number(business.payment_success_rate || 0).toFixed(2));
+          if (report.executed_action) {{
+            setText('openclaw-verdict-status', 'Verification complete. The execution surface is now showing the final report.');
+            setText('openclaw-verdict-action', actionLabel(report.executed_action.id));
+            if (actual.latency_p95_ms !== undefined) setText('openclaw-verdict-latency', actual.latency_p95_ms);
+            if (actual.retry_rate !== undefined) setText('openclaw-verdict-retry', actual.retry_rate);
+            if (actual.risk_level !== undefined) setText('openclaw-verdict-risk', actual.risk_level);
+            if (actual.blast_radius !== undefined) setText('openclaw-verdict-blast', actual.blast_radius);
+          }}
+        }} catch (_error) {{
+          // Keep the current execution surface visible if a poll fails.
+        }}
+      }}
+      refreshExecution();
+      window.setInterval(refreshExecution, 2000);
+    }})();
+  </script>
 </body>
 </html>"""
 

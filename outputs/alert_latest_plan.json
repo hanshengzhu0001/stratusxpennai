@@ -1,6 +1,7 @@
 {
-  "plan_id": "alert_latest-8a49c144",
-  "generated_at_utc": "2026-04-08T20:41:49.626432+00:00",
+  "plan_id": "alert_latest-9311d5b3",
+  "artifact_id": "alert_latest",
+  "generated_at_utc": "2026-04-09T00:50:42.577889+00:00",
   "workflow": {
     "orchestrator": "openclaw",
     "entrypoint": ".venv/bin/python run.py alerts/latest.json --phase demo",
@@ -10,7 +11,7 @@
   },
   "source_type": "alertmanager_webhook",
   "input_path": "alerts/latest.json",
-  "scenario_id": "alert_latest",
+  "scenario_id": "retry_death_spiral",
   "incident_summary": "Scheduling retry pressure above baseline",
   "planner": {
     "agent": "Planner Agent",
@@ -20,9 +21,10 @@
     "selection_rationale": [
       "Planner Agent detected retry amplification and kept three access-stabilizing actions in contention.",
       "Planner Agent kept dependency-facing actions because eligibility health is part of the incident surface.",
+      "Planner Agent recognized slot-hold pathology, so inventory and fairness actions outrank generic dependency fixes.",
+      "route_to_callback_queue: Controlled diversion can protect access while dependency health is unstable.; Overflow diversion reduces repeat holding pressure without shutting the portal.",
       "rate_limit_retries: Retry amplification is elevated and early throttling can still break the spiral.; This scenario rewards early retry throttling before backlog fully entrenches.",
-      "enable_payment_circuit_breaker: Dependency isolation is relevant while retry pressure remains active.; Eligibility degradation appears material enough that fail-fast protection may be safest.",
-      "increase_retry_backoff: Retry pressure is significant and backoff can smooth residual load."
+      "reserve_priority_slots: Fairness controls matter when slot concentration is the real pathology.; Fairness skew is high enough that protected-capacity policy may matter."
     ]
   },
   "observed_condition": {
@@ -32,34 +34,34 @@
       "eligibility"
     ],
     "metrics": {
-      "latency_p95_ms": 1617,
-      "error_rate": 0.11,
-      "retry_rate": 0.4
+      "latency_p95_ms": 2937,
+      "error_rate": 0.13,
+      "retry_rate": 0.69
     },
     "business_metrics": {
-      "queue_abandonment_rate": 0.02,
-      "payment_success_rate": 0.45,
-      "retry_amplification_factor": 1.7,
-      "fairness_skew": 0.12,
-      "seat_hold_utilization": 0.25,
+      "queue_abandonment_rate": 0.35,
+      "payment_success_rate": 0.07,
+      "retry_amplification_factor": 3.3,
+      "fairness_skew": 0.27,
+      "seat_hold_utilization": 0.54,
       "seat_hold_expiration_rate": 0.01,
       "manual_callback_queue_depth": 0.0,
-      "secondary_headroom": 0.33
+      "secondary_headroom": 0.31
     },
     "constraints": {
-      "time_sec": 0,
-      "queue_depth": 30.0,
-      "lambda_external": 6.624,
-      "lambda_retry": 4.416,
+      "time_sec": 15,
+      "queue_depth": 136.15,
+      "lambda_external": 5.491,
+      "lambda_retry": 12.39,
       "lambda_gated": 0.0,
-      "effective_service_rate": 3.0,
-      "eligibility_health": 0.58,
-      "slot_holds": 30.0,
-      "regional_headroom_primary": 0.369,
-      "regional_headroom_secondary": 0.328,
-      "projected_secondary_headroom_after_shift": 0.328,
+      "effective_service_rate": 0.384,
+      "eligibility_health": 0.61,
+      "slot_holds": 64.39,
+      "regional_headroom_primary": 0.287,
+      "regional_headroom_secondary": 0.31,
+      "projected_secondary_headroom_after_shift": 0.31,
       "manual_callback_queue": 0.0,
-      "fairness_pressure": 0.12,
+      "fairness_pressure": 0.27,
       "dependency_pressure": 0.519,
       "retry_pressure": 0.969,
       "hold_pressure": 0.29,
@@ -79,16 +81,19 @@
     ],
     "pattern_matches": [
       "retry_amplification",
-      "payment_degradation"
+      "payment_degradation",
+      "high_checkout_latency",
+      "fairness_breakdown"
     ],
     "prometheus": {
       "source": "direct_fallback",
       "queries": {
-        "checkout_latency_p95_ms": 1617,
-        "checkout_error_rate": 0.11,
-        "checkout_retry_rate": 0.4
+        "checkout_latency_p95_ms": 2937,
+        "checkout_error_rate": 0.13,
+        "checkout_retry_rate": 0.69
       },
       "active_alerts": [
+        "SchedulingLatencyHigh",
         "SchedulingRetrySpiral"
       ],
       "note": "Prometheus query failed; using direct control-plane metrics: URLError"
@@ -223,11 +228,27 @@
   ],
   "candidate_actions": [
     {
+      "id": "route_to_callback_queue",
+      "type": "fallback_routing",
+      "target": "overflow_patients",
+      "category": "graceful_access_fallback",
+      "description": "Route a controlled slice of demand to staffed callback instead of letting repeated online attempts starve access.",
+      "execution_surface": "browser"
+    },
+    {
       "id": "rate_limit_retries",
       "type": "throttle",
       "target": "checkout",
       "category": "retry_overload_control",
       "description": "Throttle appointment-booking retries to break retry amplification.",
+      "execution_surface": "browser"
+    },
+    {
+      "id": "reserve_priority_slots",
+      "type": "fairness_policy",
+      "target": "high_priority_cohorts",
+      "category": "fairness_and_inventory_control",
+      "description": "Reserve a protected slice of scarce appointment capacity for higher-priority patients and reduce hold concentration.",
       "execution_surface": "browser"
     },
     {
@@ -239,27 +260,11 @@
       "execution_surface": "browser"
     },
     {
-      "id": "increase_retry_backoff",
-      "type": "config",
-      "target": "checkout",
-      "category": "retry_overload_control",
-      "description": "Increase booking retry backoff so the portal stops hammering eligibility during partial degradation.",
-      "execution_surface": "browser"
-    },
-    {
-      "id": "route_to_callback_queue",
-      "type": "fallback_routing",
-      "target": "overflow_patients",
-      "category": "graceful_access_fallback",
-      "description": "Route a controlled slice of demand to staffed callback instead of letting repeated online attempts starve access.",
-      "execution_surface": "browser"
-    },
-    {
-      "id": "shift_traffic",
-      "type": "traffic_shift",
-      "target": "secondary_region",
-      "category": "traffic_management",
-      "description": "Shift a slice of patient-portal scheduling traffic to the secondary region.",
+      "id": "shorten_slot_hold_ttl",
+      "type": "inventory_policy",
+      "target": "slot_inventory",
+      "category": "fairness_and_inventory_control",
+      "description": "Shorten slot-hold TTL so trapped appointment inventory is released back to real patients faster.",
       "execution_surface": "browser"
     },
     {
@@ -279,28 +284,28 @@
       "rationale": "Early throttle timing still has enough leverage to win."
     },
     {
-      "id": "increase_retry_backoff",
+      "id": "route_to_callback_queue",
       "rank": 2,
-      "confidence": 0.72,
-      "rationale": "Smooths retry pressure but acts more gradually."
+      "confidence": 0.94,
+      "rationale": "Staffed callback still has room, so controlled diversion can relieve live contention immediately."
+    },
+    {
+      "id": "shorten_slot_hold_ttl",
+      "rank": 3,
+      "confidence": 0.84,
+      "rationale": "Inventory is trapped in holds, so TTL relief directly restores access."
+    },
+    {
+      "id": "reserve_priority_slots",
+      "rank": 4,
+      "confidence": 0.76,
+      "rationale": "Fairness controls matter when hold concentration is the real pathology."
     },
     {
       "id": "enable_payment_circuit_breaker",
-      "rank": 3,
-      "confidence": 0.68,
-      "rationale": "Contains dependency retries when eligibility is a real bottleneck."
-    },
-    {
-      "id": "route_to_callback_queue",
-      "rank": 4,
-      "confidence": 0.55,
-      "rationale": "Retained for comparison against safer futures."
-    },
-    {
-      "id": "shift_traffic",
       "rank": 5,
-      "confidence": 0.55,
-      "rationale": "Retained for comparison against safer futures."
+      "confidence": 0.53,
+      "rationale": "Dependency isolation does not clear the slot-hold clog."
     },
     {
       "id": "restart_payment",
@@ -332,8 +337,8 @@
       "blast_radius": "low",
       "retry_storm_risk": "low"
     },
-    "increase_retry_backoff": {
-      "latency_direction": "down",
+    "shorten_slot_hold_ttl": {
+      "latency_direction": "mixed",
       "error_direction": "mixed",
       "blast_radius": "low",
       "retry_storm_risk": "medium"
@@ -344,17 +349,17 @@
       "blast_radius": "low",
       "retry_storm_risk": "low"
     },
+    "reserve_priority_slots": {
+      "latency_direction": "mixed",
+      "error_direction": "mixed",
+      "blast_radius": "low",
+      "retry_storm_risk": "medium"
+    },
     "rate_limit_retries": {
       "latency_direction": "down",
       "error_direction": "mixed",
       "blast_radius": "low",
       "retry_storm_risk": "low"
-    },
-    "shift_traffic": {
-      "latency_direction": "mixed",
-      "error_direction": "mixed",
-      "blast_radius": "high",
-      "retry_storm_risk": "medium"
     }
   },
   "browser_workflow": {
@@ -370,7 +375,7 @@
       "Open the dedicated OpenClaw execution page.",
       "Inspect the before-action incident card and chosen remediation.",
       "Click the single OpenClaw execution button to apply the chosen remediation.",
-      "Run verify and inspect the dedicated verdict page."
+      "Run verify and inspect the live verdict on that same page."
     ]
   },
   "artifacts": {
@@ -390,6 +395,6 @@
     "recommended_remediation_manifest": "k8s/remediations/rate-limit-retries-configmap.yaml"
   },
   "notes": [
-    "Live Stratus call failed; using deterministic fallback: APIConnectionError"
+    "Using deterministic local ranking because STRATUS_API_KEY is not configured."
   ]
 }

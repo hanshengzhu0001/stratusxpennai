@@ -20,11 +20,11 @@ When asked to evaluate an incident scenario in this repo, do the following:
    open `/openclaw-execution`
    inspect the before-action incident card
    click the single execution button using the provided selector
-   open `/openclaw-execution?stage=verdict` after verify
-   inspect the state API if needed
+   stay on `/openclaw-execution` after verify or fallback
+   inspect the live verdict on that same page
 8. If the browser tool fails or times out, do not stop and do not replan. Instead run:
    `.venv/bin/python run.py alerts/latest.json --phase fallback`
-9. After fallback completes, open `/openclaw-execution?stage=verdict` in the browser and inspect the final verdict surface.
+9. After fallback completes, stay on `/openclaw-execution` and inspect the final verdict there.
 10. If the browser action succeeds, run:
    `.venv/bin/python run.py alerts/latest.json --phase verify`
 11. Read the generated report from `outputs/`.
