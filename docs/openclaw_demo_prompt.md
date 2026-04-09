@@ -22,6 +22,82 @@ Current scope note:
 - OpenClaw executes one chosen remediation per incident
 - multi-step or three-action sequencing is not active in the live path yet
 
+## How To Test Right Now
+
+1. Start or restart the local services in separate terminals:
+
+```bash
+.venv/bin/python -m uvicorn tools.alert_receiver:app --host 127.0.0.1 --port 8000
+```
+
+```bash
+.venv/bin/python -m uvicorn tools.metrics_target:app --host 127.0.0.1 --port 9101
+```
+
+```bash
+.venv/bin/python -m uvicorn tools.visual_control_plane:app --host 127.0.0.1 --port 8010
+```
+
+```bash
+docker compose up -d
+```
+
+```bash
+openclaw gateway
+```
+
+2. Reset the repo to a clean waiting state before arming OpenClaw:
+
+```bash
+curl -X POST http://127.0.0.1:8010/api/reset
+```
+
+```bash
+.venv/bin/python run.py alerts/latest.json --phase idle
+```
+
+3. Open the presenter and operator surfaces:
+
+- `http://127.0.0.1:8010/operations`
+- `http://127.0.0.1:8010/openclaw-execution`
+- `http://127.0.0.1:18789/` for the OpenClaw dashboard
+
+4. In OpenClaw chat, paste the primary prompt from this file.
+
+5. Wait until OpenClaw is blocked in `await-demo`, then trigger the incident from `/operations`:
+
+- choose `Scheduling Retry Spiral`
+- click `Apply Scenario`
+- click `Open Flu Surge Telehealth Window`
+
+6. Let OpenClaw take over:
+
+- it should wake up automatically
+- inspect `/openclaw-execution`
+- try the managed browser click
+- run `verify` or `fallback`
+- stay on `/openclaw-execution` until the page says `Verification complete. The execution surface is now showing the final report.`
+
+7. Treat the run as successful if all of these are true:
+
+- `Executed remediation` matches the plan choice
+- `Dangerous reflex` is shown and rejected
+- the verdict is rendered on the same `/openclaw-execution` page
+- the live result shows improved access metrics, e.g. retry near `0.10`, lower latency, and low or medium risk depending on scenario
+- OpenClaw returns to `await-demo` after summarizing
+
+8. If browser control fails once, do not retry browser actions manually. The correct expected behavior is:
+
+- OpenClaw runs `.venv/bin/python run.py alerts/latest.json --phase fallback`
+- the same `/openclaw-execution` page updates with the final verdict
+- the summary explicitly says fallback was used because browser control was unavailable
+
+## Expected Current Demo Behavior
+
+- `Scheduling Retry Spiral` should usually choose `Throttle Booking Retries`
+- a healthy-looking result is now in the range of roughly `After latency 1500-1700`, `Retry rate 0.07-0.10`, `Blast radius low`, and `Recovery strong`
+- the presenter board at `/operations` should keep updating live while the execution surface shows the final report
+
 ## Explicit Long Prompt
 
 ```text
