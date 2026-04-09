@@ -1,5 +1,31 @@
 # OpenClaw Demo Prompt
 
+## Current Step-By-Step Test Flow
+
+1. Start the local services in separate terminals from the workspace root:
+
+```bash
+.venv/bin/python -m uvicorn tools.alert_receiver:app --host 127.0.0.1 --port 8000
+.venv/bin/python -m uvicorn tools.metrics_target:app --host 127.0.0.1 --port 9101
+.venv/bin/python -m uvicorn tools.visual_control_plane:app --host 127.0.0.1 --port 8010
+docker compose up -d
+openclaw gateway
+```
+
+2. Open `http://127.0.0.1:8010/operations`, click `Reset to Healthy Baseline`, and confirm the watcher reads `Armed and waiting`.
+3. Open the OpenClaw dashboard at `http://127.0.0.1:18789/` in a fresh chat and send the primary prompt below.
+4. Stay on `http://127.0.0.1:8010/operations` as the presenter screen and click the business trigger for the active scenario, such as `Open Flu Surge Telehealth Window`.
+5. Let OpenClaw wake up from `--phase await-demo`, stay on the single `/openclaw-execution` page, execute the planned remediation, and either run `verify` or `fallback`.
+6. Confirm `/openclaw-execution` shows `Verification complete. The execution surface is now showing the final report.` and that the final verdict plus live operations board both reflect the same recovered state.
+
+## Current Status
+
+- Current behavior: the retry-spiral demo now stabilizes on the single execution surface with `Throttle Booking Retries` and reaches roughly `1680 ms` latency, `0.10` retry rate, `low` risk, and `low` blast radius.
+- Hansen workflow state: the armed watch/wake flow, business-event trigger, single-page execution surface, soak-based verify/fallback, and live verdict rendering are working, while managed browser clicking is still the least reliable piece and may still fall back.
+- Charlie expected improvement: better scenario calibration, stronger healthcare realism, and cleaner final demo metrics should make the incident narratives and board signals more believable.
+- Tony expected improvement: shortlist refinement plus `1-3` action sequence planning, checkpoints, and replan logic should make the decision layer meaningfully smarter and less single-step.
+- Eason expected improvement: case-library retrieval, baseline-vs-guardrail comparison, and over-time recovery stats should make the final verdict show why we beat the baseline on speed, safety, and efficiency.
+
 Primary Week 2 / final-demo prompt for the OpenClaw dashboard chat:
 
 ```text
