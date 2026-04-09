@@ -22,6 +22,7 @@ When asked to evaluate an incident scenario in this repo, do the following:
    click the single execution button using the provided selector
    stay on `/openclaw-execution` after verify or fallback
    inspect the live verdict on that same page
+   do not read `outputs/alert_latest_report.json` until the page shows `Verification complete. The execution surface is now showing the final report.`
    never use `web_fetch` or `url-fetch` on `127.0.0.1` or other localhost URLs
 8. If the browser tool fails or times out, do not stop and do not replan. Instead run:
    `.venv/bin/python run.py alerts/latest.json --phase fallback`

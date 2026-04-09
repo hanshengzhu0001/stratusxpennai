@@ -16,6 +16,8 @@ from run import (
     load_local_env,
     load_saved_plan,
     resolve_scenario_context_id,
+    resolve_executed_action,
+    soak_state_for_verification,
     wait_for_updated_evidence,
     write_browser_playbook,
     write_openclaw_demo_mode,
@@ -343,13 +345,20 @@ def api_verify(
     artifact_id = payload.get("id", "alert_latest")
     plan = load_saved_plan(artifact_id)
     scenario_id = resolve_scenario_context_id(payload, plan, artifact_id)
+    executed_action = resolve_executed_action(plan, None)
+    soaked_state, soak_seconds = soak_state_for_verification(
+        load_state(),
+        scenario_id=scenario_id,
+        action_id=executed_action["id"],
+    )
     current_evidence = wait_for_updated_evidence(
         payload,
         before_evidence={
             "metrics": plan.get("observed_condition", {}).get("metrics", {}),
             "prometheus": plan.get("observed_condition", {}).get("prometheus", {}),
         },
-        expected_metrics=derive_metrics(load_state()),
+        expected_metrics=derive_metrics(soaked_state),
+        timeout_seconds=max(6.0, min(12.0, soak_seconds / 4)),
     )
     source_type = plan.get("source_type", "alertmanager_webhook")
     current_state = derive_state_for_verify(payload, current_evidence)
@@ -363,6 +372,7 @@ def api_verify(
         plan=plan,
         execution=None,
         mode="browser_verify",
+        time_to_effect_seconds=soak_seconds,
     )
     write_outputs(report, artifact_id, "report")
     return RedirectResponse(_return_path(return_to), status_code=303)
@@ -382,13 +392,20 @@ def api_autorun(
     write_browser_playbook(plan, artifact_id)
     write_openclaw_demo_mode(plan, artifact_id)
     execution = execute_action(plan["best_action"])
+    soaked_state, soak_seconds = soak_state_for_verification(
+        execution["state_after_action"],
+        scenario_id=scenario_id,
+        action_id=plan["best_action"]["id"],
+    )
+    execution["state_after_action"] = soaked_state
     current_evidence = wait_for_updated_evidence(
         payload,
         before_evidence={
             "metrics": plan.get("observed_condition", {}).get("metrics", {}),
             "prometheus": plan.get("observed_condition", {}).get("prometheus", {}),
         },
-        expected_metrics=derive_metrics(execution["state_after_action"]),
+        expected_metrics=derive_metrics(soaked_state),
+        timeout_seconds=max(6.0, min(12.0, soak_seconds / 4)),
     )
     current_state = derive_state_for_verify(payload, current_evidence)
     report = build_verify_report(
@@ -401,6 +418,7 @@ def api_autorun(
         plan=plan,
         execution=execution,
         mode="console_autorun",
+        time_to_effect_seconds=soak_seconds,
     )
     write_outputs(report, artifact_id, "report")
     return RedirectResponse(_return_path(return_to), status_code=303)
@@ -2135,7 +2153,7 @@ def _render_openclaw_execution_surface(
     )
     verdict_block = f"""
     <div class="card" id="openclaw-verdict-card">
-      <h2 style="margin-top:0;">{escape(verdict_title)}</h2>
+      <h2 id="openclaw-verdict-title" style="margin-top:0;">{escape(verdict_title)}</h2>
       <p id="openclaw-verdict-status" style="color:var(--muted);">{escape(verdict_status)}</p>
       <ul>
         <li>Executed remediation: <strong id="openclaw-verdict-action">{escape(_action_label(report.get('executed_action', {}).get('id', chosen_action) if report else chosen_action))}</strong></li>
@@ -2281,6 +2299,7 @@ def _render_openclaw_execution_surface(
           setText('openclaw-after-retry-factor', `${{Number(business.retry_amplification_factor || 0).toFixed(1)}}x`);
           setText('openclaw-after-booking-completion', Number(business.payment_success_rate || 0).toFixed(2));
           if (report.executed_action) {{
+            setText('openclaw-verdict-title', 'Live Final Verdict');
             setText('openclaw-verdict-status', 'Verification complete. The execution surface is now showing the final report.');
             setText('openclaw-verdict-action', actionLabel(report.executed_action.id));
             if (actual.latency_p95_ms !== undefined) setText('openclaw-verdict-latency', actual.latency_p95_ms);

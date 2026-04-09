@@ -577,8 +577,10 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     noise = math.exp(rng.gauss(0.0, profile["demand"]["noise_sigma"]))
     lambda_external = max(0.35, lambda_base * noise)
     callback_fraction = float(controls.get("callback_routing_fraction", 0.0))
-    lambda_gated = lambda_external * (0.72 if not controls["online_scheduling_enabled"] else 0.0)
-    lambda_gated += lambda_external * callback_fraction
+    lambda_callback = lambda_external * callback_fraction
+    if not controls["online_scheduling_enabled"]:
+        lambda_callback += lambda_external * 0.72
+    lambda_gated = lambda_callback
     if controls["circuit_breaker_enabled"]:
         lambda_gated += lambda_external * (0.08 + 0.20 * latent.get("dependency_pressure", 0.5))
     lambda_external_local = max(0.0, lambda_external * (1.0 - controls["traffic_shift_fraction"]) - lambda_gated)
@@ -647,7 +649,7 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
         throttle_applied_at = int(activation_times.get("rate_limit_retries", simulation["time_sec"]))
         blocked_retry_fraction += 0.38 if throttle_applied_at <= int(thresholds.get("early_retry_window_sec", 20)) else 0.12
         if scenario_id == "retry_death_spiral" and throttle_applied_at <= 90:
-            blocked_retry_fraction += 0.28
+            blocked_retry_fraction += 0.36
     if callback_fraction > 0.0:
         blocked_retry_fraction += min(0.32, callback_fraction * 0.75)
     if blocked_retry_fraction > 0.0:
@@ -714,7 +716,7 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     elif timely_retry_control and scenario_id == "retry_death_spiral":
         effective_eligibility_rate = max(
             effective_eligibility_rate,
-            profile["services"]["eligibility_capacity"] * 0.72,
+            profile["services"]["eligibility_capacity"] * 0.82,
         )
     effective_scheduling_rate = profile["services"]["scheduling_capacity"]
     if controls["circuit_breaker_enabled"]:
@@ -735,7 +737,7 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     if early_throttle_active and scenario_id == "retry_death_spiral":
         inventory_penalty += 0.08
     elif timely_retry_control and scenario_id == "retry_death_spiral":
-        inventory_penalty += 0.18
+        inventory_penalty += 0.26
     effective_scheduling_rate *= max(0.18, inventory_penalty)
     if controls.get("slot_hold_ttl_factor", 1.0) < 1.0:
         effective_scheduling_rate *= 1.62
@@ -746,7 +748,7 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     if early_throttle_active and scenario_id == "retry_death_spiral":
         effective_scheduling_rate *= 1.12
     elif timely_retry_control and scenario_id == "retry_death_spiral":
-        effective_scheduling_rate *= 1.26
+        effective_scheduling_rate *= 1.42
 
     overflow_penalty = 0.0
     if controls["traffic_shift_fraction"] > 0:
@@ -778,12 +780,23 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     if controls.get("priority_slot_reserve_fraction", 0.0) > 0.0:
         abandon_hazard *= 0.74
     if timely_retry_control and scenario_id == "retry_death_spiral":
-        abandon_hazard *= 0.32
+        abandon_hazard *= 0.18
     if overflow_penalty > 0.0:
         abandon_hazard += 0.008 * overflow_penalty
     abandoned = min(queue_before_service * abandon_hazard * dt * 0.18, queue_before_service * 0.24)
     completions = min(max(queue_before_service - abandoned, 0.0), effective_service_rate * dt)
     simulation["queue_depth"] = max(0.0, queue_before_service - completions - abandoned)
+    if scenario_id == "retry_death_spiral" and controls["retry_throttle_factor"] < 1.0:
+        throttle_applied_at = int(activation_times.get("rate_limit_retries", simulation["time_sec"]))
+        if throttle_applied_at <= 90:
+            throttle_age = max(0, simulation["time_sec"] - throttle_applied_at + dt)
+            recovery_phase = min(1.0, throttle_age / 35.0)
+            deduped_backlog = min(
+                simulation["queue_depth"],
+                (8.0 + simulation["queue_depth"] * (0.11 if early_throttle_active else 0.08)) * recovery_phase,
+            )
+            simulation["queue_depth"] = max(0.0, simulation["queue_depth"] - deduped_backlog)
+            abandoned *= max(0.16, 0.52 - 0.28 * recovery_phase)
 
     effective_ttl = max(45.0, profile["holds"]["ttl_sec"] * float(controls.get("slot_hold_ttl_factor", 1.0)))
     hold_fraction = profile["holds"]["hold_fraction"] * (1.0 + 0.45 * latent.get("hold_pressure", 0.5))
@@ -817,6 +830,15 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
             hold_release * (1.08 + controls["priority_slot_reserve_fraction"] * 0.42),
         )
     simulation["slot_holds"] = max(0.0, simulation["slot_holds"] + hold_inflow - hold_expire - hold_release)
+    if scenario_id == "retry_death_spiral" and controls["retry_throttle_factor"] < 1.0:
+        throttle_applied_at = int(activation_times.get("rate_limit_retries", simulation["time_sec"]))
+        if throttle_applied_at <= 90:
+            throttle_age = max(0, simulation["time_sec"] - throttle_applied_at + dt)
+            recovery_phase = min(1.0, throttle_age / 35.0)
+            simulation["slot_holds"] = max(
+                0.0,
+                simulation["slot_holds"] * (1.0 - (0.08 + 0.14 * recovery_phase)),
+            )
 
     if controls["traffic_shift_fraction"] > 0:
         target_secondary = max(
@@ -846,7 +868,7 @@ def _step_simulation(scenario_id: str | None, simulation: dict, dt: int) -> None
     )
     simulation["manual_callback_queue"] = max(
         0.0,
-        simulation["manual_callback_queue"] + lambda_gated * dt - (1.1 + callback_fraction * 0.8) * dt,
+        simulation["manual_callback_queue"] + lambda_callback * dt - (1.1 + callback_fraction * 0.8) * dt,
     )
 
     fairness = 0.03

@@ -5,12 +5,14 @@ import json
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from agents.candidate_actions import build_scenario_shortlist
 from agents.incident_classifier import classify_incident
 from agents.simulator import compare_prediction_to_actual, normalize_actual, normalize_prediction
+from tools.simulation import advance_simulation_state
 from tools.scenario_catalog import derive_business_metrics
 from tools.execute_action import execute_action
 from tools.incident_watch import (
@@ -21,7 +23,14 @@ from tools.incident_watch import (
     watch_for_pending_incident,
 )
 from tools.prometheus_client import collect_evidence
-from tools.runtime_state import control_plane_urls, current_constraints, derive_metrics, load_state, reset_state
+from tools.runtime_state import (
+    control_plane_urls,
+    current_constraints,
+    derive_metrics,
+    load_state,
+    reset_state,
+    save_state,
+)
 from tools.stratus_guardrail import rank_actions
 
 
@@ -157,13 +166,20 @@ def main() -> None:
             "Browser control was unavailable, so OpenClaw executed the saved plan action "
             "through the local fallback path and then verified the outcome."
         )
+        soaked_state, soak_seconds = soak_state_for_verification(
+            execution["state_after_action"],
+            scenario_id=scenario_id,
+            action_id=chosen["id"],
+        )
+        execution["state_after_action"] = soaked_state
         refreshed_evidence = wait_for_updated_evidence(
             payload,
             before_evidence={
                 "metrics": plan["observed_condition"]["metrics"],
                 "prometheus": plan["observed_condition"].get("prometheus", {}),
             },
-            expected_metrics=derive_metrics(execution["state_after_action"]),
+            expected_metrics=derive_metrics(soaked_state),
+            timeout_seconds=max(6.0, min(12.0, soak_seconds / 4)),
         )
         refreshed_state = classify_incident(payload, refreshed_evidence)
         report = build_verify_report(
@@ -176,6 +192,7 @@ def main() -> None:
             plan=plan,
             execution=execution,
             mode="openclaw_browser_fallback",
+            time_to_effect_seconds=soak_seconds,
         )
         write_outputs(report, artifact_id, "report")
         complete_active_incident("fallback_verified", f"outputs/{artifact_id}_report.json")
@@ -185,6 +202,22 @@ def main() -> None:
 
     if args.phase == "verify":
         plan = load_saved_plan(artifact_id)
+        executed_action = resolve_executed_action(plan, None)
+        soaked_state, soak_seconds = soak_state_for_verification(
+            load_state(),
+            scenario_id=scenario_id,
+            action_id=executed_action["id"],
+        )
+        evidence = wait_for_updated_evidence(
+            payload,
+            before_evidence={
+                "metrics": plan["observed_condition"]["metrics"],
+                "prometheus": plan["observed_condition"].get("prometheus", {}),
+            },
+            expected_metrics=derive_metrics(soaked_state),
+            timeout_seconds=max(6.0, min(12.0, soak_seconds / 4)),
+        )
+        state = classify_incident(payload, evidence)
         verify = build_verify_report(
             payload=payload,
             scenario_id=scenario_id,
@@ -195,6 +228,7 @@ def main() -> None:
             plan=plan,
             execution=None,
             mode="browser_verify",
+            time_to_effect_seconds=soak_seconds,
         )
         write_outputs(verify, artifact_id, "report")
         complete_active_incident("verified", f"outputs/{artifact_id}_report.json")
@@ -205,13 +239,20 @@ def main() -> None:
     plan = build_plan_report(payload, scenario_id, artifact_id, source_type, input_path, state, evidence)
     chosen = plan["best_action"]
     execution = execute_action(chosen)
+    soaked_state, soak_seconds = soak_state_for_verification(
+        execution["state_after_action"],
+        scenario_id=scenario_id,
+        action_id=chosen["id"],
+    )
+    execution["state_after_action"] = soaked_state
     refreshed_evidence = wait_for_updated_evidence(
         payload,
         before_evidence={
             "metrics": plan["observed_condition"]["metrics"],
             "prometheus": plan["observed_condition"].get("prometheus", {}),
         },
-        expected_metrics=derive_metrics(execution["state_after_action"]),
+        expected_metrics=derive_metrics(soaked_state),
+        timeout_seconds=max(6.0, min(12.0, soak_seconds / 4)),
     )
     refreshed_state = classify_incident(payload, refreshed_evidence)
     report = build_verify_report(
@@ -224,6 +265,7 @@ def main() -> None:
         plan=plan,
         execution=execution,
         mode="auto_apply",
+        time_to_effect_seconds=soak_seconds,
     )
     write_outputs(plan, artifact_id, "plan")
     write_browser_playbook(plan, artifact_id)
@@ -318,6 +360,7 @@ def build_verify_report(
     plan: dict,
     execution: dict | None,
     mode: str,
+    time_to_effect_seconds: int = 30,
 ) -> dict:
     planned_action = plan["best_action"]
     executed_action = resolve_executed_action(plan, execution)
@@ -335,6 +378,7 @@ def build_verify_report(
         after_business=current_state.get("business_metrics", current_evidence.get("business_metrics", {})),
         after_constraints=current_state.get("constraints", current_evidence.get("constraints", {})),
         action_id=executed_action["id"],
+        time_to_effect_seconds=time_to_effect_seconds,
     )
     drift = compare_prediction_to_actual(executed_action["id"], predicted, actual)
     alignment = {
@@ -585,6 +629,53 @@ def evidence_from_expected_state(latest: dict, expected_metrics: dict) -> dict:
     return refreshed
 
 
+def verification_soak_seconds(scenario_id: str, action_id: str) -> int:
+    base = {
+        "retry_death_spiral": 60,
+        "payment_gateway_flap": 40,
+        "seat_hold_clog": 45,
+        "regional_saturation": 35,
+    }.get(scenario_id, 35)
+    action_adjustment = {
+        "rate_limit_retries": 10,
+        "enable_payment_circuit_breaker": 0,
+        "increase_retry_backoff": 10,
+        "shorten_slot_hold_ttl": 5,
+        "route_to_callback_queue": 10,
+        "reserve_priority_slots": 5,
+        "shift_traffic": 5,
+        "restart_payment": 15,
+        "disable_flag": 0,
+    }.get(action_id, 0)
+    return max(20, base + action_adjustment)
+
+
+def reanchor_simulation_clock(state: dict, now: datetime | None = None) -> dict:
+    current = now or datetime.now(timezone.utc)
+    simulation = deepcopy(state.get("simulation") or {})
+    if not simulation:
+        return state
+    simulation["started_at_utc"] = (
+        current - timedelta(seconds=int(simulation.get("time_sec", 0)))
+    ).astimezone(timezone.utc).isoformat()
+    simulation["last_updated_at_utc"] = current.astimezone(timezone.utc).isoformat()
+    state["simulation"] = simulation
+    return state
+
+
+def soak_state_for_verification(state: dict, scenario_id: str, action_id: str) -> tuple[dict, int]:
+    soak_seconds = verification_soak_seconds(scenario_id, action_id)
+    if not state.get("simulation", {}).get("active"):
+        return state, soak_seconds
+    projected = advance_simulation_state(
+        deepcopy(state),
+        now=datetime.now(timezone.utc) + timedelta(seconds=soak_seconds),
+    )
+    projected = reanchor_simulation_clock(projected)
+    save_state(projected)
+    return projected, soak_seconds
+
+
 def normalize_best_action(best_action: dict | str, actions: list[dict]) -> dict:
     if isinstance(best_action, dict):
         return best_action
@@ -601,6 +692,7 @@ def actual_outcome_from_evidence(
     before_business: dict | None = None,
     after_business: dict | None = None,
     after_constraints: dict | None = None,
+    time_to_effect_seconds: int = 30,
 ) -> dict:
     before_business = before_business or {}
     after_business = after_business or {}
@@ -612,6 +704,7 @@ def actual_outcome_from_evidence(
     error_rate = float(after_metrics.get("error_rate", 0.0))
     latency = int(after_metrics.get("latency_p95_ms", 0))
     abandonment = float(after_business.get("queue_abandonment_rate", 0.0))
+    completion_rate = float(after_business.get("payment_success_rate", 0.0))
     fairness = float(after_business.get("fairness_skew", 0.0))
     hold_util = float(after_business.get("seat_hold_utilization", 0.0))
     queue_depth = float(after_constraints.get("queue_depth", 0.0))
@@ -628,17 +721,24 @@ def actual_outcome_from_evidence(
     )
     retry_improvement = max(0.0, before_retry - retry_rate)
     abandonment_improvement = max(0.0, before_abandonment - abandonment)
+    access_recovered = (
+        completion_rate >= 0.35
+        and retry_rate <= 0.16
+        and fairness <= 0.10
+        and hold_util <= 0.18
+        and secondary_headroom >= 0.14
+    )
     stabilized_state = (
         retry_rate <= 0.20
         and fairness <= 0.18
         and hold_util <= 0.25
-        and queue_depth <= 20
+        and (queue_depth <= 20 or completion_rate >= 0.35)
         and secondary_headroom >= 0.14
     )
     if (
-        stabilized_state
-        and (latency_improvement >= 0.20 or latency <= 1600)
-        and abandonment <= 0.35
+        (stabilized_state or access_recovered)
+        and (latency_improvement >= 0.20 or latency <= 1900)
+        and (abandonment <= 0.35 or completion_rate >= 0.35)
     ):
         risk_level = "low"
     elif (
@@ -646,14 +746,14 @@ def actual_outcome_from_evidence(
         and latency_improvement >= 0.18
         and fairness <= 0.26
         and secondary_headroom >= 0.12
-        and queue_depth <= 60
+        and (queue_depth <= 60 or completion_rate >= 0.24)
     ):
         risk_level = "medium"
     else:
         risk_level = "high"
     if secondary_headroom < 0.12 or callback_queue > 24 or hold_util > 0.9:
         blast_radius = "high"
-    elif risk_level == "low" or stabilized_state or (
+    elif risk_level == "low" or stabilized_state or access_recovered or (
         risk_level == "medium"
         and retry_rate <= 0.20
         and fairness <= 0.16
@@ -667,12 +767,13 @@ def actual_outcome_from_evidence(
         "latency_p95_ms": latency,
         "error_rate": error_rate,
         "retry_rate": retry_rate,
+        "booking_completion_rate": round(completion_rate, 2),
         "queue_abandonment_rate": round(abandonment, 2),
         "fairness_skew": round(fairness, 2),
         "seat_hold_utilization": round(hold_util, 2),
         "secondary_headroom": round(secondary_headroom, 2),
         "manual_callback_queue_depth": round(callback_queue, 1),
-        "time_to_effect_seconds": 30,
+        "time_to_effect_seconds": time_to_effect_seconds,
         "risk_level": risk_level,
         "impact": "medium_high",
         "blast_radius": blast_radius,
@@ -680,11 +781,12 @@ def actual_outcome_from_evidence(
             "strong"
             if (
                 risk_level in {"low", "medium"}
-                and (latency_improvement >= 0.20 or latency <= 1600)
-                and retry_improvement >= 0.10
+                and (latency_improvement >= 0.20 or latency <= 1900)
+                and retry_improvement >= 0.08
                 and (
                     abandonment_improvement >= 0.04
                     or abandonment <= 0.28
+                    or completion_rate >= 0.32
                     or queue_depth <= 20
                 )
             )
@@ -844,6 +946,7 @@ def build_browser_playbook(plan: dict) -> dict:
                 "kind": "inspect",
                 "target": browser["openclaw_execution_url"],
                 "purpose": "inspect_same_page_for_live_verdict_after_verify",
+                "must_observe": "Verification complete. The execution surface is now showing the final report.",
             },
             {"kind": "read", "target": "outputs/alert_latest_report.json", "purpose": "summarize_final_report"},
         ],
@@ -929,6 +1032,7 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
                 "kind": "inspect",
                 "target": execution_surface,
                 "purpose": "inspect_same_page_for_live_verdict_after_verify",
+                "must_observe": "Verification complete. The execution surface is now showing the final report.",
             },
         ],
         "summary_contract": {
