@@ -3,7 +3,7 @@
 Primary Week 2 / final-demo prompt for the OpenClaw dashboard chat:
 
 ```text
-Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, execute the planned remediation, run verification or fallback, inspect the live verdict on that same page, summarize, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Do not stop after `await-demo` returns, and do not resume old artifacts before it returns.
+Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, execute the planned remediation, run verification or fallback, inspect the live verdict on that same page, summarize, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Use the browser tool only for localhost surfaces. Never use web_fetch or url-fetch on 127.0.0.1 URLs. If the browser tool fails once, run fallback immediately instead of attempting any localhost fetch. Do not stop after `await-demo` returns, and do not resume old artifacts before it returns.
 ```
 
 The workspace skill now carries the full behavior:
@@ -25,7 +25,7 @@ Current scope note:
 ## Explicit Long Prompt
 
 ```text
-Use the incident_guardrail skill in this workspace and stay in the same task until the workflow is complete. Run `.venv/bin/python run.py alerts/latest.json --phase await-demo` and wait until the next webhook incident is latched and the demo artifacts are prepared. Then read `outputs/alert_latest_openclaw_demo.json` and `outputs/alert_latest_browser_playbook.json`, use the browser only on `/openclaw-execution`, inspect the before-action incident card, click the single remediation button chosen by the guardrail, run verify, stay on `/openclaw-execution` to inspect the live verdict that appears on that same page, and summarize the final verdict with the dangerous reflex that was avoided. If the browser tool fails or times out, do not stop and do not replan. Instead run `.venv/bin/python run.py alerts/latest.json --phase fallback`, stay on `/openclaw-execution`, read `outputs/alert_latest_report.json`, and summarize the final verdict while explicitly noting that execution used the saved-plan fallback because browser control was unavailable. After summarizing, return to `.venv/bin/python run.py alerts/latest.json --phase await-demo`. Do not stop after `await-demo` returns.
+Use the incident_guardrail skill in this workspace and stay in the same task until the workflow is complete. Run `.venv/bin/python run.py alerts/latest.json --phase await-demo` and wait until the next webhook incident is latched and the demo artifacts are prepared. Then read `outputs/alert_latest_openclaw_demo.json` and `outputs/alert_latest_browser_playbook.json`, use the browser only on `/openclaw-execution`, inspect the before-action incident card, click the single remediation button chosen by the guardrail, run verify, stay on `/openclaw-execution` to inspect the live verdict that appears on that same page, and summarize the final verdict with the dangerous reflex that was avoided. Never use web_fetch or url-fetch on `http://127.0.0.1:*` targets. If the browser tool fails or times out, do not stop and do not replan. Instead run `.venv/bin/python run.py alerts/latest.json --phase fallback`, stay on `/openclaw-execution`, read `outputs/alert_latest_report.json`, and summarize the final verdict while explicitly noting that execution used the saved-plan fallback because browser control was unavailable. After summarizing, return to `.venv/bin/python run.py alerts/latest.json --phase await-demo`. Do not stop after `await-demo` returns.
 ```
 
 ## Shorter Rehearsal Prompt
@@ -50,6 +50,7 @@ Use the incident_guardrail skill in this workspace. An incident is already ackno
 - `/openclaw-execution` is the primary browser surface for the final demo.
 - OpenClaw should stay on that one execution page during a run; the verdict is now rendered there live after verify or fallback.
 - Keep `/operations` as the presenter screen for humans. The OpenClaw browser path should stay on `/openclaw-execution` unless you are manually inspecting the business board.
+- `web_fetch` / `url-fetch` against `127.0.0.1` is expected to be blocked by OpenClaw security. Do not use it for the demo path.
 - `Console Rehearsal: Run Full Flow` is a local backup, not the primary final-demo launch path.
 - The intended demo rhythm is:
   - arm OpenClaw once

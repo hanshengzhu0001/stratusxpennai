@@ -1,14 +1,19 @@
 {
-  "plan_id": "alert_latest-9311d5b3",
+  "plan_id": "alert_latest-a54228af",
   "workflow": {
     "orchestrator": "openclaw",
     "phase": "demo_mode",
     "workspace_skill": "incident_guardrail",
     "launch_style": "armed_background_watch"
   },
-  "scenario_id": "retry_death_spiral",
+  "scenario_id": "alert_latest",
   "goal": "Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, inspect the live verdict on that same page, summarize, and return to watch mode.",
-  "starter_prompt": "Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Do not resume stale artifacts before `await-demo` returns.",
+  "starter_prompt": "Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Use the browser tool only for localhost surfaces and never use web_fetch or url-fetch on 127.0.0.1 URLs. If the browser tool fails once, run fallback immediately instead of trying any localhost fetch. Do not resume stale artifacts before `await-demo` returns.",
+  "browser_only": true,
+  "forbidden_tools": [
+    "web_fetch",
+    "url-fetch"
+  ],
   "artifacts": {
     "plan": "outputs/alert_latest_plan.json",
     "browser_playbook": "outputs/alert_latest_browser_playbook.json",
@@ -48,7 +53,7 @@
       "step": 3,
       "kind": "click",
       "target": "#openclaw-demo-run",
-      "label": "Execute Planned Action: Throttle Booking Retries",
+      "label": "Execute Planned Action: Route Overflow to Callback Queue",
       "purpose": "apply_guardrail_choice"
     },
     {
@@ -72,8 +77,8 @@
       "before and after browser-visible evidence",
       "predicted versus actual drift"
     ],
-    "dangerous_reflex": "restart_payment",
-    "chosen_action": "rate_limit_retries"
+    "dangerous_reflex": "enable_payment_circuit_breaker",
+    "chosen_action": "route_to_callback_queue"
   },
   "fallback_contract": {
     "trigger": "browser tool times out, fails to load the dashboard, or loses browser control",
@@ -81,5 +86,10 @@
     "must_say": "execution used the saved-plan fallback because browser control was unavailable",
     "must_stay_on_execution_surface_after_fallback": true,
     "verdict_url": "http://127.0.0.1:8010/openclaw-execution"
-  }
+  },
+  "hard_rules": [
+    "Use the browser tool only for localhost surfaces.",
+    "Never call web_fetch or url-fetch on http://127.0.0.1:* targets.",
+    "If browser control fails once, run fallback immediately and do not retry with web_fetch."
+  ]
 }

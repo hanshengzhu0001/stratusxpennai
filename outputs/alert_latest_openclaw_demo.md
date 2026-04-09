@@ -7,7 +7,7 @@ Arm OpenClaw once, let it wait for the next firing incident from the Alertmanage
 ## Starter Prompt
 
 ```text
-Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Do not resume stale artifacts before `await-demo` returns.
+Use the incident_guardrail skill in this workspace and stay in the same task as a persistent responder. Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. Use the browser tool only for localhost surfaces and never use web_fetch or url-fetch on 127.0.0.1 URLs. If the browser tool fails once, run fallback immediately instead of trying any localhost fetch. Do not resume stale artifacts before `await-demo` returns.
 ```
 
 ## Demo Contract

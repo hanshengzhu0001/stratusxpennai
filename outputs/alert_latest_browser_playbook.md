@@ -6,10 +6,10 @@ Open the dedicated OpenClaw execution page, apply the selected remediation with 
 
 ## Chosen Action
 
-- Action: `rate_limit_retries`
-- Button label: `Throttle Booking Retries`
+- Action: `route_to_callback_queue`
+- Button label: `Route Overflow to Callback Queue`
 - Button selector: `#openclaw-demo-run`
-- Manual fallback selector: `#action-rate_limit_retries`
+- Manual fallback selector: `#action-route_to_callback_queue`
 
 ## URLs
 

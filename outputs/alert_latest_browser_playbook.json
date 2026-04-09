@@ -1,18 +1,23 @@
 {
-  "plan_id": "alert_latest-9311d5b3",
+  "plan_id": "alert_latest-a54228af",
   "artifact_id": "alert_latest",
   "workflow": {
     "orchestrator": "openclaw",
     "level": "level_3_browser_k8s_scaffold",
     "phase": "browser_playbook"
   },
-  "scenario_id": "retry_death_spiral",
+  "scenario_id": "alert_latest",
   "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the same page for the live verdict.",
+  "browser_only": true,
+  "forbidden_tools": [
+    "web_fetch",
+    "url-fetch"
+  ],
   "chosen_action": {
-    "id": "rate_limit_retries",
-    "label": "Throttle Booking Retries",
+    "id": "route_to_callback_queue",
+    "label": "Route Overflow to Callback Queue",
     "selector": "#openclaw-demo-run",
-    "fallback_selector": "#action-rate_limit_retries"
+    "fallback_selector": "#action-route_to_callback_queue"
   },
   "urls": {
     "dashboard": "http://127.0.0.1:8010/",
@@ -35,7 +40,7 @@
     {
       "kind": "click",
       "target": "#openclaw-demo-run",
-      "label": "Execute Planned Action: Throttle Booking Retries",
+      "label": "Execute Planned Action: Route Overflow to Callback Queue",
       "purpose": "apply_chosen_remediation"
     },
     {
@@ -54,10 +59,15 @@
       "purpose": "summarize_final_report"
     }
   ],
+  "hard_rules": [
+    "Use the browser tool only for localhost surfaces.",
+    "Never call web_fetch or url-fetch on http://127.0.0.1:* targets.",
+    "If the browser tool fails once, stop browser attempts and run fallback immediately."
+  ],
   "expected_before": {
-    "latency_p95_ms": 2937,
-    "error_rate": 0.13,
-    "retry_rate": 0.69
+    "latency_p95_ms": 1685,
+    "error_rate": 0.11,
+    "retry_rate": 0.12
   },
   "predicted_after": {
     "latency_direction": "down",

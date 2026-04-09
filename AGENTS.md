@@ -20,6 +20,7 @@ Expected workflow:
    - `outputs/alert_latest_openclaw_demo.json`
    - `outputs/alert_latest_browser_playbook.json`
 7. OpenClaw browser follows the playbook, opens `/openclaw-execution`, clicks the chosen remediation there, and stays on that same page to inspect the shared state and final verdict.
+   It must not use `web_fetch` or `url-fetch` against localhost surfaces.
 8. If browser control fails, the agent runs `.venv/bin/python run.py alerts/latest.json --phase fallback` instead of stopping or replanning.
 9. After fallback, the agent stays on `/openclaw-execution`; the final browser surface updates there to match the written report.
 10. If browser control succeeds, the agent runs `.venv/bin/python run.py alerts/latest.json --phase verify`.

@@ -754,7 +754,10 @@ def browser_workflow(chosen: dict) -> dict:
             "Inspect the before-action incident card and chosen remediation.",
             "Click the single OpenClaw execution button to apply the chosen remediation.",
             "Run verify and inspect the live verdict on that same page.",
+            "Do not use web_fetch or url-fetch on localhost URLs; use the browser tool only.",
         ],
+        "browser_only": True,
+        "forbidden_tools": ["web_fetch", "url-fetch"],
     }
 
 
@@ -808,6 +811,8 @@ def build_browser_playbook(plan: dict) -> dict:
         },
         "scenario_id": plan["scenario_id"],
         "goal": "Open the dedicated OpenClaw execution page, apply the selected remediation with one browser action, then run verify and inspect the same page for the live verdict.",
+        "browser_only": True,
+        "forbidden_tools": ["web_fetch", "url-fetch"],
         "chosen_action": {
             "id": chosen["id"],
             "label": browser["button_label"],
@@ -842,6 +847,11 @@ def build_browser_playbook(plan: dict) -> dict:
             },
             {"kind": "read", "target": "outputs/alert_latest_report.json", "purpose": "summarize_final_report"},
         ],
+        "hard_rules": [
+            "Use the browser tool only for localhost surfaces.",
+            "Never call web_fetch or url-fetch on http://127.0.0.1:* targets.",
+            "If the browser tool fails once, stop browser attempts and run fallback immediately.",
+        ],
         "expected_before": plan["observed_condition"]["metrics"],
         "predicted_after": plan["predicted_effects_by_action"].get(chosen["id"], {}),
     }
@@ -864,6 +874,8 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
         "scenario_id": plan["scenario_id"],
         "goal": "Arm OpenClaw once, let it wait for the next firing incident from the Alertmanager webhook, then execute the browser remediation from one dedicated execution page, run verify, inspect the live verdict on that same page, summarize, and return to watch mode.",
         "starter_prompt": default_openclaw_demo_prompt(),
+        "browser_only": True,
+        "forbidden_tools": ["web_fetch", "url-fetch"],
         "artifacts": {
             "plan": f"outputs/{artifact_id}_plan.json",
             "browser_playbook": f"outputs/{artifact_id}_browser_playbook.json",
@@ -937,6 +949,11 @@ def build_openclaw_demo_mode(plan: dict) -> dict:
             "must_stay_on_execution_surface_after_fallback": True,
             "verdict_url": execution_surface,
         },
+        "hard_rules": [
+            "Use the browser tool only for localhost surfaces.",
+            "Never call web_fetch or url-fetch on http://127.0.0.1:* targets.",
+            "If browser control fails once, run fallback immediately and do not retry with web_fetch.",
+        ],
     }
 
 
@@ -983,6 +1000,8 @@ def default_openclaw_demo_prompt() -> str:
         "Start by running `.venv/bin/python run.py alerts/latest.json --phase await-demo` and remain idle while it blocks. "
         "Only after that command returns should you continue on the single `/openclaw-execution` page, verify or fallback, summarize the verdict, "
         "and then return to `.venv/bin/python run.py alerts/latest.json --phase await-demo` again. "
+        "Use the browser tool only for localhost surfaces and never use web_fetch or url-fetch on 127.0.0.1 URLs. "
+        "If the browser tool fails once, run fallback immediately instead of trying any localhost fetch. "
         "Do not resume stale artifacts before `await-demo` returns."
     )
 
