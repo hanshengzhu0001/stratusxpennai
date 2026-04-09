@@ -75,14 +75,34 @@ def collect_evidence(alert_payload: dict) -> dict:
         for key, query in _prom_queries().items():
             query_results[key] = _query_prometheus(prom_base, query)
         active_alerts = _get_active_alerts(prom_base)
-        evidence["metrics"]["latency_p95_ms"] = int(query_results["checkout_latency_p95_ms"] or 2300)
-        evidence["metrics"]["error_rate"] = round(float(query_results["checkout_error_rate"] or 0.18), 4)
-        evidence["metrics"]["retry_rate"] = round(float(query_results["checkout_retry_rate"] or 0.31), 4)
+        direct_metrics = derive_metrics(state)
+        filled_from_state: list[str] = []
+        latency_value = query_results.get("checkout_latency_p95_ms")
+        error_value = query_results.get("checkout_error_rate")
+        retry_value = query_results.get("checkout_retry_rate")
+        if latency_value is None:
+            latency_value = direct_metrics["latency_p95_ms"]
+            filled_from_state.append("checkout_latency_p95_ms")
+        if error_value is None:
+            error_value = direct_metrics["error_rate"]
+            filled_from_state.append("checkout_error_rate")
+        if retry_value is None:
+            retry_value = direct_metrics["retry_rate"]
+            filled_from_state.append("checkout_retry_rate")
+        evidence["metrics"]["latency_p95_ms"] = int(latency_value)
+        evidence["metrics"]["error_rate"] = round(float(error_value), 4)
+        evidence["metrics"]["retry_rate"] = round(float(retry_value), 4)
         evidence["prometheus"] = {
-            "source": "live",
+            "source": "live_with_state_fill" if filled_from_state else "live",
             "queries": query_results,
             "active_alerts": active_alerts,
         }
+        if filled_from_state:
+            evidence["prometheus"]["note"] = (
+                "Prometheus was reachable but returned empty samples for "
+                + ", ".join(filled_from_state)
+                + "; filled those metrics from the shared simulation state."
+            )
         _enrich_with_state(evidence, alert_payload, state)
         return evidence
     except Exception as exc:
